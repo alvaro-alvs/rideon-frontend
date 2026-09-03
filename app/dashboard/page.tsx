@@ -1,6 +1,11 @@
-import { Activity, BatteryCharging, MapPin, ShieldCheck } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { Activity, BatteryCharging, MapPin, Maximize2, ShieldCheck } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
+import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { useMotorcycle } from "@/hooks/use-motorcycle";
 
 const summary = [
   { label: "Velocidade", value: "72 km/h", icon: Activity },
@@ -9,6 +14,15 @@ const summary = [
 ];
 
 export default function DashboardPage() {
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  const { motorcycle, isLoading } = useMotorcycle();
+
+  const motorcycleModel = motorcycle
+    ? `${motorcycle.brand ?? ""} ${motorcycle.model ?? ""}`.trim() || motorcycle.model || "Motocicleta"
+    : "Honda CG 160";
+
+  const motorcyclePlate = motorcycle?.license_plate || "ABC1234";
+
   return (
     <DashboardShell>
       <div className="mx-auto max-w-6xl py-6">
@@ -27,18 +41,67 @@ export default function DashboardPage() {
             </article>
           ))}
         </div>
-        <section className="mini-map relative mt-8 h-[360px] overflow-hidden border border-border">
-          <div className="absolute left-[55%] top-[45%] grid size-12 place-items-center rounded-full bg-primary shadow-lg shadow-primary/30">
-            <MapPin className="size-6 text-primary-foreground" />
+
+        {/* Hoverable and Clickable Live Telemetry Mini-map */}
+        <section
+          onClick={() => setIsMapModalOpen(true)}
+          tabIndex={0}
+          role="button"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setIsMapModalOpen(true);
+            }
+          }}
+          className="mini-map group relative mt-8 h-[360px] cursor-pointer overflow-hidden border border-border transition-all duration-300 hover:border-primary hover:shadow-xl hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          {/* Subtle animated scan grid line on hover */}
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/5 to-primary/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+          {/* Central Animated Vehicle Marker */}
+          <div className="absolute left-[55%] top-[45%] grid size-12 place-items-center rounded-full bg-primary shadow-lg shadow-primary/40 transition-transform duration-300 group-hover:scale-110">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
+            <MapPin className="relative z-10 size-6 text-primary-foreground" />
           </div>
-          <div className="absolute bottom-5 left-5 bg-background p-4">
-            <p className="text-xs font-bold uppercase tracking-[.1em] text-primary">
-              Localizacao ao vivo
+
+          {/* Top-Right Expand Prompt Badge */}
+          <div className="absolute top-4 right-4 flex items-center gap-2 rounded border border-border/80 bg-background/90 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
+            <Maximize2 className="size-4" />
+            <span>Abrir Monitoramento Realtime</span>
+          </div>
+
+          {/* Bottom Vehicle Info Card */}
+          <div className="absolute bottom-5 left-5 border border-border/80 bg-background/90 p-4 backdrop-blur transition-colors group-hover:border-primary/50">
+            <div className="flex items-center gap-2">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+              </span>
+              <p className="text-xs font-bold uppercase tracking-[.1em] text-primary">
+                Localizacao ao vivo
+              </p>
+            </div>
+            <p className="mt-1 text-sm font-semibold">
+              {isLoading ? "Carregando..." : `${motorcycleModel} - ${motorcyclePlate}`}
             </p>
-            <p className="mt-1 text-sm">Honda CG 160 - ABC1234</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground group-hover:text-foreground">
+              Clique para expandir o mapa com WebSocket
+            </p>
           </div>
         </section>
       </div>
+
+      {/* Live Telemetry Modal */}
+      <LiveTelemetryModal
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        motorcycleId={motorcycle?.id}
+        motorcycleInfo={{
+          model: motorcycleModel,
+          licensePlate: motorcyclePlate,
+        }}
+      />
     </DashboardShell>
   );
 }
+

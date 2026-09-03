@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, LockKeyhole, Mail, User } from "lucide-react";
+import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { AuthLayout } from "@/app/components/auth-layout";
@@ -11,9 +11,40 @@ import { Button } from "@/app/components/ui/button";
 export default function RegisterPage() {
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (accepted) router.push("/dashboard");
+    if (!accepted) return;
+    setError("");
+    setPending(true);
+
+    try {
+      const formData = new FormData(event.currentTarget);
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.get("email"),
+          password: formData.get("password"),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json()) as { message?: string };
+        throw new Error(data.message ?? "Nao foi possivel criar a conta.");
+      }
+
+      router.push("/login?registered=1");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Nao foi possivel criar a conta. Tente novamente.",
+      );
+    } finally {
+      setPending(false);
+    }
   };
   return (
     <AuthLayout
@@ -22,17 +53,16 @@ export default function RegisterPage() {
     >
       <form onSubmit={submit} className="space-y-5">
         <label className="field-label">
-          Nome completo
-          <div className="input-wrap">
-            <User className="size-4" />
-            <input required placeholder="Seu nome" />
-          </div>
-        </label>
-        <label className="field-label">
           E-mail
           <div className="input-wrap">
             <Mail className="size-4" />
-            <input required type="email" placeholder="voce@email.com" />
+            <input
+              required
+              name="email"
+              autoComplete="email"
+              type="email"
+              placeholder="voce@email.com"
+            />
           </div>
         </label>
         <label className="field-label">
@@ -41,6 +71,8 @@ export default function RegisterPage() {
             <LockKeyhole className="size-4" />
             <input
               required
+              name="password"
+              autoComplete="new-password"
               minLength={6}
               type="password"
               placeholder="Minimo de 6 caracteres"
@@ -57,8 +89,18 @@ export default function RegisterPage() {
           Aceito os termos de uso e a politica de privacidade desta
           demonstracao.
         </label>
-        <Button type="submit" disabled={!accepted} className="w-full">
-          Criar conta <ArrowRight className="size-4" />
+        {error && (
+          <p role="alert" className="text-sm text-primary">
+            {error}
+          </p>
+        )}
+        <Button
+          type="submit"
+          disabled={!accepted || pending}
+          className="w-full"
+        >
+          {pending ? "Criando..." : "Criar conta"}{" "}
+          <ArrowRight className="size-4" />
         </Button>
         <p className="text-center text-sm text-muted-foreground">
           Ja possui acesso?{" "}

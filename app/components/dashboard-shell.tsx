@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bike,
   History,
@@ -24,7 +24,18 @@ const navItems = [
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const router = useRouter();
   const pathname = usePathname();
+  const logout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/login");
+      setLoggingOut(false);
+    }
+  };
   const navigation = (
     <nav className="flex flex-1 flex-col gap-1 p-3">
       {navItems.map(({ label, href, icon: Icon }) => (
@@ -38,13 +49,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           {label}
         </Link>
       ))}
-      <Link
-        href="/"
+      <button
+        type="button"
+        onClick={logout}
+        disabled={loggingOut}
         className="mt-auto flex items-center gap-3 border-t border-border px-3 py-4 text-xs font-semibold uppercase tracking-[.08em] text-muted-foreground hover:text-foreground"
       >
         <LogOut className="size-5" />
-        Sair
-      </Link>
+        {loggingOut ? "Saindo..." : "Sair"}
+      </button>
     </nav>
   );
   return (
