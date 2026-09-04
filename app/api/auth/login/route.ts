@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 import {
   callAuthApi,
+  callApiMe,
   getPublicError,
+  getUserRole,
   hasAccessToken,
   hasRefreshToken,
   isValidCredentials,
@@ -10,6 +12,8 @@ import {
   SESSION_MAX_AGE,
   REFRESH_COOKIE,
   REFRESH_MAX_AGE,
+  ROLE_COOKIE,
+  ROLE_MAX_AGE,
 } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -42,28 +46,36 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = NextResponse.json({ authenticated: true });
-    result.cookies.set({
-      name: SESSION_COOKIE,
-      value: data.access_token,
+    // Per README_FRONTEND.md §4: call GET /api/v1/auth/me right after login to
+    // resolve the user's role (JWT does NOT contain the role field).
+    let role = "rider";
+    try {
+      const { response: meRes, data: meData } = await callApiMe(data.access_token);
+      if (meRes.ok && meData) {
+        role = getUserRole(meData);
+      }
+    } catch {
+      // Non-fatal — default to "rider" (safe fallback for legacy accounts)
+    }
+
+    const cookieDefaults = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       path: "/",
-      maxAge: SESSION_MAX_AGE,
-    });
+    };
+
+    const result = NextResponse.json({ authenticated: true, role });
+
+    result.cookies.set({ name: SESSION_COOKIE, value: data.access_token, maxAge: SESSION_MAX_AGE, ...cookieDefaults });
 
     if (hasRefreshToken(data)) {
-      result.cookies.set({
-        name: REFRESH_COOKIE,
-        value: data.refresh_token,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: REFRESH_MAX_AGE,
-      });
+      result.cookies.set({ name: REFRESH_COOKIE, value: data.refresh_token, maxAge: REFRESH_MAX_AGE, ...cookieDefaults });
     }
+
+    // Store role in an HttpOnly cookie so proxy.ts can enforce route-level RBAC
+    // without making outbound API calls (proxy runs in Edge-compatible context).
+    result.cookies.set({ name: ROLE_COOKIE, value: role, maxAge: ROLE_MAX_AGE, ...cookieDefaults });
 
     return result;
   } catch {

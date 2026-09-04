@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,6 +12,7 @@ import {
 
 import { PublicHeader } from "@/app/components/public-header";
 import { RideOnLogo } from "@/app/components/rideon-logo";
+import { HeroSection } from "@/app/components/hero-section";
 
 const features = [
   [
@@ -53,59 +53,7 @@ export default function Home() {
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <PublicHeader />
       <main>
-        <section className="relative flex min-h-[720px] items-center overflow-hidden pt-20 lg:min-h-[820px]">
-          <Image
-            src="/rideon-hero.jpg"
-            alt="Painel RideOn com motocicleta e aplicacao de rastreamento"
-            fill
-            priority
-            className="object-cover object-center"
-            sizes="100vw"
-          />
-          <div className="hero-overlay absolute inset-0" />
-          <div className="relative z-10 mx-auto w-full max-w-7xl px-5 py-24 lg:px-8">
-            <div className="max-w-2xl">
-              <p className="section-kicker">Rastreamento e seguranca</p>
-              <h1 className="mt-6 text-5xl font-extrabold uppercase leading-[.96] sm:text-6xl lg:text-8xl">
-                Sua moto.
-                <br />
-                <span className="text-primary">Sempre no radar.</span>
-              </h1>
-              <p className="mt-7 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-                Tecnologia em tempo real para voce pilotar com liberdade.
-                Localize, proteja e acompanhe tudo em um so lugar.
-              </p>
-              <div className="mt-9 flex flex-wrap gap-3">
-                <Link
-                  href="/register"
-                  className="inline-flex min-h-11 items-center gap-2 bg-primary px-5 text-sm font-semibold uppercase tracking-[.08em] text-primary-foreground hover:bg-primary/90"
-                >
-                  Proteja sua moto <ArrowRight className="size-4" />
-                </Link>
-                <Link
-                  href="/login"
-                  className="inline-flex min-h-11 items-center border border-border bg-background/40 px-5 text-sm font-semibold uppercase tracking-[.08em] hover:border-primary"
-                >
-                  Acessar plataforma
-                </Link>
-              </div>
-              <div className="mt-14 grid max-w-xl grid-cols-3 border-t border-border/70 pt-6">
-                <div>
-                  <strong className="metric">24h</strong>
-                  <span className="metric-label">Monitoramento</span>
-                </div>
-                <div>
-                  <strong className="metric">2.4s</strong>
-                  <span className="metric-label">Atualizacao</span>
-                </div>
-                <div>
-                  <strong className="metric">100%</strong>
-                  <span className="metric-label">Controle</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <HeroSection />
         <section
           id="recursos"
           className="border-y border-border bg-surface py-24 lg:py-32"

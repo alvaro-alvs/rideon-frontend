@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bike,
+  Cpu,
   History,
   LayoutDashboard,
   LogOut,
@@ -14,10 +15,26 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { RideOnLogo } from "@/app/components/rideon-logo";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
-const navItems = [
+type NavItem = {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
+  adminOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { label: "Visao geral", href: "/dashboard", icon: LayoutDashboard },
   { label: "Veiculos", href: "/dashboard/vehicles", icon: Bike },
+  {
+    label: "Dispositivos",
+    href: "/admin/devices",
+    icon: Cpu,
+    badge: "Admin",
+    adminOnly: true,
+  },
   { label: "Historico", href: "/dashboard/history", icon: History },
   { label: "Configuracoes", href: "/dashboard/settings", icon: Settings },
 ];
@@ -27,6 +44,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const currentUser = useCurrentUser();
+
+  const isAdmin =
+    currentUser.status === "authenticated" && currentUser.user.role === "admin";
+
+  const visibleNavItems = navItems.filter(
+    (item) => !item.adminOnly || isAdmin,
+  );
+
   const logout = async () => {
     setLoggingOut(true);
     try {
@@ -38,15 +64,32 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   };
   const navigation = (
     <nav className="flex flex-1 flex-col gap-1 p-3">
-      {navItems.map(({ label, href, icon: Icon }) => (
+      {visibleNavItems.map(({ label, href, icon: Icon, badge }) => (
         <Link
           key={href}
           href={href}
           onClick={() => setMobileOpen(false)}
-          className={`flex items-center gap-3 px-3 py-3 text-xs font-semibold uppercase tracking-[.08em] ${pathname === href ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+          className={`flex items-center justify-between px-3 py-3 text-xs font-semibold uppercase tracking-[.08em] transition-colors ${
+            pathname === href
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          }`}
         >
-          <Icon className="size-5" />
-          {label}
+          <div className="flex items-center gap-3">
+            <Icon className="size-5" />
+            <span>{label}</span>
+          </div>
+          {badge && (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[9px] font-black tracking-widest uppercase ${
+                pathname === href
+                  ? "bg-black/30 text-white"
+                  : "bg-primary/20 text-primary border border-primary/30"
+              }`}
+            >
+              {badge}
+            </span>
+          )}
         </Link>
       ))}
       <button

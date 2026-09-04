@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { PENDING_RIDER_COOKIE, REFRESH_COOKIE, SESSION_COOKIE } from "@/lib/auth";
+import { PENDING_RIDER_COOKIE, REFRESH_COOKIE, ROLE_COOKIE, SESSION_COOKIE } from "@/lib/auth";
 
 export async function POST() {
   const response = NextResponse.json({ authenticated: false });
@@ -15,5 +15,6 @@ export async function POST() {
   });
   response.cookies.delete(REFRESH_COOKIE);
   response.cookies.delete(PENDING_RIDER_COOKIE);
+  response.cookies.delete(ROLE_COOKIE);
   return response;
 }

@@ -8,6 +8,24 @@ export const REFRESH_MAX_AGE = 60 * 60 * 24 * 7;
 export const PENDING_RIDER_COOKIE = "rideon_pending_rider";
 export const PENDING_RIDER_MAX_AGE = 60 * 30;
 
+// Role cookie — stores the user role ("admin" | "rider") after login.
+// httpOnly so client JS can't tamper with it; proxy.ts reads it for route protection.
+export const ROLE_COOKIE = "rideon_user_role";
+export const ROLE_MAX_AGE = SESSION_MAX_AGE;
+
+export type UserRole = "admin" | "rider";
+
+/**
+ * Defensive helper per README_FRONTEND.md §3:
+ * Legacy accounts may have role absent or empty — treat them as "rider".
+ */
+export function getUserRole(meResponse: Record<string, unknown> | null): UserRole {
+  const role = meResponse?.role;
+  if (!role || role === "") return "rider";
+  if (role === "admin") return "admin";
+  return "rider";
+}
+
 type AuthPayload = {
   email: string;
   password: string;
@@ -96,6 +114,27 @@ export async function callAuthApi(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    return { response, data: await readJson(response) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function callApiMe(token: string): Promise<ApiResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${getApiUrl()}/api/v1/auth/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       signal: controller.signal,
       cache: "no-store",
     });
