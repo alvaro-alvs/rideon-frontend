@@ -3,11 +3,16 @@ import type { NextRequest } from "next/server";
 
 import {
   callAuthenticatedApi,
+  callApiMe,
+  getApiUrl,
+  getUserRole,
   isValidVehicleRegistration,
   PENDING_RIDER_COOKIE,
   PENDING_RIDER_MAX_AGE,
+  ROLE_COOKIE,
   SESSION_COOKIE,
   type RiderPayload,
+  type UserRole,
 } from "@/lib/auth";
 
 type PendingRider = RiderPayload & {
@@ -23,12 +28,111 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const role = await resolveUserRole(request, token);
   const pendingRider = getPendingRider(request);
 
   try {
+    if (role === "admin") {
+      // 1. Motocicletas do próprio perfil de piloto do admin (se houver)
+      const ownMotorcycles: Array<Record<string, unknown>> = [];
+      let riderId = pendingRider?.id;
+      if (!riderId) {
+        const { response: riderRes, data: riderData } = await callAuthenticatedApi(
+          "/api/v1/riders/me",
+          token,
+          undefined,
+          "GET",
+        );
+        if (riderRes.ok && riderData) {
+          riderId = getId(riderData) ?? undefined;
+        }
+      }
+
+      if (riderId) {
+        const query = new URLSearchParams({ rider_id: riderId });
+        const { response: motoRes, data: motoData } = await callAuthenticatedApi(
+          `/api/v1/motorcycles?${query}`,
+          token,
+          undefined,
+          "GET",
+        );
+        if (motoRes.ok && motoData) {
+          ownMotorcycles.push(...extractMotorcyclesList(motoData));
+        }
+      }
+
+      // 2. Motocicletas de toda a frota através de /api/v1/devices
+      const apiUrl = getApiUrl();
+      const devRes = await fetch(`${apiUrl}/api/v1/devices`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+
+      const allFleetMotos: Array<Record<string, unknown>> = [];
+      if (devRes.ok) {
+        const devBody: unknown = await devRes.json().catch(() => null);
+        let rawDevices: Array<Record<string, unknown>> = [];
+        if (Array.isArray(devBody)) {
+          rawDevices = devBody as Array<Record<string, unknown>>;
+        } else if (devBody && typeof devBody === "object") {
+          const body = devBody as Record<string, unknown>;
+          if (Array.isArray(body.data)) rawDevices = body.data as Array<Record<string, unknown>>;
+          else if (Array.isArray(body.devices)) rawDevices = body.devices as Array<Record<string, unknown>>;
+        }
+
+        const motoIds = Array.from(
+          new Set(
+            rawDevices
+              .map((d) => String(d.motorcycle_id || ""))
+              .filter((id) => Boolean(id) && id !== "undefined"),
+          ),
+        );
+
+        const motoResults = await Promise.allSettled(
+          motoIds.map(async (id) => {
+            const mRes = await fetch(`${apiUrl}/api/v1/motorcycles/${id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            });
+            if (mRes.ok) {
+              const mData = await mRes.json().catch(() => null);
+              if (mData && typeof mData === "object") {
+                return mData as Record<string, unknown>;
+              }
+            }
+            return null;
+          }),
+        );
+
+        for (const res of motoResults) {
+          if (res.status === "fulfilled" && res.value) {
+            allFleetMotos.push(res.value);
+          }
+        }
+      }
+
+      // Combina e deduplica motocicletas
+      const motoMap = new Map<string, Record<string, unknown>>();
+      for (const m of [...ownMotorcycles, ...allFleetMotos]) {
+        const id = String(m.id || m.license_plate || Math.random());
+        if (!motoMap.has(id)) {
+          motoMap.set(id, m);
+        }
+      }
+      const combinedMotorcycles = Array.from(motoMap.values());
+
+      return NextResponse.json({
+        pendingRider: toPublicPendingRider(pendingRider),
+        motorcycles: combinedMotorcycles,
+        total: combinedMotorcycles.length,
+        role: "admin",
+      });
+    }
+
+    // Fluxo padrão para usuário com perfil comum (rider)
     let riderId = pendingRider?.id;
 
-    // Se não tiver rider pendente no cookie, busca o rider logado via /api/v1/riders/me
     if (!riderId) {
       const { response: riderRes, data: riderData } = await callAuthenticatedApi(
         "/api/v1/riders/me",
@@ -37,12 +141,24 @@ export async function GET(request: NextRequest) {
         "GET",
       );
 
+      // Se o perfil ainda não existe (404), trata como normal com lista vazia
       if (!riderRes.ok) {
+        if (riderRes.status === 404) {
+          return NextResponse.json({
+            pendingRider: toPublicPendingRider(pendingRider),
+            motorcycles: [],
+            total: 0,
+            role: "rider",
+          });
+        }
+
         return NextResponse.json(
           {
             message: getVehicleError(riderRes.status),
             pendingRider: toPublicPendingRider(pendingRider),
             motorcycles: [],
+            total: 0,
+            role: "rider",
           },
           { status: toPublicStatus(riderRes.status) },
         );
@@ -57,6 +173,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         pendingRider: toPublicPendingRider(pendingRider),
         motorcycles: [],
+        total: 0,
+        role: "rider",
       });
     }
 
@@ -68,37 +186,26 @@ export async function GET(request: NextRequest) {
       "GET",
     );
 
-    console.log("motoRes", motoRes);
-    console.log("data", data);
-
     if (!motoRes.ok) {
       return NextResponse.json(
         {
           message: getVehicleError(motoRes.status),
           pendingRider: toPublicPendingRider(pendingRider),
           motorcycles: [],
+          total: 0,
+          role: "rider",
         },
         { status: toPublicStatus(motoRes.status) },
       );
     }
 
-    let motorcycles: Array<Record<string, unknown>> = [];
-
-    if (data) {
-      if (Array.isArray(data)) {
-        motorcycles = data as Array<Record<string, unknown>>;
-      } else if (Array.isArray(data.data)) {
-        motorcycles = data.data as Array<Record<string, unknown>>;
-      } else if (Array.isArray(data.motorcycles)) {
-        motorcycles = data.motorcycles as Array<Record<string, unknown>>;
-      } else if (Array.isArray(data.items)) {
-        motorcycles = data.items as Array<Record<string, unknown>>;
-      }
-    }
+    const motorcycles = extractMotorcyclesList(data);
 
     return NextResponse.json({
       pendingRider: toPublicPendingRider(pendingRider),
       motorcycles,
+      total: motorcycles.length,
+      role: "rider",
     });
   } catch {
     return NextResponse.json(
@@ -127,6 +234,48 @@ export async function POST(request: NextRequest) {
       { message: "Sua sessao expirou. Entre novamente." },
       { status: 401 },
     );
+  }
+
+  const role = await resolveUserRole(request, token);
+
+  // Regra de Negócio: Usuário padrão (rider) NÃO pode criar mais de 1 veículo
+  if (role !== "admin") {
+    try {
+      const { response: riderRes, data: riderData } = await callAuthenticatedApi(
+        "/api/v1/riders/me",
+        token,
+        undefined,
+        "GET",
+      );
+
+      if (riderRes.ok && riderData) {
+        const existingRiderId = getId(riderData);
+        if (existingRiderId) {
+          const query = new URLSearchParams({ rider_id: existingRiderId });
+          const { response: motoRes, data: motoData } = await callAuthenticatedApi(
+            `/api/v1/motorcycles?${query}`,
+            token,
+            undefined,
+            "GET",
+          );
+
+          if (motoRes.ok && motoData) {
+            const existingMotos = extractMotorcyclesList(motoData);
+            if (existingMotos.length >= 1) {
+              return NextResponse.json(
+                {
+                  message:
+                    "Limite de veículos atingido. O perfil padrão de piloto permite o cadastro de no máximo 1 veículo.",
+                },
+                { status: 403 },
+              );
+            }
+          }
+        }
+      }
+    } catch {
+      // Se falhar a verificação prévia, prossegue com o fluxo padrão
+    }
   }
 
   try {
@@ -194,6 +343,35 @@ export async function POST(request: NextRequest) {
       { status: 502 },
     );
   }
+}
+
+async function resolveUserRole(request: NextRequest, token: string): Promise<UserRole> {
+  const cookieRole = request.cookies.get(ROLE_COOKIE)?.value;
+  if (cookieRole === "admin") return "admin";
+  if (cookieRole === "rider") return "rider";
+
+  try {
+    const { response, data } = await callApiMe(token);
+    if (response.ok && data) {
+      return getUserRole(data);
+    }
+  } catch {
+    // fallback
+  }
+
+  return "rider";
+}
+
+function extractMotorcyclesList(data: unknown): Array<Record<string, unknown>> {
+  if (!data) return [];
+  if (Array.isArray(data)) return data as Array<Record<string, unknown>>;
+  if (typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return obj.data as Array<Record<string, unknown>>;
+    if (Array.isArray(obj.motorcycles)) return obj.motorcycles as Array<Record<string, unknown>>;
+    if (Array.isArray(obj.items)) return obj.items as Array<Record<string, unknown>>;
+  }
+  return [];
 }
 
 function getPendingRider(request: NextRequest): PendingRider | null {
