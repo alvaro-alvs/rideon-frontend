@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminDevicesResponse, Device } from "@/lib/types/device";
 
-export type FilterStatus = "all" | "active" | "inactive" | "unlinked";
+export type FilterStatus = "all" | "active" | "inactive" | "unlinked" | "j16";
 
 export function useAdminDevices(pollIntervalSeconds: number = 30) {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -49,10 +49,46 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
   }, []);
 
   useEffect(() => {
-    void fetchDevices();
-  }, [fetchDevices]);
+    let active = true;
+    async function initFetch() {
+      try {
+        setError(null);
+        const response = await fetch("/api/admin/devices", { cache: "no-store" });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            message?: string;
+          } | null;
+          if (response.status === 401) {
+            throw new Error(
+              body?.message || "Sessão não autenticada. Faça login novamente.",
+            );
+          }
+          throw new Error(
+            body?.message || "Falha ao carregar lista de dispositivos.",
+          );
+        }
 
-  // Polling automático
+        const data = (await response.json()) as AdminDevicesResponse;
+        if (active) {
+          setDevices(data.devices || []);
+          setLastUpdated(new Date());
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Erro ao carregar dispositivos");
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void initFetch();
+    return () => {
+      active = false;
+    };
+  }, []);
   useEffect(() => {
     if (!autoRefresh || pollIntervalSeconds <= 0) return;
 
@@ -66,10 +102,16 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
   // Filtragem e busca
   const filteredDevices = useMemo(() => {
     return devices.filter((device) => {
+      const isJ16 =
+        !device.protocol ||
+        device.protocol.toUpperCase() === "GT06" ||
+        device.protocol.toUpperCase().includes("J16");
+
       // Filtro de status
       if (filterStatus === "active" && !device.last_position) return false;
       if (filterStatus === "inactive" && device.last_position) return false;
       if (filterStatus === "unlinked" && device.motorcycle) return false;
+      if (filterStatus === "j16" && !isJ16) return false;
 
       // Busca textual
       if (!searchQuery.trim()) return true;
@@ -98,12 +140,18 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
     const activeCount = devices.filter((d) => Boolean(d.last_position)).length;
     const inactiveCount = devices.filter((d) => !d.last_position && Boolean(d.motorcycle)).length;
     const unlinkedCount = devices.filter((d) => !d.motorcycle).length;
+    const j16Count = devices.filter((d) =>
+      !d.protocol ||
+      d.protocol.toUpperCase() === "GT06" ||
+      d.protocol.toUpperCase().includes("J16")
+    ).length;
 
     return {
       total,
       activeCount,
       inactiveCount,
       unlinkedCount,
+      j16Count,
     };
   }, [devices]);
 

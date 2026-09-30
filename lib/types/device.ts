@@ -70,3 +70,26 @@ export type AdminDevicesResponse = {
   inactive_count: number;
   unlinked_count: number;
 };
+
+export type CreateDevicePayload = {
+  serial_number: string;
+  motorcycle_id?: string | null;
+  protocol?: string;
+  firmware_version?: string;
+  status?: "active" | "inactive";
+  model_name?: string;
+  notes?: string;
+};
+
+export type DeviceModelPreset = {
+  id: string;
+  name: string;
+  category: "4g" | "2g" | "hybrid" | "custom";
+  defaultProtocol: string;
+  defaultFirmware: string;
+  badge: string;
+  description: string;
+  voltageRange: string;
+  features: string[];
+};
+

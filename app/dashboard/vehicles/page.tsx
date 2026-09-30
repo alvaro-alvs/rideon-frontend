@@ -1,31 +1,46 @@
 "use client";
 
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
+  Activity,
   Bike,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Info,
+  MapPin,
   Palette,
   Phone,
   Plus,
+  Radio,
+  Search,
   ShieldCheck,
+  Sparkles,
   Tag,
   UserRound,
+  X,
+  Zap,
 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { Button } from "@/app/components/ui/button";
+import { CalendarPicker } from "@/app/components/ui/calendar-picker";
+import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   VehicleMiniCard,
   type VehicleCardData,
-} from "@/app/dashboard/vehicles/components/vehicle-mini-card";
-import { useCurrentUser } from "@/hooks/use-current-user";
+} from "./components/vehicle-mini-card";
+import { VehiclePlatePreview } from "./components/vehicle-plate-preview";
+import {
+  BrandQuickSelect,
+  ColorQuickSelect,
+} from "./components/brand-quick-select";
 
 type PendingRider = {
+  id?: string;
   name: string;
   date_of_birth: string;
   phone: string;
@@ -33,7 +48,7 @@ type PendingRider = {
 
 type View = "loading" | "new" | "pending-card" | "pending-form" | "success";
 
-const ADMIN_PAGE_SIZE = 4;
+const ADMIN_PAGE_SIZE = 6;
 
 export default function VehiclesPage() {
   const currentUser = useCurrentUser();
@@ -44,11 +59,25 @@ export default function VehiclesPage() {
   const [pending, setPending] = useState(false);
   const [adminPage, setAdminPage] = useState(1);
   const [showAdminAddForm, setShowAdminAddForm] = useState(false);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
+
+  // Filtro de busca (Admin ou multi-veículos)
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Live Telemetry Modal
+  const [selectedTelemetryMoto, setSelectedTelemetryMoto] =
+    useState<VehicleCardData | null>(null);
+
+  // Form interactive state
+  const [formBrand, setFormBrand] = useState("");
+  const [formModel, setFormModel] = useState("");
+  const [formPlate, setFormPlate] = useState("");
+  const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
+  const [formColor, setFormColor] = useState("");
+  const [formDob, setFormDob] = useState("");
 
   const isAdmin =
     currentUser.status === "authenticated" && currentUser.user.role === "admin";
-
-  const [reloadTrigger, setReloadTrigger] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -106,6 +135,14 @@ export default function VehiclesPage() {
       phone: String(formData.get("phone") ?? ""),
     };
 
+    const brand = formBrand || String(formData.get("brand") ?? "");
+    const model = formModel || String(formData.get("model") ?? "");
+    const color = formColor || String(formData.get("color") ?? "");
+    const year = Number(formYear || formData.get("year"));
+    const license_plate = (formPlate || String(formData.get("license_plate") ?? ""))
+      .trim()
+      .toUpperCase();
+
     try {
       const response = await fetch("/api/vehicles", {
         method: "POST",
@@ -117,13 +154,11 @@ export default function VehiclesPage() {
             phone: rider.phone,
           },
           motorcycle: {
-            brand: formData.get("brand"),
-            model: formData.get("model"),
-            year: Number(formData.get("year")),
-            color: formData.get("color"),
-            license_plate: String(formData.get("license_plate") ?? "")
-              .trim()
-              .toUpperCase(),
+            brand,
+            model,
+            year,
+            color,
+            license_plate,
           },
         }),
       });
@@ -147,6 +182,12 @@ export default function VehiclesPage() {
       setPendingRider(null);
       setView("success");
       setShowAdminAddForm(false);
+      // Reset form states
+      setFormBrand("");
+      setFormModel("");
+      setFormPlate("");
+      setFormColor("");
+      setFormDob("");
       setReloadTrigger((prev) => prev + 1);
     } catch (reason) {
       setError(
@@ -162,221 +203,422 @@ export default function VehiclesPage() {
   // Regra de Negócio: Usuário padrão não pode cadastrar mais de 1 veículo
   const hasReachedSingleVehicleLimit = !isAdmin && motorcycles.length >= 1;
 
-  // Paginação para Admin
+  // Filtragem e Paginação para Admin
+  const filteredMotorcycles = motorcycles.filter((moto) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const plate = (moto.license_plate ?? "").toLowerCase();
+    const brand = (moto.brand ?? "").toLowerCase();
+    const model = (moto.model ?? "").toLowerCase();
+    const riderName = (moto.rider?.name ?? "").toLowerCase();
+    return (
+      plate.includes(query) ||
+      brand.includes(query) ||
+      model.includes(query) ||
+      riderName.includes(query)
+    );
+  });
+
   const totalAdminPages = Math.max(
     1,
-    Math.ceil(motorcycles.length / ADMIN_PAGE_SIZE),
+    Math.ceil(filteredMotorcycles.length / ADMIN_PAGE_SIZE),
   );
   const currentAdminPage = Math.min(adminPage, totalAdminPages);
   const displayedMotorcycles = isAdmin
-    ? motorcycles.slice(
-        (currentAdminPage - 1) * ADMIN_PAGE_SIZE,
-        currentAdminPage * ADMIN_PAGE_SIZE,
-      )
+    ? filteredMotorcycles.slice(
+      (currentAdminPage - 1) * ADMIN_PAGE_SIZE,
+      currentAdminPage * ADMIN_PAGE_SIZE,
+    )
     : motorcycles;
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-6xl py-6 space-y-10">
-        {/* Page Header */}
-        <header>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="section-kicker">Veículos</p>
-            {isAdmin && (
-              <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary">
-                Modo Admin
-              </span>
-            )}
+      <div className="mx-auto max-w-6xl space-y-10 py-4">
+        {/* ========================================================================= */}
+        {/* HERO HEADER & STATS SUMMARY BAR                                           */}
+        {/* ========================================================================= */}
+        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+          {/* Ambient Cyber Grid & Glow Accents */}
+          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
+
+          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
+                  <Sparkles className="size-3.5" />
+                  Central RideOn
+                </span>
+                {isAdmin ? (
+                  <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-400 border border-amber-500/20">
+                    Modo Frotas & Administrador
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
+                    {motorcycles.length > 0 ? "1 Moto Ativa" : "Pronto para Conectar"}
+                  </span>
+                )}
+              </div>
+
+              <h1 className="text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
+                {isAdmin ? "Gestão de Veículos da Frota" : "Seus Veículos & Cadastro"}
+              </h1>
+
+              <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                {isAdmin
+                  ? "Monitore e gerencie todos os veículos cadastrados na central com telemetria GPS e controle administrativo."
+                  : "Acompanhe os dados da sua motocicleta vinculada, verifique a proteção em tempo real ou conclua o cadastro."}
+              </p>
+            </div>
+
+            {/* Real-time Metrics Bar (4 Cards) */}
+            <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-3.5">
+              {/* Metric 1: Total Veículos */}
+              <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Bike className="size-4.5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    {isAdmin ? "Total Frota" : "Veículo"}
+                  </p>
+                  <p className="text-base font-black text-foreground">
+                    {view === "loading" ? "..." : motorcycles.length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Metric 2: Rastreamento Ativo */}
+              <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+                  <Radio className="size-4.5 animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Rastreamento
+                  </p>
+                  <p className="text-base font-black text-emerald-400">
+                    {view === "loading"
+                      ? "..."
+                      : motorcycles.length > 0
+                        ? `${motorcycles.length} Ativo${motorcycles.length > 1 ? "s" : ""}`
+                        : "0 Ativos"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Metric 3: Prontidão de Telemetria */}
+              <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                  <Activity className="size-4.5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Telemetria
+                  </p>
+                  <p className="text-base font-black text-blue-400">
+                    {motorcycles.length > 0 ? "100% Online" : "Standby"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Metric 4: Alerta de Segurança */}
+              {/* <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                  <ShieldCheck className="size-4.5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Segurança
+                  </p>
+                  <p className="text-base font-black text-amber-400">
+                    Protegido 24/7
+                  </p>
+                </div>
+              </div> */}
+            </div>
           </div>
-          <h1 className="mt-3 text-3xl font-extrabold uppercase sm:text-4xl text-foreground">
-            {isAdmin ? "Gestão de Veículos da Frota" : "Seus Veículos & Cadastro"}
-          </h1>
-          <p className="mt-2 max-w-2xl text-xs sm:text-sm leading-6 text-muted-foreground">
-            {isAdmin
-              ? "Visualize todos os veículos da central com paginação e realize novos cadastros administrativos."
-              : "Acompanhe sua moto vinculada ou conclua o cadastro para iniciar o monitoramento em tempo real."}
-          </p>
         </header>
 
         {/* Global Error Banner */}
         {error && (
-          <p
+          <div
             role="alert"
-            className="border border-primary bg-primary/10 p-4 text-sm font-medium text-primary"
+            className="flex items-center justify-between rounded-xl border border-primary/60 bg-primary/10 p-4 text-sm font-medium text-primary shadow-lg"
           >
-            {error}
-          </p>
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="text-primary hover:opacity-75"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         )}
 
         {/* Loading Indicator */}
         {view === "loading" && (
-          <div className="border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            <Bike className="mx-auto size-8 animate-pulse text-primary mb-3" />
-            Carregando veículos cadastrados...
+          <div className="rounded-2xl border border-border/80 bg-card/60 p-12 text-center shadow-lg backdrop-blur-md">
+            <div className="relative mx-auto mb-4 flex size-14 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-25" />
+              <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/30">
+                <Bike className="size-6 animate-pulse" />
+              </div>
+            </div>
+            <p className="text-sm font-bold uppercase tracking-wider text-foreground">
+              Sincronizando Veículos...
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Carregando dados da telemetria e perfil da frota.
+            </p>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* SEÇÃO 1: MINI CARDS DOS VEÍCULOS CADASTRADOS (LADO A LADO ACIMA DO FORM)   */}
+        {/* SEÇÃO 1: VEÍCULOS CADASTRADOS (CARDS MODERNOS & BUSCA)                     */}
         {/* ========================================================================= */}
         {view !== "loading" && motorcycles.length > 0 && (
-          <section aria-labelledby="registered-vehicles-title" className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
+          <section aria-labelledby="registered-vehicles-title" className="space-y-6">
+            <div className="flex flex-col gap-4 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <Bike className="size-5 text-primary" />
-                <h2 id="registered-vehicles-title" className="text-lg font-bold uppercase tracking-tight text-foreground">
-                  {isAdmin ? "Veículos Cadastrados na Frota" : "Sua Motocicleta"}
-                </h2>
-                <span className="rounded bg-secondary px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
-                  {motorcycles.length} {motorcycles.length === 1 ? "veículo" : "veículos"}
-                </span>
+                <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Bike className="size-4.5" />
+                </div>
+                <div>
+                  <h2
+                    id="registered-vehicles-title"
+                    className="text-lg font-black uppercase tracking-tight text-foreground"
+                  >
+                    {isAdmin ? "Veículos Cadastrados na Frota" : "Sua Motocicleta Conectada"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {motorcycles.length === 1
+                      ? "1 veículo monitorado em tempo real"
+                      : `${motorcycles.length} veículos registrados`}
+                  </p>
+                </div>
               </div>
 
-              {/* Controles de Paginação para Admin */}
-              {isAdmin && totalAdminPages > 1 && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground text-[11px]">
-                    Pág. <b>{currentAdminPage}</b> de <b>{totalAdminPages}</b>
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setAdminPage((p) => Math.max(1, p - 1))}
-                      disabled={currentAdminPage <= 1}
-                      className="grid size-7 place-items-center border border-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-40 disabled:hover:border-border disabled:hover:text-foreground"
-                      title="Página Anterior"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </button>
-                    {Array.from({ length: totalAdminPages }, (_, idx) => idx + 1).map((pageNum) => (
+              {/* Barra de Busca para Admin ou se houver mais de 2 veículos */}
+              {(isAdmin || motorcycles.length > 2) && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative min-w-[240px]">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setAdminPage(1);
+                      }}
+                      placeholder="Buscar por placa, modelo ou piloto..."
+                      className="w-full rounded-xl border border-border/80 bg-secondary/80 py-2 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                    />
+                    {searchQuery && (
                       <button
-                        key={pageNum}
                         type="button"
-                        onClick={() => setAdminPage(pageNum)}
-                        className={`size-7 text-xs font-bold transition-colors ${
-                          pageNum === currentAdminPage
-                            ? "bg-primary text-white"
-                            : "border border-border bg-secondary text-muted-foreground hover:text-foreground"
-                        }`}
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       >
-                        {pageNum}
+                        <X className="size-3.5" />
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setAdminPage((p) => Math.min(totalAdminPages, p + 1))}
-                      disabled={currentAdminPage >= totalAdminPages}
-                      className="grid size-7 place-items-center border border-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-40 disabled:hover:border-border disabled:hover:text-foreground"
-                      title="Próxima Página"
-                    >
-                      <ChevronRight className="size-4" />
-                    </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Grid dos Mini Cards Lado a Lado */}
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {displayedMotorcycles.map((moto, index) => (
-                <VehicleMiniCard
-                  key={moto.id || moto.license_plate || index}
-                  vehicle={moto}
-                  isAdmin={isAdmin}
-                />
-              ))}
-            </div>
+            {/* Grid dos Novos Cards Modernos */}
+            {displayedMotorcycles.length > 0 ? (
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {displayedMotorcycles.map((moto, index) => (
+                  <VehicleMiniCard
+                    key={moto.id || moto.license_plate || index}
+                    vehicle={moto}
+                    isAdmin={isAdmin}
+                    onOpenTelemetry={(m) => setSelectedTelemetryMoto(m)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border/60 bg-card/40 p-8 text-center text-xs text-muted-foreground">
+                Nenhum veículo encontrado para a busca &quot;{searchQuery}&quot;.
+              </div>
+            )}
+
+            {/* Paginação para Admin */}
+            {isAdmin && totalAdminPages > 1 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4 text-xs">
+                <span className="text-muted-foreground">
+                  Mostrando página <b>{currentAdminPage}</b> de <b>{totalAdminPages}</b> ({filteredMotorcycles.length} veículos)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAdminPage((p) => Math.max(1, p - 1))}
+                    disabled={currentAdminPage <= 1}
+                    className="flex size-8 items-center justify-center rounded-lg border border-border/80 bg-secondary/80 text-foreground transition-all hover:border-primary hover:text-primary disabled:opacity-30"
+                    title="Página Anterior"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                  {Array.from({ length: totalAdminPages }, (_, idx) => idx + 1).map((pageNum) => (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setAdminPage(pageNum)}
+                      className={`size-8 rounded-lg text-xs font-bold transition-all ${pageNum === currentAdminPage
+                          ? "bg-primary text-white shadow-md shadow-primary/20"
+                          : "border border-border/80 bg-secondary/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setAdminPage((p) => Math.min(totalAdminPages, p + 1))}
+                    disabled={currentAdminPage >= totalAdminPages}
+                    className="flex size-8 items-center justify-center rounded-lg border border-border/80 bg-secondary/80 text-foreground transition-all hover:border-primary hover:text-primary disabled:opacity-30"
+                    title="Próxima Página"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
         {/* ========================================================================= */}
-        {/* SEÇÃO 2: FORMULÁRIOS / REGRA DE NEGÓCIO DE LIMITE DE 1 VEÍCULO            */}
+        {/* SEÇÃO 2: BANNER DE PROTEÇÃO ATIVA (LIMITE 1 VEÍCULO PARA RIDER)           */}
         {/* ========================================================================= */}
-
-        {/* Aviso de Limite Atingido para Usuário Padrão */}
         {hasReachedSingleVehicleLimit && view !== "loading" && (
-          <section className="border border-border bg-card p-6 sm:p-8 space-y-4">
-            <div className="flex items-start gap-4">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-400">
-                <ShieldCheck className="size-6" />
-              </span>
-              <div className="space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400">
-                  Limite de Cadastro Atingido
-                </span>
-                <h3 className="text-xl font-bold uppercase text-foreground">
-                  Você já possui 1 veículo cadastrado
-                </h3>
-                <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl leading-relaxed">
-                  Usuários com perfil de piloto comum têm direito ao cadastro de 1 veículo ativo por conta.
-                  Sua moto já está cadastrada e visível no card acima com proteção e telemetria disponíveis.
-                </p>
+          <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-r from-card via-card/90 to-emerald-950/20 p-6 shadow-xl backdrop-blur-xl sm:p-8">
+            <div className="pointer-events-none absolute -right-12 -top-12 size-48 rounded-full bg-emerald-500/10 blur-2xl" />
+
+            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="relative flex size-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner">
+                  <ShieldCheck className="size-7" />
+                  <span className="absolute -right-1 -top-1 flex size-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                      Proteção RideOn Ativa • Limite de 1 Veículo Atingido
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-black uppercase tracking-tight text-foreground sm:text-2xl">
+                    Sua moto está monitorada e segura
+                  </h3>
+                  <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                    Usuários padrão possuem direito a 1 motocicleta conectada simultaneamente.
+                    Seu veículo já está vinculado à central de telemetria com rastreamento GPS e alerta antifurto.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all duration-200 hover:bg-primary/90 hover:scale-[1.02]"
+                >
+                  <MapPin className="size-4" />
+                  <span>Acessar Painel de Telemetria</span>
+                  <ChevronRight className="size-4" />
+                </Link>
               </div>
             </div>
-
-            <div className="pt-2 flex flex-wrap gap-3">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 border border-primary bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-primary/90"
-              >
-                <span>Acessar Monitoramento ao Vivo</span>
-                <ChevronRight className="size-4" />
-              </Link>
-            </div>
           </section>
         )}
 
-        {/* Cadastro Pendente (Step 1 do cadastro por cookie) */}
+        {/* ========================================================================= */}
+        {/* SEÇÃO 3: ETAPA PENDENTE DE CADASTRO (STEPPER MODERNO)                      */}
+        {/* ========================================================================= */}
         {view === "pending-card" && pendingRider && (
-          <section className="border border-primary/50 bg-card p-6 space-y-3 max-w-2xl">
-            <p className="section-kicker">Cadastro Pendente</p>
-            <h2 className="text-xl font-bold uppercase">Piloto registrado, moto pendente</h2>
-            <p className="text-xs text-muted-foreground">
-              Você já iniciou o cadastro do piloto. Clique abaixo para finalizar a vinculação da motocicleta.
+          <section className="overflow-hidden rounded-3xl border border-primary/40 bg-card/90 p-6 shadow-2xl backdrop-blur-xl sm:p-8 space-y-6 max-w-3xl mx-auto">
+            {/* Stepper Header */}
+            <div className="flex items-center justify-between border-b border-border/60 pb-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                  Etapa 2 de 2 • Finalizar Cadastro
+                </span>
+                <h2 className="text-2xl font-black uppercase tracking-tight text-foreground">
+                  Piloto Registrado, Moto Pendente
+                </h2>
+              </div>
+              <span className="rounded-full bg-primary/20 px-3 py-1 text-xs font-bold text-primary border border-primary/30">
+                Aguardando Motocicleta
+              </span>
+            </div>
+
+            <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+              Você já registrou os dados do piloto responsável. Agora basta adicionar as especificações da motocicleta para concluir o vínculo com o rastreador.
             </p>
+
             <button
               type="button"
               onClick={() => {
                 setError("");
                 setView("pending-form");
               }}
-              className="mt-3 flex w-full items-center gap-4 border border-primary bg-secondary p-4 text-left transition-colors hover:bg-secondary/80 focus-visible:outline-2 focus-visible:outline-primary"
+              className="group flex w-full items-center gap-4 rounded-2xl border border-primary/40 bg-secondary/60 p-5 text-left transition-all duration-300 hover:border-primary hover:bg-secondary hover:shadow-xl hover:shadow-primary/10"
             >
-              <span className="grid size-10 shrink-0 place-items-center bg-primary text-primary-foreground">
-                <UserRound className="size-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-foreground">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 transition-transform group-hover:scale-105">
+                <UserRound className="size-6" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="truncate text-base font-bold text-foreground group-hover:text-primary transition-colors">
                   {pendingRider.name}
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Tel: {pendingRider.phone} • Nasc: {pendingRider.date_of_birth.slice(0, 10)}
-                </span>
-              </span>
-              <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary">
-                <span>Continuar</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>Tel: <b className="text-foreground font-mono">{pendingRider.phone}</b></span>
+                  <span>•</span>
+                  <span>Nascimento: <b className="text-foreground">{pendingRider.date_of_birth.slice(0, 10)}</b></span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-primary group-hover:bg-primary group-hover:text-white transition-all">
+                <span>Vincular Moto</span>
                 <ChevronRight className="size-4" />
-              </span>
+              </div>
             </button>
           </section>
         )}
 
-        {/* Sucesso de Cadastro */}
+        {/* ========================================================================= */}
+        {/* SEÇÃO 4: SUCESSO DE CADASTRO                                               */}
+        {/* ========================================================================= */}
         {view === "success" && (
-          <section className="border border-primary bg-card p-6 sm:p-8 max-w-2xl space-y-4">
-            <div className="flex items-center gap-3 text-primary">
-              <CheckCircle2 className="size-8" />
-              <h2 className="text-2xl font-bold uppercase">Moto cadastrada com sucesso!</h2>
+          <section className="overflow-hidden rounded-3xl border border-emerald-500/40 bg-card/90 p-8 shadow-2xl backdrop-blur-xl max-w-3xl mx-auto space-y-6 text-center sm:text-left">
+            <div className="flex flex-col sm:flex-row items-center gap-5">
+              <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/10">
+                <CheckCircle2 className="size-9" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                  Operação Concluída com Sucesso
+                </span>
+                <h2 className="text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
+                  Veículo Cadastrado com Sucesso!
+                </h2>
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                  O piloto e a motocicleta foram conectados com sucesso à central RideOn. A telemetria já está ativa e pronta para acompanhamento em tempo real.
+                </p>
+              </div>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-6">
-              O piloto e a motocicleta já estão vinculados à sua central e prontos para monitoramento.
-            </p>
-            <div className="flex flex-wrap gap-3 pt-2">
+
+            <div className="flex flex-wrap items-center gap-3 pt-2">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-2 border border-primary bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-primary/90"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.02]"
               >
-                <span>Ir para a Dashboard</span>
+                <span>Ir para o Painel de Telemetria</span>
                 <ChevronRight className="size-4" />
               </Link>
               {isAdmin && (
@@ -386,7 +628,7 @@ export default function VehiclesPage() {
                     setView("new");
                     setShowAdminAddForm(true);
                   }}
-                  className="inline-flex items-center gap-2 border border-border bg-secondary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground transition-colors hover:border-primary"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary px-5 py-3 text-xs font-black uppercase tracking-wider text-foreground transition-all hover:border-primary hover:text-primary"
                 >
                   <Plus className="size-4" />
                   <span>Cadastrar Outro Veículo</span>
@@ -396,124 +638,241 @@ export default function VehiclesPage() {
           </section>
         )}
 
-        {/* Formulário de Cadastro: exibido se não atingiu o limite ou se for admin */}
+        {/* ========================================================================= */}
+        {/* SEÇÃO 5: FORMULÁRIO DE CADASTRO COM PREVIEW DE PLACA EM TEMPO REAL         */}
+        {/* ========================================================================= */}
         {((!hasReachedSingleVehicleLimit && (view === "new" || view === "pending-form")) ||
           (isAdmin && showAdminAddForm)) && (
-          <div className="space-y-6">
-            {isAdmin && motorcycles.length > 0 && (
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Info className="size-4 text-primary" />
-                  <span>Cadastro Administrativo de Novo Veículo na Frota</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAdminAddForm(false)}
-                  className="text-xs font-bold uppercase text-muted-foreground hover:text-foreground"
-                >
-                  Fechar Formulário
-                </button>
-              </div>
-            )}
-
-            <form onSubmit={submit} className="max-w-3xl space-y-8">
-              {/* Piloto */}
-              <section className="border border-border bg-card p-5 sm:p-6">
-                <div className="flex items-center gap-3">
-                  <UserRound className="size-5 text-primary" />
-                  <h2 className="text-lg font-bold uppercase">Piloto Responsável</h2>
-                </div>
-                {pendingRider ? (
-                  <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                    <FixedField label="Nome" value={pendingRider.name} />
-                    <FixedField
-                      label="Nascimento"
-                      value={pendingRider.date_of_birth.slice(0, 10)}
-                    />
-                    <FixedField label="Telefone" value={pendingRider.phone} />
+            <div className="space-y-6">
+              {isAdmin && motorcycles.length > 0 && (
+                <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-secondary/40 px-5 py-3.5 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                    <Info className="size-4 text-primary" />
+                    <span>Cadastro Administrativo de Novo Veículo na Frota</span>
                   </div>
-                ) : (
-                  <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                    <FormField
-                      label="Nome completo"
-                      name="name"
-                      icon={UserRound}
-                      autoComplete="name"
-                      placeholder="Ex: Carlos Silva"
-                    />
-                    <FormField
-                      label="Telefone"
-                      name="phone"
-                      icon={Phone}
-                      type="tel"
-                      autoComplete="tel"
-                      placeholder="Ex: +55 11 99999-8888"
-                    />
-                    <FormField
-                      label="Data de nascimento"
-                      name="date_of_birth"
-                      icon={CalendarDays}
-                      type="date"
-                    />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminAddForm(false)}
+                    className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Fechar Formulário
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={submit} className="space-y-8">
+                <div className="grid gap-8 lg:grid-cols-12">
+                  {/* Coluna Esquerda: Dados do Piloto e Moto */}
+                  <div className="space-y-8 lg:col-span-8">
+                    {/* Seção Piloto */}
+                    <section className="relative z-20 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
+                      <div className="flex items-center gap-3 border-b border-border/60 pb-4">
+                        <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                          <UserRound className="size-5" />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
+                            Piloto Responsável
+                          </h2>
+                          <p className="text-xs text-muted-foreground">
+                            {pendingRider
+                              ? "Piloto pré-registrado na etapa anterior"
+                              : "Informe os dados de identificação do condutor"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {pendingRider ? (
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <FixedField label="Nome Completo" value={pendingRider.name} />
+                          <FixedField
+                            label="Data de Nascimento"
+                            value={pendingRider.date_of_birth.slice(0, 10)}
+                          />
+                          <FixedField label="Telefone" value={pendingRider.phone} />
+                        </div>
+                      ) : (
+                        <div className="grid gap-5 sm:grid-cols-2">
+                          <FormField
+                            label="Nome Completo"
+                            name="name"
+                            icon={UserRound}
+                            autoComplete="name"
+                            placeholder="Ex: Carlos Silva"
+                            className="sm:col-span-2"
+                          />
+                          <FormField
+                            label="Telefone com DDD"
+                            name="phone"
+                            icon={Phone}
+                            type="tel"
+                            autoComplete="tel"
+                            placeholder="Ex: (11) 99999-8888"
+                          />
+                          <CalendarPicker
+                            label="Data de Nascimento"
+                            name="date_of_birth"
+                            value={formDob}
+                            onChange={setFormDob}
+                            placeholder="Selecione sua data de nascimento"
+                            required
+                            mode="birthdate"
+                            maxDate={new Date().toISOString().split("T")[0]}
+                          />
+                        </div>
+                      )}
+                    </section>
+
+                    {/* Seção Motocicleta */}
+                    <section className="relative z-10 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
+                      <div className="flex items-center gap-3 border-b border-border/60 pb-4">
+                        <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                          <Bike className="size-5" />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
+                            Dados da Motocicleta
+                          </h2>
+                          <p className="text-xs text-muted-foreground">
+                            Especifique a marca, modelo, ano, cor e placa do veículo
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Quick Selectors de Marca e Cor */}
+                      <div className="space-y-4 rounded-2xl border border-border/60 bg-secondary/40 p-4">
+                        <BrandQuickSelect
+                          selectedBrand={formBrand}
+                          onSelect={(brand) => setFormBrand(brand)}
+                        />
+                        <ColorQuickSelect
+                          selectedColor={formColor}
+                          onSelect={(color) => setFormColor(color)}
+                        />
+                      </div>
+
+                      <div className="grid gap-5 sm:grid-cols-2">
+                        <FormField
+                          label="Marca"
+                          name="brand"
+                          value={formBrand}
+                          onChange={(e) => setFormBrand(e.target.value)}
+                          icon={Bike}
+                          placeholder="Ex: Yamaha, Honda, BMW"
+                        />
+                        <FormField
+                          label="Modelo"
+                          name="model"
+                          value={formModel}
+                          onChange={(e) => setFormModel(e.target.value)}
+                          icon={Tag}
+                          placeholder="Ex: MT-07, CB 500F, F 850 GS"
+                        />
+                        <FormField
+                          label="Ano de Fabricação"
+                          name="year"
+                          value={formYear}
+                          onChange={(e) => setFormYear(e.target.value)}
+                          icon={CalendarDays}
+                          type="number"
+                          min="1900"
+                          max={String(new Date().getFullYear() + 1)}
+                          placeholder="Ex: 2024"
+                        />
+                        <FormField
+                          label="Cor Predominante"
+                          name="color"
+                          value={formColor}
+                          onChange={(e) => setFormColor(e.target.value)}
+                          icon={Palette}
+                          placeholder="Ex: Preto, Vermelho, Azul"
+                        />
+                        <FormField
+                          label="Placa (Padrão Mercosul ou Tradicional)"
+                          name="license_plate"
+                          value={formPlate}
+                          onChange={(e) => setFormPlate(e.target.value.toUpperCase())}
+                          icon={Tag}
+                          maxLength={8}
+                          placeholder="Ex: BRA2E19 ou ABC1234"
+                          className="sm:col-span-2"
+                        />
+                      </div>
+                    </section>
                   </div>
-                )}
-              </section>
 
-              {/* Motocicleta */}
-              <section className="border border-border bg-card p-5 sm:p-6">
-                <div className="flex items-center gap-3">
-                  <Bike className="size-5 text-primary" />
-                  <h2 className="text-lg font-bold uppercase">Dados da Motocicleta</h2>
-                </div>
-                <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                  <FormField
-                    label="Marca"
-                    name="brand"
-                    icon={Bike}
-                    placeholder="Ex: Yamaha, Honda, BMW"
-                  />
-                  <FormField
-                    label="Modelo"
-                    name="model"
-                    icon={Tag}
-                    placeholder="Ex: MT-07, CB 500F"
-                  />
-                  <FormField
-                    label="Ano"
-                    name="year"
-                    icon={CalendarDays}
-                    type="number"
-                    min="1900"
-                    max={String(new Date().getFullYear() + 1)}
-                    placeholder="Ex: 2024"
-                  />
-                  <FormField
-                    label="Cor"
-                    name="color"
-                    icon={Palette}
-                    placeholder="Ex: Preto, Azul, Vermelho"
-                  />
-                  <FormField
-                    label="Placa (Padrão Mercosul ou Tradicional)"
-                    name="license_plate"
-                    icon={Tag}
-                    placeholder="Ex: BRA2E19"
-                    className="sm:col-span-2"
-                  />
-                </div>
-              </section>
+                  {/* Coluna Direita: Live Plate Preview & Resumo */}
+                  <div className="space-y-6 lg:col-span-4">
+                    <div className="sticky top-6 space-y-6">
+                      {/* Live Mercosul Plate Preview Box */}
+                      <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl text-center space-y-4">
+                        <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          <Zap className="size-3.5 text-primary" />
+                          <span>Preview da Placa Mercosul</span>
+                        </div>
 
-              <Button type="submit" disabled={pending} className="w-full">
-                {pending
-                  ? "Salvando..."
-                  : pendingRider
-                    ? "Concluir cadastro do veículo"
-                    : "Cadastrar moto"}
-                <ChevronRight className="size-4" />
-              </Button>
-            </form>
-          </div>
-        )}
+                        <div className="flex justify-center py-2">
+                          <VehiclePlatePreview
+                            plate={formPlate || "RIDEON"}
+                            size="lg"
+                          />
+                        </div>
+
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          A placa é formatada e vinculada à sua central para identificação rápida nos alertas de telemetria.
+                        </p>
+                      </div>
+
+                      {/* Card de Resumo Rápido */}
+                      <div className="overflow-hidden rounded-3xl border border-border/70 bg-secondary/40 p-6 backdrop-blur-xl space-y-4">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-primary">
+                          Resumo do Cadastro
+                        </h4>
+
+                        <div className="space-y-2.5 text-xs">
+                          <div className="flex justify-between border-b border-border/40 pb-1.5">
+                            <span className="text-muted-foreground">Marca/Modelo:</span>
+                            <span className="font-bold text-foreground">
+                              {formBrand || formModel
+                                ? `${formBrand} ${formModel}`.trim()
+                                : "Não informado"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-b border-border/40 pb-1.5">
+                            <span className="text-muted-foreground">Ano:</span>
+                            <span className="font-bold text-foreground">
+                              {formYear || "Não informado"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-b border-border/40 pb-1.5">
+                            <span className="text-muted-foreground">Cor:</span>
+                            <span className="font-bold text-foreground">
+                              {formColor || "Não informado"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <Button
+                          type="submit"
+                          disabled={pending}
+                          className="w-full justify-center rounded-xl bg-primary py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.02]"
+                        >
+                          {pending ? (
+                            "Salvando Dados..."
+                          ) : pendingRider ? (
+                            "Concluir Vínculo do Veículo"
+                          ) : (
+                            "Salvar e Ativar Veículo"
+                          )}
+                          <ChevronRight className="size-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
 
         {/* Botão para Admin abrir formulário caso já tenha veículos e form esteja recolhido */}
         {isAdmin && !showAdminAddForm && motorcycles.length > 0 && view !== "success" && (
@@ -521,14 +880,33 @@ export default function VehiclesPage() {
             <button
               type="button"
               onClick={() => setShowAdminAddForm(true)}
-              className="flex items-center gap-2 border border-dashed border-border bg-card/60 px-5 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+              className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border/80 bg-card/40 p-5 text-xs font-black uppercase tracking-widest text-muted-foreground backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-secondary hover:text-foreground hover:shadow-xl hover:shadow-primary/5"
             >
-              <Plus className="size-4 text-primary" />
-              <span>Cadastrar Mais um Veículo na Frota</span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover:scale-110">
+                <Plus className="size-4" />
+              </div>
+              <span>Cadastrar Novo Veículo na Frota RideOn</span>
             </button>
           </div>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL DE TELEMETRIA AO VIVO (ACESSADO DIRETO DO CARD)                     */}
+      {/* ========================================================================= */}
+      {selectedTelemetryMoto && (
+        <LiveTelemetryModal
+          isOpen={Boolean(selectedTelemetryMoto)}
+          onClose={() => setSelectedTelemetryMoto(null)}
+          motorcycleId={selectedTelemetryMoto.id}
+          motorcycleInfo={{
+            model:
+              `${selectedTelemetryMoto.brand ?? ""} ${selectedTelemetryMoto.model ?? ""}`.trim() ||
+              "Motocicleta",
+            licensePlate: selectedTelemetryMoto.license_plate || "SEM PLACA",
+          }}
+        />
+      )}
     </DashboardShell>
   );
 }
@@ -539,6 +917,8 @@ function FormField({
   icon: Icon,
   type = "text",
   className = "",
+  value,
+  onChange,
   ...props
 }: {
   label: string;
@@ -546,16 +926,26 @@ function FormField({
   icon: typeof UserRound;
   type?: string;
   className?: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 } & Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
-  "name" | "type" | "className"
+  "name" | "type" | "className" | "value" | "onChange"
 >) {
   return (
-    <label className={`field-label ${className}`}>
+    <label className={`grid gap-2 text-xs font-bold uppercase tracking-wider text-foreground ${className}`}>
       {label}
-      <span className="input-wrap">
-        <Icon className="size-4" />
-        <input required name={name} type={type} {...props} />
+      <span className="flex items-center gap-3 rounded-xl border border-border/80 bg-secondary/80 px-3.5 py-3 transition-all duration-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
+        <input
+          required
+          name={name}
+          type={type}
+          value={value}
+          onChange={onChange}
+          className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          {...props}
+        />
       </span>
     </label>
   );
@@ -563,11 +953,11 @@ function FormField({
 
 function FixedField({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[.1em] text-muted-foreground">
+    <div className="rounded-xl border border-border/60 bg-secondary/50 p-3.5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         {label}
       </p>
-      <p className="mt-2 border-b border-border pb-2 text-sm font-medium">
+      <p className="mt-1 text-sm font-bold text-foreground">
         {value}
       </p>
     </div>
@@ -577,4 +967,3 @@ function FixedField({ label, value }: { label: string; value: string }) {
 function toIsoDate(value: string) {
   return value.includes("T") ? value : `${value}T00:00:00Z`;
 }
-
