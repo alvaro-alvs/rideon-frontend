@@ -8,7 +8,6 @@ import {
   History,
   LayoutDashboard,
   LogOut,
-  Menu,
   Settings,
   X,
 } from "lucide-react";
@@ -31,9 +30,10 @@ const navItems: NavItem[] = [
   { label: "Veículos", href: "/dashboard/vehicles", icon: Bike },
   {
     label: "Dispositivos",
-    href: "/dashboard/devices",
+    href: "/admin/devices",
     icon: Cpu,
-    badge: "GPS",
+    badge: "Admin",
+    adminOnly: true,
   },
   { label: "Histórico", href: "/dashboard/history", icon: History },
   { label: "Configurações", href: "/dashboard/settings", icon: Settings },

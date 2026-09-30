@@ -87,10 +87,12 @@ export function GoogleMapView({
     markerInstance.current.setPosition(latLng);
 
     // Atualizar rotação
-    const icon = markerInstance.current.getIcon() as google.maps.Symbol;
-    if (icon) {
-      icon.rotation = heading;
-      markerInstance.current.setIcon(icon);
+    const icon = markerInstance.current.getIcon() as google.maps.Symbol | null;
+    if (icon && typeof icon === "object") {
+      markerInstance.current.setIcon({
+        ...icon,
+        rotation: heading,
+      });
     }
 
     googleMapInstance.current.panTo(latLng);
@@ -100,7 +102,7 @@ export function GoogleMapView({
         history.map((p) => ({ lat: p.latitude, lng: p.longitude })),
       );
     }
-  }, [position, heading, history]);
+  }, [position.latitude, position.longitude, heading, history]);
 
   if (!apiKey) {
     // Renderização visual de fallback responsiva caso a chave não esteja configurada

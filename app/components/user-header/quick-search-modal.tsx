@@ -112,10 +112,10 @@ export function QuickSearchModal({
     );
   }, [query]);
 
-  // Reset selected index when results change
-  useEffect(() => {
+  const handleQueryChange = (val: string) => {
+    setQuery(val);
     setSelectedIndex(0);
-  }, [filteredItems]);
+  };
 
   // Handle global shortcuts
   useEffect(() => {
@@ -178,14 +178,14 @@ export function QuickSearchModal({
                 type="text"
                 autoFocus
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => handleQueryChange(e.target.value)}
                 placeholder="Buscar páginas, veículos, alertas ou atalhos..."
                 className="w-full bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
               />
               {query && (
                 <button
                   type="button"
-                  onClick={() => setQuery("")}
+                  onClick={() => handleQueryChange("")}
                   className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 >
                   <X className="size-4" />

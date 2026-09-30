@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertCircle,
@@ -9,32 +10,33 @@ import {
   Copy,
   Cpu,
   Eye,
-  Filter,
-  Grid3X3,
   LayoutGrid,
+  Link2,
   List,
-  MapPin,
   Plus,
   Radio,
   RefreshCw,
   Search,
   ShieldAlert,
   Sparkles,
-  User,
-  XCircle,
-  Zap,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { DeviceCard } from "@/app/admin/devices/components/device-card";
 import { DeviceCreateModal } from "@/app/admin/devices/components/device-create-modal";
+import { DeviceLinkModal } from "@/app/admin/devices/components/device-link-modal";
 import { DeviceMapModal } from "@/app/admin/devices/components/device-map-modal";
 import { J16SpecBanner } from "@/app/admin/devices/components/j16-spec-banner";
-import { useAdminDevices, type FilterStatus } from "@/hooks/use-admin-devices";
+import { useAdminDevices } from "@/hooks/use-admin-devices";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { Device } from "@/lib/types/device";
 
 export default function AdminDevicesPage() {
+  const router = useRouter();
+  const currentUser = useCurrentUser();
+
   const {
+    devices,
     filteredDevices,
     stats,
     isLoading,
@@ -52,9 +54,22 @@ export default function AdminDevicesPage() {
 
   const [selectedDeviceForMap, setSelectedDeviceForMap] =
     useState<Device | null>(null);
+  const [selectedDeviceForLink, setSelectedDeviceForLink] =
+    useState<Device | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Client-side role protection
+  useEffect(() => {
+    if (currentUser.status === "loading") return;
+    if (
+      currentUser.status === "unauthenticated" ||
+      (currentUser.status === "authenticated" && currentUser.user.role !== "admin")
+    ) {
+      router.replace("/dashboard");
+    }
+  }, [currentUser, router]);
 
   const handleCopy = (text: string, id: string) => {
     void navigator.clipboard.writeText(text);
@@ -411,6 +426,7 @@ export default function AdminDevicesPage() {
                   key={device.id}
                   device={device}
                   onOpenMap={(d) => setSelectedDeviceForMap(d)}
+                  onOpenLink={(d) => setSelectedDeviceForLink(d)}
                 />
               ))}
             </div>
@@ -427,7 +443,7 @@ export default function AdminDevicesPage() {
                       <th className="px-3 py-3.5">Motocicleta</th>
                       <th className="px-3 py-3.5">Piloto</th>
                       <th className="px-3 py-3.5">Última Posição</th>
-                      <th className="py-3.5 pl-3 pr-6 text-right">Ação</th>
+                      <th className="py-3.5 pl-3 pr-6 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
@@ -505,7 +521,7 @@ export default function AdminDevicesPage() {
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-neutral-500 italic">
+                              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-400 border border-amber-500/20">
                                 Em Estoque
                               </span>
                             )}
@@ -542,20 +558,34 @@ export default function AdminDevicesPage() {
                             )}
                           </td>
 
-                          {/* Action */}
+                          {/* Actions */}
                           <td className="py-4 pl-3 pr-6 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDeviceForMap(device)}
-                              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                                hasPos
-                                  ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary hover:text-white"
-                                  : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              <Eye className="size-3.5" />
-                              <span>Mapa</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDeviceForLink(device)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-border/80 bg-secondary px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
+                                title="Vincular ou gerenciar motocicleta"
+                              >
+                                <Link2 className="size-3.5 text-primary" />
+                                <span className="hidden lg:inline">
+                                  {moto ? "Vínculo" : "Vincular"}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDeviceForMap(device)}
+                                className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                                  hasPos
+                                    ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary hover:text-white"
+                                    : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                <Eye className="size-3.5" />
+                                <span className="hidden lg:inline">Mapa</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -569,7 +599,7 @@ export default function AdminDevicesPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODALS: DEVICE CREATION & MAP TELEMETRY                                   */}
+      {/* MODALS: DEVICE CREATION, MAP TELEMETRY & DEVICE LINKING                   */}
       {/* ========================================================================= */}
       <DeviceCreateModal
         isOpen={isCreateModalOpen}
@@ -579,9 +609,23 @@ export default function AdminDevicesPage() {
         }}
       />
 
+      <DeviceLinkModal
+        isOpen={Boolean(selectedDeviceForLink)}
+        device={selectedDeviceForLink}
+        onClose={() => setSelectedDeviceForLink(null)}
+        onSuccess={() => {
+          void refetch();
+        }}
+      />
+
       <DeviceMapModal
         isOpen={Boolean(selectedDeviceForMap)}
-        device={selectedDeviceForMap}
+        device={
+          selectedDeviceForMap
+            ? devices.find((d) => d.id === selectedDeviceForMap.id) ||
+              selectedDeviceForMap
+            : null
+        }
         onClose={() => setSelectedDeviceForMap(null)}
       />
     </DashboardShell>

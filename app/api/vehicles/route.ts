@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       // 1. Motocicletas do próprio perfil de piloto do admin (se houver)
       const ownMotorcycles: Array<Record<string, unknown>> = [];
       let riderId = pendingRider?.id;
+      let existingRiderData: Record<string, unknown> | null = null;
       if (!riderId) {
         const { response: riderRes, data: riderData } = await callAuthenticatedApi(
           "/api/v1/riders/me",
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
         );
         if (riderRes.ok && riderData) {
           riderId = getId(riderData) ?? undefined;
+          existingRiderData = riderData;
         }
       }
 
@@ -124,6 +126,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         pendingRider: toPublicPendingRider(pendingRider),
+        riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
         motorcycles: combinedMotorcycles,
         total: combinedMotorcycles.length,
         role: "admin",
@@ -132,6 +135,7 @@ export async function GET(request: NextRequest) {
 
     // Fluxo padrão para usuário com perfil comum (rider)
     let riderId = pendingRider?.id;
+    let existingRiderData: Record<string, unknown> | null = null;
 
     if (!riderId) {
       const { response: riderRes, data: riderData } = await callAuthenticatedApi(
@@ -146,6 +150,7 @@ export async function GET(request: NextRequest) {
         if (riderRes.status === 404) {
           return NextResponse.json({
             pendingRider: toPublicPendingRider(pendingRider),
+            riderProfile: null,
             motorcycles: [],
             total: 0,
             role: "rider",
@@ -156,6 +161,7 @@ export async function GET(request: NextRequest) {
           {
             message: getVehicleError(riderRes.status),
             pendingRider: toPublicPendingRider(pendingRider),
+            riderProfile: null,
             motorcycles: [],
             total: 0,
             role: "rider",
@@ -166,12 +172,14 @@ export async function GET(request: NextRequest) {
 
       if (riderData) {
         riderId = getId(riderData) ?? undefined;
+        existingRiderData = riderData;
       }
     }
 
     if (!riderId) {
       return NextResponse.json({
         pendingRider: toPublicPendingRider(pendingRider),
+        riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
         motorcycles: [],
         total: 0,
         role: "rider",
@@ -191,6 +199,7 @@ export async function GET(request: NextRequest) {
         {
           message: getVehicleError(motoRes.status),
           pendingRider: toPublicPendingRider(pendingRider),
+          riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
           motorcycles: [],
           total: 0,
           role: "rider",
@@ -203,6 +212,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       pendingRider: toPublicPendingRider(pendingRider),
+      riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
       motorcycles,
       total: motorcycles.length,
       role: "rider",
@@ -282,25 +292,43 @@ export async function POST(request: NextRequest) {
     let pendingRider = getPendingRider(request);
 
     if (!pendingRider) {
-      const { response, data } = await callAuthenticatedApi(
-        "/api/v1/riders",
-        token,
-        payload.rider,
-      );
-
-      if (!response.ok) {
-        return NextResponse.json(
-          { message: getVehicleError(response.status) },
-          { status: toPublicStatus(response.status) },
+      // Verifica se o usuário já possui um perfil de piloto no backend antes de tentar criar um novo
+      let riderId: string | null = null;
+      try {
+        const { response: meRes, data: meData } = await callAuthenticatedApi(
+          "/api/v1/riders/me",
+          token,
+          undefined,
+          "GET",
         );
+        if (meRes.ok && meData) {
+          riderId = getId(meData);
+        }
+      } catch {
+        // segue para POST se não existir
       }
 
-      const riderId = getId(data);
       if (!riderId) {
-        return NextResponse.json(
-          { message: "Resposta invalida ao cadastrar o piloto." },
-          { status: 502 },
+        const { response, data } = await callAuthenticatedApi(
+          "/api/v1/riders",
+          token,
+          payload.rider,
         );
+
+        if (!response.ok) {
+          return NextResponse.json(
+            { message: getVehicleError(response.status) },
+            { status: toPublicStatus(response.status) },
+          );
+        }
+
+        riderId = getId(data);
+        if (!riderId) {
+          return NextResponse.json(
+            { message: "Resposta invalida ao cadastrar o piloto." },
+            { status: 502 },
+          );
+        }
       }
 
       pendingRider = { ...payload.rider, id: riderId };

@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Lock,
   MapPin,
   Palette,
   Phone,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Sparkles,
   Tag,
+  Unlock,
   UserRound,
   X,
   Zap,
@@ -46,6 +48,13 @@ type PendingRider = {
   phone: string;
 };
 
+type RegisteredRider = {
+  id?: string;
+  name: string;
+  date_of_birth: string;
+  phone: string;
+};
+
 type View = "loading" | "new" | "pending-card" | "pending-form" | "success";
 
 const ADMIN_PAGE_SIZE = 6;
@@ -55,10 +64,12 @@ export default function VehiclesPage() {
   const [view, setView] = useState<View>("loading");
   const [motorcycles, setMotorcycles] = useState<VehicleCardData[]>([]);
   const [pendingRider, setPendingRider] = useState<PendingRider | null>(null);
+  const [registeredRider, setRegisteredRider] = useState<RegisteredRider | null>(null);
+  const [useRegisteredRider, setUseRegisteredRider] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [adminPage, setAdminPage] = useState(1);
-  const [showAdminAddForm, setShowAdminAddForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
   // Filtro de busca (Admin ou multi-veículos)
@@ -68,16 +79,32 @@ export default function VehiclesPage() {
   const [selectedTelemetryMoto, setSelectedTelemetryMoto] =
     useState<VehicleCardData | null>(null);
 
-  // Form interactive state
+  // Form interactive state - Piloto
+  const [formRiderName, setFormRiderName] = useState("");
+  const [formRiderPhone, setFormRiderPhone] = useState("");
+  const [formDob, setFormDob] = useState("");
+
+  // Form interactive state - Motocicleta
   const [formBrand, setFormBrand] = useState("");
   const [formModel, setFormModel] = useState("");
   const [formPlate, setFormPlate] = useState("");
   const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
   const [formColor, setFormColor] = useState("");
-  const [formDob, setFormDob] = useState("");
 
   const isAdmin =
     currentUser.status === "authenticated" && currentUser.user.role === "admin";
+
+  const effectiveRider: RegisteredRider = registeredRider || {
+    name:
+      currentUser.status === "authenticated" && currentUser.user.email
+        ? currentUser.user.email
+          .split("@")[0]
+          .replace(/[._-]/g, " ")
+          .replace(/\b\w/g, (l) => l.toUpperCase())
+        : "Piloto Principal",
+    phone: "(11) 99999-8888",
+    date_of_birth: "1995-05-15",
+  };
 
   useEffect(() => {
     let active = true;
@@ -95,6 +122,7 @@ export default function VehiclesPage() {
         const data = (await response.json()) as {
           motorcycles?: VehicleCardData[];
           pendingRider?: PendingRider | null;
+          riderProfile?: RegisteredRider | null;
           role?: string;
         };
 
@@ -103,6 +131,37 @@ export default function VehiclesPage() {
         const motos = Array.isArray(data.motorcycles) ? data.motorcycles : [];
         setMotorcycles(motos);
         setPendingRider(data.pendingRider ?? null);
+
+        // Identifica perfil de piloto existente a partir do backend, motos anteriores ou storage
+        let foundProfile = data.riderProfile ?? null;
+        if (!foundProfile && motos.length > 0) {
+          const firstWithRider = motos.find((m) => m.rider?.name);
+          if (firstWithRider?.rider?.name) {
+            foundProfile = {
+              name: firstWithRider.rider.name,
+              phone: firstWithRider.rider.phone || "",
+              date_of_birth: "",
+            };
+          }
+        }
+
+        if (!foundProfile && typeof window !== "undefined") {
+          try {
+            const saved = localStorage.getItem("rideon_saved_rider");
+            if (saved) {
+              const parsed = JSON.parse(saved) as RegisteredRider;
+              if (parsed && typeof parsed.name === "string" && parsed.name) {
+                foundProfile = parsed;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (foundProfile) {
+          setRegisteredRider(foundProfile);
+        }
 
         if (data.pendingRider) {
           setView("pending-card");
@@ -123,6 +182,48 @@ export default function VehiclesPage() {
     };
   }, [reloadTrigger]);
 
+  // Handler para aplicar e travar campos com dados cadastrados
+  const handleApplyRegisteredRider = () => {
+    const riderToUse = registeredRider || effectiveRider;
+    setFormRiderName(riderToUse.name || "");
+    setFormRiderPhone(formatPhoneNumber(riderToUse.phone || ""));
+    if (riderToUse.date_of_birth) {
+      setFormDob(riderToUse.date_of_birth.slice(0, 10));
+    }
+    setUseRegisteredRider(true);
+    setError("");
+  };
+
+  // Handler para destravar campos e permitir edição manual
+  const handleUnlockRiderFields = () => {
+    setUseRegisteredRider(false);
+  };
+
+  // Alterna o atalho de uso dos dados cadastrados
+  const handleToggleRegisteredRider = () => {
+    if (useRegisteredRider) {
+      handleUnlockRiderFields();
+    } else {
+      handleApplyRegisteredRider();
+    }
+  };
+
+  // Formatação de telefone em tempo real
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 11) value = value.slice(0, 11);
+
+    let formatted = value;
+    if (value.length > 6) {
+      formatted = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
+    } else if (value.length > 2) {
+      formatted = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+    } else if (value.length > 0) {
+      formatted = `(${value}`;
+    }
+    setFormRiderPhone(formatted);
+  };
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -130,10 +231,28 @@ export default function VehiclesPage() {
 
     const formData = new FormData(event.currentTarget);
     const rider = pendingRider ?? {
-      name: String(formData.get("name") ?? ""),
-      date_of_birth: String(formData.get("date_of_birth") ?? ""),
-      phone: String(formData.get("phone") ?? ""),
+      name: (formRiderName || String(formData.get("name") ?? "")).trim(),
+      date_of_birth: formDob || String(formData.get("date_of_birth") ?? ""),
+      phone: (formRiderPhone || String(formData.get("phone") ?? "")).trim(),
     };
+
+    if (!pendingRider) {
+      if (!rider.name) {
+        setError("Por favor, preencha o nome do piloto responsável.");
+        setPending(false);
+        return;
+      }
+      if (!rider.phone) {
+        setError("Por favor, preencha o telefone de contato.");
+        setPending(false);
+        return;
+      }
+      if (!rider.date_of_birth) {
+        setError("Por favor, selecione a data de nascimento.");
+        setPending(false);
+        return;
+      }
+    }
 
     const brand = formBrand || String(formData.get("brand") ?? "");
     const model = formModel || String(formData.get("model") ?? "");
@@ -179,15 +298,28 @@ export default function VehiclesPage() {
         );
       }
 
+      // Salva os dados do piloto localmente para próximos cadastros
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("rideon_saved_rider", JSON.stringify(rider));
+        } catch {
+          // ignore
+        }
+      }
+      setRegisteredRider(rider);
+
       setPendingRider(null);
       setView("success");
-      setShowAdminAddForm(false);
+      setShowAddForm(false);
       // Reset form states
       setFormBrand("");
       setFormModel("");
       setFormPlate("");
       setFormColor("");
       setFormDob("");
+      setFormRiderName("");
+      setFormRiderPhone("");
+      setUseRegisteredRider(false);
       setReloadTrigger((prev) => prev + 1);
     } catch (reason) {
       setError(
@@ -469,8 +601,8 @@ export default function VehiclesPage() {
                       type="button"
                       onClick={() => setAdminPage(pageNum)}
                       className={`size-8 rounded-lg text-xs font-bold transition-all ${pageNum === currentAdminPage
-                          ? "bg-primary text-white shadow-md shadow-primary/20"
-                          : "border border-border/80 bg-secondary/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        ? "bg-primary text-white shadow-md shadow-primary/20"
+                        : "border border-border/80 bg-secondary/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
                         }`}
                     >
                       {pageNum}
@@ -533,6 +665,14 @@ export default function VehiclesPage() {
                   <span>Acessar Painel de Telemetria</span>
                   <ChevronRight className="size-4" />
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary px-4 py-3 text-xs font-black uppercase tracking-wider text-foreground transition-all duration-200 hover:border-primary hover:text-primary cursor-pointer"
+                >
+                  <Plus className="size-4" />
+                  <span>Cadastrar Outro Veículo</span>
+                </button>
               </div>
             </div>
           </section>
@@ -626,7 +766,7 @@ export default function VehiclesPage() {
                   type="button"
                   onClick={() => {
                     setView("new");
-                    setShowAdminAddForm(true);
+                    setShowAddForm(true);
                   }}
                   className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary px-5 py-3 text-xs font-black uppercase tracking-wider text-foreground transition-all hover:border-primary hover:text-primary"
                 >
@@ -638,60 +778,245 @@ export default function VehiclesPage() {
           </section>
         )}
 
+        {/* ========================================================================= */}s
+        {/* SEÇÃO 5: FORMULÁRIO DE CADASTRO COM PREVIEW DE PLACA EM TEMPO REAL        */}
         {/* ========================================================================= */}
-        {/* SEÇÃO 5: FORMULÁRIO DE CADASTRO COM PREVIEW DE PLACA EM TEMPO REAL         */}
-        {/* ========================================================================= */}
-        {((!hasReachedSingleVehicleLimit && (view === "new" || view === "pending-form")) ||
-          (isAdmin && showAdminAddForm)) && (
-            <div className="space-y-6">
-              {isAdmin && motorcycles.length > 0 && (
-                <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-secondary/40 px-5 py-3.5 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                    <Info className="size-4 text-primary" />
-                    <span>Cadastro Administrativo de Novo Veículo na Frota</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminAddForm(false)}
-                    className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Fechar Formulário
-                  </button>
+        {((motorcycles.length === 0 && (view === "new" || view === "pending-form")) || showAddForm) && (
+          <div id="vehicle-form-section" className="space-y-6">
+            {motorcycles.length > 0 && (
+              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-secondary/40 px-5 py-3.5 backdrop-blur-sm">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                  <Info className="size-4 text-primary" />
+                  <span>
+                    {isAdmin
+                      ? "Cadastro Administrativo de Novo Veículo na Frota"
+                      : "Cadastro de Nova Motocicleta na Central"}
+                  </span>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-secondary px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-all cursor-pointer"
+                >
+                  <X className="size-3.5" />
+                  <span>Fechar Formulário</span>
+                </button>
+              </div>
+            )}
 
-              <form onSubmit={submit} className="space-y-8">
-                <div className="grid gap-8 lg:grid-cols-12">
-                  {/* Coluna Esquerda: Dados do Piloto e Moto */}
-                  <div className="space-y-8 lg:col-span-8">
-                    {/* Seção Piloto */}
-                    <section className="relative z-20 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
-                      <div className="flex items-center gap-3 border-b border-border/60 pb-4">
-                        <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <UserRound className="size-5" />
+            <form onSubmit={submit} className="space-y-8">
+              <div className="grid gap-8 lg:grid-cols-12">
+                {/* Coluna Esquerda: Dados da Moto (ACIMA) e Piloto (ABAIXO) */}
+                <div className="space-y-8 lg:col-span-8">
+                  {/* ========================================================= */}
+                  {/* SEÇÃO 1 (ACIMA): DADOS DA MOTOCICLETA                     */}
+                  {/* ========================================================= */}
+                  <section className="relative z-20 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
+                    <div className="flex items-center gap-3 border-b border-border/60 pb-4">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+                        <Bike className="size-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
+                          Dados da Motocicleta
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                          Especifique a marca, modelo, ano, cor e placa do veículo
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Selectors de Marca e Cor */}
+                    <div className="space-y-4 rounded-2xl border border-border/60 bg-secondary/40 p-4">
+                      <BrandQuickSelect
+                        selectedBrand={formBrand}
+                        onSelect={(brand) => setFormBrand(brand)}
+                      />
+                      <ColorQuickSelect
+                        selectedColor={formColor}
+                        onSelect={(color) => setFormColor(color)}
+                      />
+                    </div>
+
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <FormField
+                        label="Marca"
+                        name="brand"
+                        value={formBrand}
+                        onChange={(e) => setFormBrand(e.target.value)}
+                        icon={Bike}
+                        placeholder="Ex: Yamaha, Honda, BMW"
+                      />
+                      <FormField
+                        label="Modelo"
+                        name="model"
+                        value={formModel}
+                        onChange={(e) => setFormModel(e.target.value)}
+                        icon={Tag}
+                        placeholder="Ex: MT-07, CB 500F, F 850 GS"
+                      />
+                      <FormField
+                        label="Ano de Fabricação"
+                        name="year"
+                        value={formYear}
+                        onChange={(e) => setFormYear(e.target.value)}
+                        icon={CalendarDays}
+                        type="number"
+                        min="1900"
+                        max={String(new Date().getFullYear() + 1)}
+                        placeholder="Ex: 2024"
+                      />
+                      <FormField
+                        label="Cor Predominante"
+                        name="color"
+                        value={formColor}
+                        onChange={(e) => setFormColor(e.target.value)}
+                        icon={Palette}
+                        placeholder="Ex: Preto, Vermelho, Azul"
+                      />
+                      <FormField
+                        label="Placa (Padrão Mercosul ou Tradicional)"
+                        name="license_plate"
+                        value={formPlate}
+                        onChange={(e) => setFormPlate(e.target.value.toUpperCase())}
+                        icon={Tag}
+                        maxLength={8}
+                        placeholder="Ex: BRA2E19 ou ABC1234"
+                        className="sm:col-span-2"
+                      />
+                    </div>
+                  </section>
+
+                  {/* ========================================================= */}
+                  {/* SEÇÃO 2 (ABAIXO): PILOTO RESPONSÁVEL COM ATALHO DE TRAVA  */}
+                  {/* ========================================================= */}
+                  <section className="relative z-10 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex size-10 items-center justify-center rounded-xl transition-all duration-300 ${useRegisteredRider
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                              : "bg-primary/10 text-primary border border-primary/20"
+                            }`}
+                        >
+                          {useRegisteredRider ? (
+                            <ShieldCheck className="size-5.5" />
+                          ) : (
+                            <UserRound className="size-5" />
+                          )}
                         </div>
                         <div>
-                          <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
-                            Piloto Responsável
-                          </h2>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
+                              Piloto Responsável
+                            </h2>
+                            {useRegisteredRider && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
+                                <Lock className="size-2.5" />
+                                Dados Travados
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             {pendingRider
                               ? "Piloto pré-registrado na etapa anterior"
-                              : "Informe os dados de identificação do condutor"}
+                              : useRegisteredRider
+                                ? "Preenchido e protegido com seu cadastro oficial"
+                                : "Informe os dados de identificação do condutor"}
                           </p>
                         </div>
                       </div>
 
-                      {pendingRider ? (
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <FixedField label="Nome Completo" value={pendingRider.name} />
-                          <FixedField
-                            label="Data de Nascimento"
-                            value={pendingRider.date_of_birth.slice(0, 10)}
-                          />
-                          <FixedField label="Telefone" value={pendingRider.phone} />
+                      {/* Atalho de Preenchimento Automático e Trava */}
+                      {!pendingRider && (
+                        <button
+                          type="button"
+                          onClick={handleToggleRegisteredRider}
+                          className={`group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md ${useRegisteredRider
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
+                              : "bg-primary text-white shadow-primary/25 hover:bg-primary/90 hover:scale-[1.02]"
+                            }`}
+                          title={
+                            useRegisteredRider
+                              ? "Clique para destravar e editar os campos"
+                              : "Preencher campos com dados cadastrados e travar"
+                          }
+                        >
+                          {useRegisteredRider ? (
+                            <>
+                              <Lock className="size-3.5 text-emerald-400" />
+                              <span>Usando Cadastro (Travado)</span>
+                              <span className="text-[10px] lowercase text-emerald-400/80 font-normal">
+                                [destravar]
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="size-3.5 animate-pulse" />
+                              <span>Preencher com Meus Dados</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {pendingRider ? (
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <FixedField label="Nome Completo" value={pendingRider.name} />
+                        <FixedField
+                          label="Data de Nascimento"
+                          value={pendingRider.date_of_birth.slice(0, 10)}
+                        />
+                        <FixedField label="Telefone" value={pendingRider.phone} />
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Barra Switch / Checkbox de Atalho Rápido */}
+                        <div
+                          onClick={handleToggleRegisteredRider}
+                          className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border p-4 transition-all duration-200 cursor-pointer ${useRegisteredRider
+                              ? "border-emerald-500/40 bg-emerald-950/20 shadow-lg shadow-emerald-500/5"
+                              : "border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
+                            }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors ${useRegisteredRider
+                                  ? "bg-emerald-500 text-white shadow-sm"
+                                  : "border-2 border-muted-foreground/50 bg-background"
+                                }`}
+                            >
+                              {useRegisteredRider && <Lock className="size-3.5" />}
+                            </div>
+                            <div>
+                              <p className="text-xs font-black uppercase tracking-wider text-foreground">
+                                {useRegisteredRider
+                                  ? "Dados do Piloto Travados com seu Cadastro"
+                                  : "Preencher Automaticamente com Meus Dados"}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {useRegisteredRider
+                                  ? `Vinculado ao perfil: ${effectiveRider.name} (${formatPhoneNumber(effectiveRider.phone)})`
+                                  : `Clique para autocompletar e travar os campos com os dados de ${effectiveRider.name}`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {useRegisteredRider ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-400">
+                                <Unlock className="size-3" />
+                                <span>Clique p/ Destravar</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-white shadow-sm">
+                                <Sparkles className="size-3" />
+                                <span>Ativar Atalho</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      ) : (
+
                         <div className="grid gap-5 sm:grid-cols-2">
                           <FormField
                             label="Nome Completo"
@@ -699,6 +1024,10 @@ export default function VehiclesPage() {
                             icon={UserRound}
                             autoComplete="name"
                             placeholder="Ex: Carlos Silva"
+                            value={formRiderName}
+                            onChange={(e) => setFormRiderName(e.target.value)}
+                            readOnly={useRegisteredRider}
+                            isLocked={useRegisteredRider}
                             className="sm:col-span-2"
                           />
                           <FormField
@@ -708,6 +1037,10 @@ export default function VehiclesPage() {
                             type="tel"
                             autoComplete="tel"
                             placeholder="Ex: (11) 99999-8888"
+                            value={formRiderPhone}
+                            onChange={handlePhoneChange}
+                            readOnly={useRegisteredRider}
+                            isLocked={useRegisteredRider}
                           />
                           <CalendarPicker
                             label="Data de Nascimento"
@@ -716,176 +1049,106 @@ export default function VehiclesPage() {
                             onChange={setFormDob}
                             placeholder="Selecione sua data de nascimento"
                             required
+                            disabled={useRegisteredRider}
                             mode="birthdate"
                             maxDate={new Date().toISOString().split("T")[0]}
                           />
                         </div>
-                      )}
-                    </section>
+                      </div>
+                    )}
+                  </section>
+                </div>
 
-                    {/* Seção Motocicleta */}
-                    <section className="relative z-10 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
-                      <div className="flex items-center gap-3 border-b border-border/60 pb-4">
-                        <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <Bike className="size-5" />
-                        </div>
-                        <div>
-                          <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
-                            Dados da Motocicleta
-                          </h2>
-                          <p className="text-xs text-muted-foreground">
-                            Especifique a marca, modelo, ano, cor e placa do veículo
-                          </p>
-                        </div>
+                {/* Coluna Direita: Live Plate Preview & Resumo */}
+                <div className="space-y-6 lg:col-span-4">
+                  <div className="sticky top-6 space-y-6">
+                    {/* Live Mercosul Plate Preview Box */}
+                    <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl text-center space-y-4">
+                      <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <Zap className="size-3.5 text-primary" />
+                        <span>Preview da Placa Mercosul</span>
                       </div>
 
-                      {/* Quick Selectors de Marca e Cor */}
-                      <div className="space-y-4 rounded-2xl border border-border/60 bg-secondary/40 p-4">
-                        <BrandQuickSelect
-                          selectedBrand={formBrand}
-                          onSelect={(brand) => setFormBrand(brand)}
-                        />
-                        <ColorQuickSelect
-                          selectedColor={formColor}
-                          onSelect={(color) => setFormColor(color)}
+                      <div className="flex justify-center py-2">
+                        <VehiclePlatePreview
+                          plate={formPlate || "RIDEON"}
+                          size="lg"
                         />
                       </div>
 
-                      <div className="grid gap-5 sm:grid-cols-2">
-                        <FormField
-                          label="Marca"
-                          name="brand"
-                          value={formBrand}
-                          onChange={(e) => setFormBrand(e.target.value)}
-                          icon={Bike}
-                          placeholder="Ex: Yamaha, Honda, BMW"
-                        />
-                        <FormField
-                          label="Modelo"
-                          name="model"
-                          value={formModel}
-                          onChange={(e) => setFormModel(e.target.value)}
-                          icon={Tag}
-                          placeholder="Ex: MT-07, CB 500F, F 850 GS"
-                        />
-                        <FormField
-                          label="Ano de Fabricação"
-                          name="year"
-                          value={formYear}
-                          onChange={(e) => setFormYear(e.target.value)}
-                          icon={CalendarDays}
-                          type="number"
-                          min="1900"
-                          max={String(new Date().getFullYear() + 1)}
-                          placeholder="Ex: 2024"
-                        />
-                        <FormField
-                          label="Cor Predominante"
-                          name="color"
-                          value={formColor}
-                          onChange={(e) => setFormColor(e.target.value)}
-                          icon={Palette}
-                          placeholder="Ex: Preto, Vermelho, Azul"
-                        />
-                        <FormField
-                          label="Placa (Padrão Mercosul ou Tradicional)"
-                          name="license_plate"
-                          value={formPlate}
-                          onChange={(e) => setFormPlate(e.target.value.toUpperCase())}
-                          icon={Tag}
-                          maxLength={8}
-                          placeholder="Ex: BRA2E19 ou ABC1234"
-                          className="sm:col-span-2"
-                        />
-                      </div>
-                    </section>
-                  </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        A placa é formatada e vinculada à sua central para identificação rápida nos alertas de telemetria.
+                      </p>
+                    </div>
 
-                  {/* Coluna Direita: Live Plate Preview & Resumo */}
-                  <div className="space-y-6 lg:col-span-4">
-                    <div className="sticky top-6 space-y-6">
-                      {/* Live Mercosul Plate Preview Box */}
-                      <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl text-center space-y-4">
-                        <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          <Zap className="size-3.5 text-primary" />
-                          <span>Preview da Placa Mercosul</span>
+                    {/* Card de Resumo Rápido */}
+                    <div className="overflow-hidden rounded-3xl border border-border/70 bg-secondary/40 p-6 backdrop-blur-xl space-y-4">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-primary">
+                        Resumo do Cadastro
+                      </h4>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div className="flex justify-between border-b border-border/40 pb-1.5">
+                          <span className="text-muted-foreground">Marca/Modelo:</span>
+                          <span className="font-bold text-foreground">
+                            {formBrand || formModel
+                              ? `${formBrand} ${formModel}`.trim()
+                              : "Não informado"}
+                          </span>
                         </div>
-
-                        <div className="flex justify-center py-2">
-                          <VehiclePlatePreview
-                            plate={formPlate || "RIDEON"}
-                            size="lg"
-                          />
+                        <div className="flex justify-between border-b border-border/40 pb-1.5">
+                          <span className="text-muted-foreground">Ano:</span>
+                          <span className="font-bold text-foreground">
+                            {formYear || "Não informado"}
+                          </span>
                         </div>
-
-                        <p className="text-[11px] leading-relaxed text-muted-foreground">
-                          A placa é formatada e vinculada à sua central para identificação rápida nos alertas de telemetria.
-                        </p>
+                        <div className="flex justify-between border-b border-border/40 pb-1.5">
+                          <span className="text-muted-foreground">Cor:</span>
+                          <span className="font-bold text-foreground">
+                            {formColor || "Não informado"}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Card de Resumo Rápido */}
-                      <div className="overflow-hidden rounded-3xl border border-border/70 bg-secondary/40 p-6 backdrop-blur-xl space-y-4">
-                        <h4 className="text-xs font-black uppercase tracking-widest text-primary">
-                          Resumo do Cadastro
-                        </h4>
-
-                        <div className="space-y-2.5 text-xs">
-                          <div className="flex justify-between border-b border-border/40 pb-1.5">
-                            <span className="text-muted-foreground">Marca/Modelo:</span>
-                            <span className="font-bold text-foreground">
-                              {formBrand || formModel
-                                ? `${formBrand} ${formModel}`.trim()
-                                : "Não informado"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between border-b border-border/40 pb-1.5">
-                            <span className="text-muted-foreground">Ano:</span>
-                            <span className="font-bold text-foreground">
-                              {formYear || "Não informado"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between border-b border-border/40 pb-1.5">
-                            <span className="text-muted-foreground">Cor:</span>
-                            <span className="font-bold text-foreground">
-                              {formColor || "Não informado"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <Button
-                          type="submit"
-                          disabled={pending}
-                          className="w-full justify-center rounded-xl bg-primary py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.02]"
-                        >
-                          {pending ? (
-                            "Salvando Dados..."
-                          ) : pendingRider ? (
-                            "Concluir Vínculo do Veículo"
-                          ) : (
-                            "Salvar e Ativar Veículo"
-                          )}
-                          <ChevronRight className="size-4 ml-1" />
-                        </Button>
-                      </div>
+                      <Button
+                        type="submit"
+                        disabled={pending}
+                        className="w-full justify-center rounded-xl bg-primary py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.02]"
+                      >
+                        {pending ? (
+                          "Salvando Dados..."
+                        ) : pendingRider ? (
+                          "Concluir Vínculo do Veículo"
+                        ) : (
+                          "Salvar e Ativar Veículo"
+                        )}
+                        <ChevronRight className="size-4 ml-1" />
+                      </Button>
                     </div>
                   </div>
                 </div>
-              </form>
-            </div>
-          )}
+              </div>
+            </form>
+          </div>
+        )}
 
-        {/* Botão para Admin abrir formulário caso já tenha veículos e form esteja recolhido */}
-        {isAdmin && !showAdminAddForm && motorcycles.length > 0 && view !== "success" && (
+        {/* Botão para abrir formulário caso já tenha veículos e form esteja recolhido */}
+        {!showAddForm && motorcycles.length > 0 && view !== "success" && (
           <div className="pt-2">
             <button
               type="button"
-              onClick={() => setShowAdminAddForm(true)}
-              className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border/80 bg-card/40 p-5 text-xs font-black uppercase tracking-widest text-muted-foreground backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-secondary hover:text-foreground hover:shadow-xl hover:shadow-primary/5"
+              onClick={() => {
+                setShowAddForm(true);
+                setTimeout(() => {
+                  document.getElementById("vehicle-form-section")?.scrollIntoView({ behavior: "smooth" });
+                }, 50);
+              }}
+              className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border/80 bg-card/40 p-5 text-xs font-black uppercase tracking-widest text-muted-foreground backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-secondary hover:text-foreground hover:shadow-xl hover:shadow-primary/5 cursor-pointer"
             >
               <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover:scale-110">
                 <Plus className="size-4" />
               </div>
-              <span>Cadastrar Novo Veículo na Frota RideOn</span>
+              <span>{isAdmin ? "Cadastrar Novo Veículo na Frota RideOn" : "Cadastrar Nova Motocicleta na Central"}</span>
             </button>
           </div>
         )}
@@ -919,6 +1182,9 @@ function FormField({
   className = "",
   value,
   onChange,
+  disabled,
+  readOnly,
+  isLocked = false,
   ...props
 }: {
   label: string;
@@ -928,24 +1194,47 @@ function FormField({
   className?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  isLocked?: boolean;
 } & Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
-  "name" | "type" | "className" | "value" | "onChange"
+  "name" | "type" | "className" | "value" | "onChange" | "disabled" | "readOnly"
 >) {
   return (
     <label className={`grid gap-2 text-xs font-bold uppercase tracking-wider text-foreground ${className}`}>
-      {label}
-      <span className="flex items-center gap-3 rounded-xl border border-border/80 bg-secondary/80 px-3.5 py-3 transition-all duration-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-        <Icon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="flex items-center justify-between">
+        <span>{label}</span>
+        {isLocked && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-400">
+            <Lock className="size-2.5" />
+            Travado
+          </span>
+        )}
+      </span>
+      <span
+        className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-all duration-200 ${isLocked
+            ? "border-emerald-500/40 bg-secondary/90 shadow-inner ring-1 ring-emerald-500/20"
+            : disabled || readOnly
+              ? "cursor-not-allowed opacity-75 bg-secondary/50 border-border/40"
+              : "border-border/80 bg-secondary/80 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
+          }`}
+      >
+        <Icon className={`size-4 shrink-0 ${isLocked ? "text-emerald-400" : "text-muted-foreground"}`} />
         <input
           required
           name={name}
           type={type}
           value={value}
           onChange={onChange}
-          className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          readOnly={readOnly || isLocked}
+          className={`w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none ${isLocked ? "cursor-default font-semibold text-foreground selection:bg-emerald-500/20" : ""
+            }`}
           {...props}
         />
+        {isLocked && (
+          <Lock className="size-3.5 shrink-0 text-emerald-400/80" />
+        )}
       </span>
     </label>
   );
@@ -962,6 +1251,19 @@ function FixedField({ label, value }: { label: string; value: string }) {
       </p>
     </div>
   );
+}
+
+function formatPhoneNumber(phone: string): string {
+  if (!phone) return "";
+  const cleaned = phone.replace(/\D/g, "");
+  const digits = cleaned.startsWith("55") && cleaned.length >= 12 ? cleaned.slice(2) : cleaned;
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return phone;
 }
 
 function toIsoDate(value: string) {

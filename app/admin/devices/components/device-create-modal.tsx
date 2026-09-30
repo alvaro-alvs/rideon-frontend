@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ClipboardPaste,
   Cpu,
-  HelpCircle,
   Radio,
   Sparkles,
   Wand2,
@@ -205,7 +204,6 @@ export function DeviceCreateModal({
   };
 
   const is15Digits = /^\d{15}$/.test(imei);
-  const activePresetObj = MODEL_PRESETS.find((p) => p.id === selectedPreset);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

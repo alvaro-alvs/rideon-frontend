@@ -8,10 +8,9 @@ import {
   Copy,
   Cpu,
   Eye,
+  Link2,
   MapPin,
-  Radio,
   User,
-  Zap,
 } from "lucide-react";
 
 import type { Device } from "@/lib/types/device";
@@ -19,9 +18,10 @@ import type { Device } from "@/lib/types/device";
 interface DeviceCardProps {
   device: Device;
   onOpenMap: (device: Device) => void;
+  onOpenLink?: (device: Device) => void;
 }
 
-export function DeviceCard({ device, onOpenMap }: DeviceCardProps) {
+export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
   const [copied, setCopied] = useState(false);
 
   const hasLastPosition = Boolean(device.last_position);
@@ -150,7 +150,7 @@ export function DeviceCard({ device, onOpenMap }: DeviceCardProps) {
           </div>
         </div>
 
-        {/* Associated Motorcycle Box */}
+        {/* Associated Motorcycle Box with Link Action */}
         <div className="rounded-2xl border border-border/60 bg-background/50 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
@@ -158,43 +158,71 @@ export function DeviceCard({ device, onOpenMap }: DeviceCardProps) {
               Veículo Vinculado
             </span>
 
-            {moto && (
+            {moto ? (
               <span className="text-[10px] text-muted-foreground font-mono">
                 {moto.year} • {moto.color}
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-400 border border-amber-500/20">
+                Estoque (Standby)
               </span>
             )}
           </div>
 
           {moto ? (
-            <div className="flex items-center justify-between gap-3 pt-1">
-              {/* Mercosul Badge */}
-              <div className="inline-flex shrink-0 items-center overflow-hidden rounded-lg border border-blue-500/60 bg-neutral-950 text-xs font-extrabold shadow-sm">
-                <span className="bg-blue-600 px-1.5 py-0.5 text-[8px] font-black text-white uppercase">
-                  BR
-                </span>
-                <span className="px-2 py-0.5 tracking-wider text-foreground font-mono">
-                  {moto.license_plate}
-                </span>
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-3">
+                {/* Mercosul Badge */}
+                <div className="inline-flex shrink-0 items-center overflow-hidden rounded-lg border border-blue-500/60 bg-neutral-950 text-xs font-extrabold shadow-sm">
+                  <span className="bg-blue-600 px-1.5 py-0.5 text-[8px] font-black text-white uppercase">
+                    BR
+                  </span>
+                  <span className="px-2 py-0.5 tracking-wider text-foreground font-mono">
+                    {moto.license_plate}
+                  </span>
+                </div>
+
+                <div className="min-w-0 flex-1 text-right">
+                  <p className="text-xs font-bold text-foreground truncate">
+                    {moto.brand} {moto.model}
+                  </p>
+                  {moto.rider?.name && (
+                    <p className="text-[11px] text-muted-foreground flex items-center justify-end gap-1 truncate">
+                      <User className="size-3 text-primary shrink-0" />
+                      <span className="truncate">{moto.rider.name}</span>
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div className="min-w-0 flex-1 text-right">
-                <p className="text-xs font-bold text-foreground truncate">
-                  {moto.brand} {moto.model}
-                </p>
-                {moto.rider?.name && (
-                  <p className="text-[11px] text-muted-foreground flex items-center justify-end gap-1 truncate">
-                    <User className="size-3 text-primary shrink-0" />
-                    <span className="truncate">{moto.rider.name}</span>
-                  </p>
-                )}
-              </div>
+              {onOpenLink && (
+                <div className="flex justify-end pt-1 border-t border-border/40">
+                  <button
+                    type="button"
+                    onClick={() => onOpenLink(device)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                  >
+                    <Link2 className="size-3" />
+                    <span>Gerenciar / Alterar Vínculo</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="flex items-center justify-between py-1 text-xs text-muted-foreground">
-              <span className="italic text-[11px]">Nenhuma motocicleta vinculada</span>
-              <span className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-bold uppercase text-muted-foreground">
-                Em Estoque
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1 text-xs">
+              <span className="italic text-[11px] text-muted-foreground">
+                Nenhuma motocicleta vinculada
               </span>
+              {onOpenLink && (
+                <button
+                  type="button"
+                  onClick={() => onOpenLink(device)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary/15 border border-primary/30 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-primary hover:bg-primary hover:text-white transition-all cursor-pointer shadow-sm"
+                >
+                  <Link2 className="size-3.5" />
+                  <span>Vincular a Moto</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -258,18 +286,32 @@ export function DeviceCard({ device, onOpenMap }: DeviceCardProps) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => onOpenMap(device)}
-          className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-            hasLastPosition
-              ? "border-primary/50 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-white shadow-sm"
-              : "border-border bg-secondary text-muted-foreground hover:border-primary hover:text-foreground"
-          }`}
-        >
-          <Eye className="size-3.5" />
-          <span>Ver no Mapa</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenLink && (
+            <button
+              type="button"
+              onClick={() => onOpenLink(device)}
+              className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-secondary px-3 py-2 text-xs font-bold uppercase tracking-wider text-foreground hover:border-primary hover:text-primary transition-all cursor-pointer"
+              title="Vincular ou gerenciar motocicleta"
+            >
+              <Link2 className="size-3.5 text-primary" />
+              <span className="hidden sm:inline">Vínculo</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onOpenMap(device)}
+            className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              hasLastPosition
+                ? "border-primary/50 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-white shadow-sm"
+                : "border-border bg-secondary text-muted-foreground hover:border-primary hover:text-foreground"
+            }`}
+          >
+            <Eye className="size-3.5" />
+            <span>Ver no Mapa</span>
+          </button>
+        </div>
       </div>
     </article>
   );
