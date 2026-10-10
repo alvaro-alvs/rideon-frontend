@@ -110,14 +110,16 @@ function DeviceMapModalContent({
   // Sync state if device prop updates from parent
   useEffect(() => {
     if (device.last_position) {
-      setPosition((prev) => {
-        if (!prev) return device.last_position || null;
-        const prevTime = new Date(prev.timestamp).getTime();
-        const nextTime = new Date(device.last_position!.timestamp).getTime();
-        if (nextTime >= prevTime) {
-          return device.last_position || prev;
-        }
-        return prev;
+      queueMicrotask(() => {
+        setPosition((prev) => {
+          if (!prev) return device.last_position || null;
+          const prevTime = new Date(prev.timestamp).getTime();
+          const nextTime = new Date(device.last_position!.timestamp).getTime();
+          if (nextTime >= prevTime) {
+            return device.last_position || prev;
+          }
+          return prev;
+        });
       });
     }
   }, [device]);

@@ -13,57 +13,114 @@ type State =
   | { status: "authenticated"; user: CurrentUser }
   | { status: "unauthenticated" };
 
+const AUTH_SYNC_KEY = "rideon_auth_sync";
+const HEARTBEAT_INTERVAL_MS = 1000 * 60 * 4; // 4 minutes
+
 /**
- * Fetches the current user's profile from GET /api/auth/me (which proxies to
- * GET /api/v1/auth/me on the backend).
- *
- * Per README_FRONTEND.md §3: the JWT does NOT carry the `role` field — it is
- * always resolved server-side in real time. This hook surfaces it to client
- * components so they can conditionally render role-gated UI.
+ * Checks synchronously whether the client session cookie is active.
+ */
+export function isClientSessionActive(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith("rideon_session_active=1"));
+}
+
+/**
+ * Broadcasts an auth state change across browser tabs.
+ */
+export function notifyAuthChange(action: "login" | "logout" | "refresh") {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(AUTH_SYNC_KEY, `${action}:${Date.now()}`);
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+/**
+ * Fetches the current user's profile from GET /api/auth/me.
+ * Monitors cookie presence, handles multi-tab synchronization,
+ * tab visibility changes, and proactive heartbeat session retention.
  */
 export function useCurrentUser(): State {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
-    let cancelled = false;
+    let isMounted = true;
 
-    async function fetchMe() {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "same-origin" });
-        if (cancelled) return;
+    const runFetch = () => {
+      fetch("/api/auth/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+      })
+        .then(async (res) => {
+          if (!isMounted) return;
+          if (!res.ok) {
+            setState({ status: "unauthenticated" });
+            return;
+          }
 
-        if (!res.ok) {
-          setState({ status: "unauthenticated" });
-          return;
-        }
+          const data = (await res.json()) as {
+            id: string | null;
+            email: string | null;
+            role: string;
+            status: string | null;
+          };
 
-        const data = (await res.json()) as {
-          id: string | null;
-          email: string | null;
-          role: string;
-          status: string | null;
-        };
-
-        setState({
-          status: "authenticated",
-          user: {
-            id: data.id ?? null,
-            email: data.email ?? null,
-            // Defensive cast: treat any unknown value as "rider"
-            role: data.role === "admin" ? "admin" : "rider",
-            status: data.status ?? null,
-          },
+          if (!isMounted) return;
+          setState({
+            status: "authenticated",
+            user: {
+              id: data.id ?? null,
+              email: data.email ?? null,
+              role: data.role === "admin" ? "admin" : "rider",
+              status: data.status ?? null,
+            },
+          });
+        })
+        .catch(() => {
+          if (isMounted) {
+            setState({ status: "unauthenticated" });
+          }
         });
-      } catch {
-        if (!cancelled) setState({ status: "unauthenticated" });
-      }
-    }
+    };
 
-    void fetchMe();
+    runFetch();
+
+    // 1. Re-check on tab visibility change or focus
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        runFetch();
+      }
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    // 2. Synchronize across tabs via storage event
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_SYNC_KEY) {
+        runFetch();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    // 3. Heartbeat: periodically ping /api/auth/me to keep access token fresh
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        runFetch();
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
     return () => {
-      cancelled = true;
+      isMounted = false;
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("storage", handleStorage);
+      clearInterval(interval);
     };
   }, []);
 
   return state;
 }
+
+

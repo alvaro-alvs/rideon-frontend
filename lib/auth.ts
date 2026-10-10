@@ -1,3 +1,5 @@
+import type { NextResponse } from "next/server";
+
 const DEFAULT_API_URL = "http://localhost:8080";
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -12,6 +14,9 @@ export const PENDING_RIDER_MAX_AGE = 60 * 30;
 // httpOnly so client JS can't tamper with it; proxy.ts reads it for route protection.
 export const ROLE_COOKIE = "rideon_user_role";
 export const ROLE_MAX_AGE = SESSION_MAX_AGE;
+
+// Client-readable cookie so frontend code and browser tabs can monitor session state
+export const CLIENT_SESSION_COOKIE = "rideon_session_active";
 
 export type UserRole = "admin" | "rider";
 
@@ -237,3 +242,102 @@ export async function readJson(
     return null;
   }
 }
+
+export function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr =
+      typeof atob === "function"
+        ? atob(base64)
+        : Buffer.from(base64, "base64").toString("utf-8");
+    return JSON.parse(jsonStr) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export function isTokenExpired(token: string, skewSeconds = 30): boolean {
+  try {
+    const payload = parseJwtPayload(token);
+    if (!payload || typeof payload.exp !== "number") return false;
+    return Date.now() >= (payload.exp - skewSeconds) * 1000;
+  } catch {
+    return true;
+  }
+}
+
+export function applyAuthCookies(
+  response: NextResponse,
+  data: {
+    accessToken: string;
+    refreshToken?: string;
+    role?: UserRole | string;
+  },
+) {
+  const isProduction = process.env.NODE_ENV === "production";
+  const httpOnlyDefaults = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax" as const,
+    path: "/",
+  };
+
+  const role: UserRole = data.role === "admin" ? "admin" : "rider";
+
+  // Access token cookie
+  response.cookies.set({
+    name: SESSION_COOKIE,
+    value: data.accessToken,
+    maxAge: SESSION_MAX_AGE,
+    ...httpOnlyDefaults,
+  });
+
+  // Refresh token cookie
+  if (data.refreshToken) {
+    response.cookies.set({
+      name: REFRESH_COOKIE,
+      value: data.refreshToken,
+      maxAge: REFRESH_MAX_AGE,
+      ...httpOnlyDefaults,
+    });
+  }
+
+  // Role cookie
+  response.cookies.set({
+    name: ROLE_COOKIE,
+    value: role,
+    maxAge: ROLE_MAX_AGE,
+    ...httpOnlyDefaults,
+  });
+
+  // Client-readable cookie to monitor session existence without exposing secrets
+  response.cookies.set({
+    name: CLIENT_SESSION_COOKIE,
+    value: "1",
+    maxAge: SESSION_MAX_AGE,
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+  });
+}
+
+export function clearAuthCookies(response: NextResponse) {
+  const isProduction = process.env.NODE_ENV === "production";
+  const deleteOpts = {
+    value: "",
+    maxAge: 0,
+    path: "/",
+    sameSite: "lax" as const,
+    secure: isProduction,
+  };
+
+  response.cookies.set({ name: SESSION_COOKIE, httpOnly: true, ...deleteOpts });
+  response.cookies.set({ name: REFRESH_COOKIE, httpOnly: true, ...deleteOpts });
+  response.cookies.set({ name: ROLE_COOKIE, httpOnly: true, ...deleteOpts });
+  response.cookies.set({ name: CLIENT_SESSION_COOKIE, httpOnly: false, ...deleteOpts });
+  response.cookies.set({ name: PENDING_RIDER_COOKIE, httpOnly: true, ...deleteOpts });
+}
+
