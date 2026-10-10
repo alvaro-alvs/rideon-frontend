@@ -15,6 +15,7 @@ import {
 
 import { RideOnLogo } from "@/app/components/rideon-logo";
 import { useApiHealth } from "@/hooks/use-api-health";
+import { useTenant } from "@/app/components/tenant-provider";
 
 interface AuthLayoutProps {
   title: string;
@@ -29,6 +30,8 @@ export function AuthLayout({
   activeTab = "login",
   children,
 }: AuthLayoutProps) {
+  const { branding } = useTenant();
+  const brandName = branding.brand_name || "RideOn";
   const { status: apiStatus, latency } = useApiHealth();
   const isOnline = apiStatus === "online";
   const isChecking = apiStatus === "checking";
@@ -112,7 +115,7 @@ export function AuthLayout({
           <header className="mb-8">
             <p className="section-kicker flex items-center gap-2">
               <span className="size-1.5 rounded-full bg-primary" />
-              Área Segura RideOn
+              Área Segura {brandName}
             </p>
             <h1 className="mt-3 text-3xl font-extrabold uppercase tracking-tight sm:text-4xl">
               {title}
@@ -142,7 +145,7 @@ export function AuthLayout({
 
         {/* Footer */}
         <footer className="relative z-10 text-center text-xs text-muted-foreground/60 sm:text-left">
-          RideOn Fleet &bull; Rastreamento, Telemetria &amp; Segurança
+          {brandName} Fleet &bull; Rastreamento, Telemetria &amp; Segurança
         </footer>
       </section>
 
@@ -236,9 +239,9 @@ export function AuthLayout({
 
                   {/* Route Gradient */}
                   <linearGradient id="route-line" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#ef251b" stopOpacity="0.2" />
-                    <stop offset="60%" stopColor="#ef251b" stopOpacity="0.8" />
-                    <stop offset="100%" stopColor="#ef251b" stopOpacity="1" />
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.2" />
+                    <stop offset="60%" stopColor="var(--primary)" stopOpacity="0.8" />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity="1" />
                   </linearGradient>
                 </defs>
 

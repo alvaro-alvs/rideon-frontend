@@ -8,6 +8,7 @@ import {
   History,
   LayoutDashboard,
   LogOut,
+  Palette,
   Settings,
   X,
 } from "lucide-react";
@@ -32,6 +33,13 @@ const navItems: NavItem[] = [
     label: "Dispositivos",
     href: "/admin/devices",
     icon: Cpu,
+    badge: "Admin",
+    adminOnly: true,
+  },
+  {
+    label: "White-Label",
+    href: "/admin/tenants",
+    icon: Palette,
     badge: "Admin",
     adminOnly: true,
   },

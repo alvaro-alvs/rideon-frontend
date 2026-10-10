@@ -19,15 +19,28 @@ export async function proxy(request: NextRequest) {
   const isProtectedPage =
     pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
 
+  const host = request.headers.get("host") || "localhost";
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-tenant-host", host);
+
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
   const role = request.cookies.get(ROLE_COOKIE)?.value || "rider";
   const userHome = role === "admin" ? "/admin" : "/dashboard";
 
+  // Helper to attach tenant headers & cookie
+  const finalizeResponse = (res: NextResponse) => {
+    res.cookies.set("rideon_tenant_host", host, {
+      path: "/",
+      sameSite: "lax",
+    });
+    return res;
+  };
+
   // Case 1: User visits login or register while session is active -> redirect to home
   if (isAuthPage) {
     if (sessionToken && !isTokenExpired(sessionToken)) {
-      return NextResponse.redirect(new URL(userHome, request.url));
+      return finalizeResponse(NextResponse.redirect(new URL(userHome, request.url)));
     }
 
     if (refreshToken) {
@@ -40,14 +53,19 @@ export async function proxy(request: NextRequest) {
             refreshToken: hasRefreshToken(data) ? data.refresh_token : refreshToken,
             role,
           });
-          return redirectRes;
+          return finalizeResponse(redirectRes);
         }
       } catch {
         // Refresh failed, proceed to show auth page
       }
     }
 
-    return NextResponse.next();
+    const nextRes = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+    return finalizeResponse(nextRes);
   }
 
   // Case 2: Protected routes (/dashboard, /admin)
@@ -82,7 +100,7 @@ export async function proxy(request: NextRequest) {
       }
       const redirectRes = NextResponse.redirect(loginUrl);
       clearAuthCookies(redirectRes);
-      return redirectRes;
+      return finalizeResponse(redirectRes);
     }
 
     // Role-based access: /admin/* and /dashboard/devices require "admin" role
@@ -96,11 +114,15 @@ export async function proxy(request: NextRequest) {
             role,
           });
         }
-        return redirectRes;
+        return finalizeResponse(redirectRes);
       }
     }
 
-    const response = NextResponse.next();
+    const response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
     if (refreshed) {
       applyAuthCookies(response, {
         accessToken: newAccessToken,
@@ -109,13 +131,22 @@ export async function proxy(request: NextRequest) {
       });
     }
 
-    return response;
+    return finalizeResponse(response);
   }
 
-  return NextResponse.next();
+  // Case 3: Public routes (/ and others)
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+  return finalizeResponse(response);
 }
 
-export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/login", "/register"],
-};
+export const middleware = proxy;
 
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
+};
