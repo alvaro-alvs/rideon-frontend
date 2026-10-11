@@ -18,7 +18,13 @@ export const ROLE_MAX_AGE = SESSION_MAX_AGE;
 // Client-readable cookie so frontend code and browser tabs can monitor session state
 export const CLIENT_SESSION_COOKIE = "rideon_session_active";
 
-export type UserRole = "admin" | "rider";
+export type UserRole =
+  | "admin"
+  | "platform_admin"
+  | "tenant_owner"
+  | "tenant_admin"
+  | "tenant_operator"
+  | "rider";
 
 /**
  * Defensive helper per README_FRONTEND.md §3:
@@ -27,8 +33,25 @@ export type UserRole = "admin" | "rider";
 export function getUserRole(meResponse: Record<string, unknown> | null): UserRole {
   const role = meResponse?.role;
   if (!role || role === "") return "rider";
-  if (role === "admin") return "admin";
+  if (
+    role === "admin" ||
+    role === "platform_admin" ||
+    role === "tenant_owner" ||
+    role === "tenant_admin" ||
+    role === "tenant_operator"
+  ) {
+    return role as UserRole;
+  }
   return "rider";
+}
+
+export function isPlatformOrTenantAdmin(role: UserRole | string | undefined): boolean {
+  return (
+    role === "admin" ||
+    role === "platform_admin" ||
+    role === "tenant_owner" ||
+    role === "tenant_admin"
+  );
 }
 
 type AuthPayload = {

@@ -15,8 +15,11 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { RideOnLogo } from "@/app/components/rideon-logo";
+import { useTenant } from "@/app/components/tenant-provider";
 import { UserHeader } from "@/app/components/user-header";
 import { useCurrentUser } from "@/hooks/use-current-user";
+
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 
 type NavItem = {
   label: string;
@@ -40,7 +43,7 @@ const navItems: NavItem[] = [
     label: "White-Label",
     href: "/admin/tenants",
     icon: Palette,
-    badge: "Admin",
+    badge: "Portal",
     adminOnly: true,
   },
   { label: "Histórico", href: "/dashboard/history", icon: History },
@@ -53,9 +56,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const currentUser = useCurrentUser();
+  const { tenant } = useTenant();
 
   const user = currentUser.status === "authenticated" ? currentUser.user : null;
-  const isAdmin = user?.role === "admin";
+  const isAdmin = isPlatformOrTenantAdmin(user?.role);
 
   const visibleNavItems = navItems.filter(
     (item) => !item.adminOnly || isAdmin,
@@ -126,7 +130,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               {email.split("@")[0]}
             </p>
             <p className="text-[10px] text-muted-foreground font-mono truncate">
-              {isAdmin ? "Admin • Online" : "Piloto • Online"}
+              {isAdmin ? `${tenant.branding?.brand_name || "Admin"} • Online` : `${tenant.branding?.brand_name || "Piloto"} • Online`}
             </p>
           </div>
         </div>
