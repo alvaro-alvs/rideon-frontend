@@ -20,6 +20,8 @@ import {
 import { NotificationPopover } from "@/app/components/user-header/notification-popover";
 import { UserDropdownMenu } from "@/app/components/user-header/user-dropdown-menu";
 import { QuickSearchModal } from "@/app/components/user-header/quick-search-modal";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 
 interface UserHeaderProps {
   onMenuClick?: () => void;
@@ -29,6 +31,10 @@ interface UserHeaderProps {
 export function UserHeader({ onMenuClick, className = "" }: UserHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const pathname = usePathname();
+  const currentUser = useCurrentUser();
+  const isManagerOrAdmin =
+    currentUser.status === "authenticated" &&
+    isPlatformOrTenantAdmin(currentUser.user.role);
 
   // Listen for ⌘K / Ctrl+K
   useEffect(() => {
@@ -168,13 +174,13 @@ export function UserHeader({ onMenuClick, className = "" }: UserHeaderProps) {
             </span>
           </div>
 
-          {/* Quick Action Button: New Vehicle / Garagem */}
+          {/* Quick Action Button: Frota (Manager/Admin) ou Garagem (Rider) */}
           <Link
-            href="/dashboard/vehicles"
+            href={isManagerOrAdmin ? "/admin/vehicles" : "/dashboard/vehicles"}
             className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-primary hover:bg-primary hover:text-white transition-all duration-200"
           >
             <Plus className="size-3.5 stroke-[2.5]" />
-            <span>Garagem</span>
+            <span>{isManagerOrAdmin ? "Frota" : "Garagem"}</span>
           </Link>
 
           {/* Notifications Popover */}

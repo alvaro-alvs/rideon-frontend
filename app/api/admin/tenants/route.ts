@@ -1,20 +1,28 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getApiUrl, SESSION_COOKIE } from "@/lib/auth";
+import {
+  applyAuthCookies,
+  clearAuthCookies,
+  getApiUrl,
+  getSessionOrRefresh,
+} from "@/lib/auth";
 
 /**
  * GET /api/admin/tenants
  * Lists all white-label tenants in the platform.
  */
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sessão expirada ou não autenticada." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sessão expirada ou não autenticada.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
 
+  const token = session.token;
   const apiUrl = getApiUrl();
   try {
     const res = await fetch(`${apiUrl}/api/v1/admin/tenants`, {
@@ -33,7 +41,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(data);
+    const response = NextResponse.json(data);
+    if (session.refreshed && session.newAccessToken) {
+      applyAuthCookies(response, {
+        accessToken: session.newAccessToken,
+        refreshToken: session.newRefreshToken,
+      });
+    }
+    return response;
   } catch (err) {
     return NextResponse.json(
       { message: "Falha de conexão com a API de tenants.", error: String(err) },
@@ -47,14 +62,17 @@ export async function GET(request: NextRequest) {
  * Creates a new partner white-label tenant.
  */
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sessão expirada ou não autenticada." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sessão expirada ou não autenticada.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
 
+  const token = session.token;
   const apiUrl = getApiUrl();
   try {
     const body = await request.json().catch(() => null);
@@ -82,7 +100,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(data, { status: 201 });
+    const response = NextResponse.json(data, { status: 201 });
+    if (session.refreshed && session.newAccessToken) {
+      applyAuthCookies(response, {
+        accessToken: session.newAccessToken,
+        refreshToken: session.newRefreshToken,
+      });
+    }
+    return response;
   } catch (err) {
     return NextResponse.json(
       { message: "Falha de conexão ao cadastrar parceiro.", error: String(err) },

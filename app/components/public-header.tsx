@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/app/components/ui/button";
 import { RideOnLogo } from "@/app/components/rideon-logo";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 
 export function PublicHeader() {
   const [open, setOpen] = useState(false);
@@ -14,7 +15,7 @@ export function PublicHeader() {
 
   const isAuthenticated = currentUser.status === "authenticated";
   const dashboardHref =
-    isAuthenticated && currentUser.user.role === "admin" ? "/admin" : "/dashboard";
+    isAuthenticated && isPlatformOrTenantAdmin(currentUser.user.role) ? "/admin" : "/dashboard";
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-xl">

@@ -1,4 +1,4 @@
-import type { NextResponse } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
 
 const DEFAULT_API_URL = "http://localhost:8080";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -24,6 +24,7 @@ export type UserRole =
   | "tenant_owner"
   | "tenant_admin"
   | "tenant_operator"
+  | "manager"
   | "rider";
 
 /**
@@ -38,7 +39,8 @@ export function getUserRole(meResponse: Record<string, unknown> | null): UserRol
     role === "platform_admin" ||
     role === "tenant_owner" ||
     role === "tenant_admin" ||
-    role === "tenant_operator"
+    role === "tenant_operator" ||
+    role === "manager"
   ) {
     return role as UserRole;
   }
@@ -50,9 +52,27 @@ export function isPlatformOrTenantAdmin(role: UserRole | string | undefined): bo
     role === "admin" ||
     role === "platform_admin" ||
     role === "tenant_owner" ||
-    role === "tenant_admin"
+    role === "tenant_admin" ||
+    role === "manager"
   );
 }
+
+export function isMasterAdmin(role: UserRole | string | undefined): boolean {
+  return role === "admin" || role === "platform_admin";
+}
+
+export function isManager(role: UserRole | string | undefined): boolean {
+  return (
+    role === "tenant_owner" ||
+    role === "tenant_admin" ||
+    role === "manager"
+  );
+}
+
+export function isCustomer(role: UserRole | string | undefined): boolean {
+  return !isPlatformOrTenantAdmin(role);
+}
+
 
 type AuthPayload = {
   email: string;
@@ -245,6 +265,57 @@ export async function refreshAccessToken(refreshToken: string): Promise<ApiResul
   }
 }
 
+export type AuthSession = {
+  token: string;
+  refreshToken?: string;
+  refreshed: boolean;
+  newAccessToken?: string;
+  newRefreshToken?: string;
+};
+
+/**
+ * Retorna a sessão autenticada atual. Caso o access token esteja ausente ou
+ * expirado, tenta renová-lo transparentemente usando o refresh token.
+ */
+export async function getSessionOrRefresh(
+  request: NextRequest,
+): Promise<AuthSession | null> {
+  const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
+  const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
+
+  if (sessionToken && !isTokenExpired(sessionToken)) {
+    return {
+      token: sessionToken,
+      refreshToken,
+      refreshed: false,
+    };
+  }
+
+  // Tenta renovação transparente através do refresh token
+  if (refreshToken) {
+    try {
+      const { response, data } = await refreshAccessToken(refreshToken);
+      if (response.ok && hasAccessToken(data)) {
+        const newAccessToken = data.access_token;
+        const newRefreshToken = hasRefreshToken(data)
+          ? data.refresh_token
+          : refreshToken;
+        return {
+          token: newAccessToken,
+          refreshToken: newRefreshToken,
+          refreshed: true,
+          newAccessToken,
+          newRefreshToken,
+        };
+      }
+    } catch {
+      // Falha na renovação
+    }
+  }
+
+  return null;
+}
+
 export function hasUserId(data: Record<string, unknown> | null) {
   return typeof data?.id === "string" || typeof data?.id === "number";
 }
@@ -284,7 +355,7 @@ export function parseJwtPayload(token: string): Record<string, unknown> | null {
 export function isTokenExpired(token: string, skewSeconds = 30): boolean {
   try {
     const payload = parseJwtPayload(token);
-    if (!payload || typeof payload.exp !== "number") return false;
+    if (!payload || typeof payload.exp !== "number") return true;
     return Date.now() >= (payload.exp - skewSeconds) * 1000;
   } catch {
     return true;
@@ -307,7 +378,18 @@ export function applyAuthCookies(
     path: "/",
   };
 
-  const role: UserRole = data.role === "admin" ? "admin" : "rider";
+  const role: string =
+    data.role &&
+    [
+      "admin",
+      "platform_admin",
+      "tenant_owner",
+      "tenant_admin",
+      "tenant_operator",
+      "manager",
+    ].includes(data.role)
+      ? data.role
+      : "rider";
 
   // Access token cookie
   response.cookies.set({

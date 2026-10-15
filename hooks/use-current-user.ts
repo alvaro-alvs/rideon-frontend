@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { UserRole } from "@/lib/auth";
+import { getUserRole, type UserRole } from "@/lib/auth";
 
 export type CurrentUser = {
   id: string | null;
@@ -72,7 +72,7 @@ export function useCurrentUser(): State {
             user: {
               id: data.id ?? null,
               email: data.email ?? null,
-              role: data.role === "admin" ? "admin" : "rider",
+              role: getUserRole(data),
               status: data.status ?? null,
             },
           });

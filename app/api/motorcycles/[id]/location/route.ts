@@ -1,20 +1,28 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { callAuthenticatedApi, SESSION_COOKIE } from "@/lib/auth";
+import {
+  applyAuthCookies,
+  callAuthenticatedApi,
+  clearAuthCookies,
+  getSessionOrRefresh,
+} from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sua sessao expirou. Entre novamente." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sua sessao expirou. Entre novamente.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
 
+  const token = session.token;
   const { id } = await params;
 
   try {
@@ -32,7 +40,14 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(data);
+    const res = NextResponse.json(data);
+    if (session.refreshed && session.newAccessToken) {
+      applyAuthCookies(res, {
+        accessToken: session.newAccessToken,
+        refreshToken: session.newRefreshToken,
+      });
+    }
+    return res;
   } catch {
     return NextResponse.json(
       { message: "Nao foi possivel conectar ao servidor." },

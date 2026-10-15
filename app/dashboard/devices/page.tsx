@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 
 export default function DashboardDevicesPage() {
   const router = useRouter();
@@ -10,7 +11,7 @@ export default function DashboardDevicesPage() {
 
   useEffect(() => {
     if (currentUser.status === "loading") return;
-    if (currentUser.status === "authenticated" && currentUser.user.role === "admin") {
+    if (currentUser.status === "authenticated" && isPlatformOrTenantAdmin(currentUser.user.role)) {
       router.replace("/admin/devices");
     } else {
       router.replace("/dashboard/vehicles");

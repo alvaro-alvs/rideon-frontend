@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { notifyAuthChange } from "@/hooks/use-current-user";
 import type { AdminDevicesResponse, Device } from "@/lib/types/device";
 
 export type FilterStatus = "all" | "active" | "inactive" | "unlinked" | "j16";
@@ -28,9 +29,11 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
           message?: string;
         } | null;
         if (response.status === 401) {
-          throw new Error(
-            body?.message || "Sessão não autenticada. Faça login novamente.",
-          );
+          notifyAuthChange("logout");
+          if (typeof window !== "undefined") {
+            window.location.replace("/login?expired=1&from=" + encodeURIComponent("/admin/devices"));
+          }
+          return;
         }
         throw new Error(
           body?.message || "Falha ao carregar lista de dispositivos.",
@@ -59,9 +62,11 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
             message?: string;
           } | null;
           if (response.status === 401) {
-            throw new Error(
-              body?.message || "Sessão não autenticada. Faça login novamente.",
-            );
+            notifyAuthChange("logout");
+            if (typeof window !== "undefined") {
+              window.location.replace("/login?expired=1&from=" + encodeURIComponent("/admin/devices"));
+            }
+            return;
           }
           throw new Error(
             body?.message || "Falha ao carregar lista de dispositivos.",

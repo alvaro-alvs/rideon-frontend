@@ -4,51 +4,31 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bike,
+  Building2,
   Cpu,
   History,
   LayoutDashboard,
   LogOut,
   Palette,
   Settings,
+  Users,
   X,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { RideOnLogo } from "@/app/components/rideon-logo";
 import { useTenant } from "@/app/components/tenant-provider";
 import { UserHeader } from "@/app/components/user-header";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { notifyAuthChange, useCurrentUser } from "@/hooks/use-current-user";
 
-import { isPlatformOrTenantAdmin } from "@/lib/auth";
+import { isMasterAdmin, isManager } from "@/lib/auth";
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
-  adminOnly?: boolean;
 };
-
-const navItems: NavItem[] = [
-  { label: "Visão geral", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Veículos", href: "/dashboard/vehicles", icon: Bike },
-  {
-    label: "Dispositivos",
-    href: "/admin/devices",
-    icon: Cpu,
-    badge: "Admin",
-    adminOnly: true,
-  },
-  {
-    label: "White-Label",
-    href: "/admin/tenants",
-    icon: Palette,
-    badge: "Portal",
-    adminOnly: true,
-  },
-  { label: "Histórico", href: "/dashboard/history", icon: History },
-  { label: "Configurações", href: "/dashboard/settings", icon: Settings },
-];
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,22 +38,86 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
   const { tenant } = useTenant();
 
-  const user = currentUser.status === "authenticated" ? currentUser.user : null;
-  const isAdmin = isPlatformOrTenantAdmin(user?.role);
+  // Redireciona imediatamente caso a sessão tenha expirado ou sido encerrada
+  useEffect(() => {
+    if (currentUser.status === "unauthenticated") {
+      notifyAuthChange("logout");
+      const target = pathname && pathname !== "/dashboard" ? `&from=${encodeURIComponent(pathname)}` : "";
+      if (typeof window !== "undefined") {
+        window.location.replace(`/login?expired=1${target}`);
+      }
+    }
+  }, [currentUser.status, pathname]);
 
-  const visibleNavItems = navItems.filter(
-    (item) => !item.adminOnly || isAdmin,
-  );
+  const user = currentUser.status === "authenticated" ? currentUser.user : null;
+  const role = user?.role;
+  const master = isMasterAdmin(role);
+  const manager = isManager(role);
+
+  let visibleNavItems: NavItem[] = [];
+
+  if (master) {
+    visibleNavItems = [
+      { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Gerentes", href: "/admin/managers", icon: Building2, badge: "Master" },
+      { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Global" },
+      { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Global" },
+      { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "Global" },
+      { label: "White-Label", href: "/admin/tenants", icon: Palette, badge: "SaaS" },
+      { label: "Configurações", href: "/dashboard/settings", icon: Settings },
+    ];
+  } else if (manager) {
+    visibleNavItems = [
+      { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Carteira" },
+      { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Frota" },
+      { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "IMEI" },
+      { label: "White-Label", href: "/admin/tenants", icon: Palette, badge: "Marca" },
+      { label: "Configurações", href: "/dashboard/settings", icon: Settings },
+    ];
+  } else {
+    // Cliente (Rider) — 100% focado em UX, sem menus administrativos
+    visibleNavItems = [
+      { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Meus Veículos", href: "/dashboard/vehicles", icon: Bike },
+      { label: "Histórico", href: "/dashboard/history", icon: History },
+      { label: "Configurações", href: "/dashboard/settings", icon: Settings },
+    ];
+  }
 
   const logout = async () => {
     setLoggingOut(true);
     try {
+      notifyAuthChange("logout");
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      router.push("/login");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
       setLoggingOut(false);
     }
   };
+
+  // Enquanto a sessão está sendo verificada ou sendo encerrada, nunca exibe o painel ou dados inconsistentes
+  if (currentUser.status === "loading" || currentUser.status === "unauthenticated") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-pulse">
+            <RideOnLogo />
+          </div>
+          <div className="flex items-center gap-2.5">
+            <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+              {currentUser.status === "loading"
+                ? "Verificando sessão..."
+                : "Sessão encerrada. Redirecionando..."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const email = user?.email || "piloto@rideon.com";
   const userInitials = email
@@ -130,8 +174,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               {email.split("@")[0]}
             </p>
             <p className="text-[10px] text-muted-foreground font-mono truncate">
-              {isAdmin ? `${tenant.branding?.brand_name || "Admin"} • Online` : `${tenant.branding?.brand_name || "Piloto"} • Online`}
+              {master
+                ? "Master Admin • Online"
+                : manager
+                  ? `${tenant.branding?.brand_name || "Gerente"} • Gestor`
+                  : `${tenant.branding?.brand_name || "Piloto"} • Online`}
             </p>
+
           </div>
         </div>
 

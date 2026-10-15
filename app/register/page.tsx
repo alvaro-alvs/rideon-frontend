@@ -23,6 +23,7 @@ import {
   notifyAuthChange,
   useCurrentUser,
 } from "@/hooks/use-current-user";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,7 +45,7 @@ export default function RegisterPage() {
     if (isAlreadyLoggedIn) {
       const destination =
         currentUser.status === "authenticated" &&
-        currentUser.user.role === "admin"
+        isPlatformOrTenantAdmin(currentUser.user.role)
           ? "/admin"
           : "/dashboard";
       router.replace(destination);

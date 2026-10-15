@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { getApiUrl, SESSION_COOKIE } from "@/lib/auth";
+import {
+  applyAuthCookies,
+  clearAuthCookies,
+  getApiUrl,
+  getSessionOrRefresh,
+} from "@/lib/auth";
 import type {
   AssociatedMotorcycle,
   Device,
@@ -24,13 +29,17 @@ import type {
  * Requer cookie de sessão com papel `admin`.
  */
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sua sessão expirou ou não está autenticada." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sua sessão expirou ou não está autenticada.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
+
+  const token = session.token;
 
   const apiUrl = getApiUrl();
 
@@ -179,13 +188,20 @@ export async function GET(request: NextRequest) {
     ).length;
     const unlinkedCount = devices.filter((d) => !d.motorcycle).length;
 
-    return NextResponse.json({
+    const successRes = NextResponse.json({
       devices,
       total: devices.length,
       active_count: activeCount,
       inactive_count: inactiveCount,
       unlinked_count: unlinkedCount,
     });
+    if (session.refreshed && session.newAccessToken) {
+      applyAuthCookies(successRes, {
+        accessToken: session.newAccessToken,
+        refreshToken: session.newRefreshToken,
+      });
+    }
+    return successRes;
   } catch {
     return NextResponse.json(
       {
@@ -208,14 +224,17 @@ export async function GET(request: NextRequest) {
  * Permite associar imediatamente a uma motocicleta ou deixar em estoque.
  */
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sua sessão expirou ou não está autenticada." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sua sessão expirou ou não está autenticada.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
 
+  const token = session.token;
   const apiUrl = getApiUrl();
 
   try {

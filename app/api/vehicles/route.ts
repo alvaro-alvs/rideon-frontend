@@ -2,15 +2,20 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import {
+  applyAuthCookies,
   callAuthenticatedApi,
   callApiMe,
+  clearAuthCookies,
   getApiUrl,
+  getSessionOrRefresh,
   getUserRole,
+  isMasterAdmin,
+  isManager,
+  isPlatformOrTenantAdmin,
   isValidVehicleRegistration,
   PENDING_RIDER_COOKIE,
   PENDING_RIDER_MAX_AGE,
   ROLE_COOKIE,
-  SESSION_COOKIE,
   type RiderPayload,
   type UserRole,
 } from "@/lib/auth";
@@ -20,21 +25,46 @@ type PendingRider = RiderPayload & {
 };
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sua sessao expirou. Entre novamente." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sua sessao expirou. Entre novamente.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
 
+  const token = session.token;
   const role = await resolveUserRole(request, token);
   const pendingRider = getPendingRider(request);
 
+  const finalize = (res: NextResponse) => {
+    if (session.refreshed && session.newAccessToken) {
+      applyAuthCookies(res, {
+        accessToken: session.newAccessToken,
+        refreshToken: session.newRefreshToken,
+        role,
+      });
+    }
+    return res;
+  };
+
   try {
-    if (role === "admin") {
-      // 1. Motocicletas do próprio perfil de piloto do admin (se houver)
-      const ownMotorcycles: Array<Record<string, unknown>> = [];
+    if (isPlatformOrTenantAdmin(role)) {
+      const apiUrl = getApiUrl();
+      const motoRes = await fetch(`${apiUrl}/api/v1/motorcycles`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+
+      let fleetMotorcycles: Array<Record<string, unknown>> = [];
+      if (motoRes.ok) {
+        const motoData = await motoRes.json().catch(() => null);
+        fleetMotorcycles = extractMotorcyclesList(motoData);
+      }
+
       let riderId = pendingRider?.id;
       let existingRiderData: Record<string, unknown> | null = null;
       if (!riderId) {
@@ -50,87 +80,17 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (riderId) {
-        const query = new URLSearchParams({ rider_id: riderId });
-        const { response: motoRes, data: motoData } = await callAuthenticatedApi(
-          `/api/v1/motorcycles?${query}`,
-          token,
-          undefined,
-          "GET",
-        );
-        if (motoRes.ok && motoData) {
-          ownMotorcycles.push(...extractMotorcyclesList(motoData));
-        }
-      }
+      const clientRole = isMasterAdmin(role) ? "admin" : isManager(role) ? "manager" : "rider";
 
-      // 2. Motocicletas de toda a frota através de /api/v1/devices
-      const apiUrl = getApiUrl();
-      const devRes = await fetch(`${apiUrl}/api/v1/devices`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-
-      const allFleetMotos: Array<Record<string, unknown>> = [];
-      if (devRes.ok) {
-        const devBody: unknown = await devRes.json().catch(() => null);
-        let rawDevices: Array<Record<string, unknown>> = [];
-        if (Array.isArray(devBody)) {
-          rawDevices = devBody as Array<Record<string, unknown>>;
-        } else if (devBody && typeof devBody === "object") {
-          const body = devBody as Record<string, unknown>;
-          if (Array.isArray(body.data)) rawDevices = body.data as Array<Record<string, unknown>>;
-          else if (Array.isArray(body.devices)) rawDevices = body.devices as Array<Record<string, unknown>>;
-        }
-
-        const motoIds = Array.from(
-          new Set(
-            rawDevices
-              .map((d) => String(d.motorcycle_id || ""))
-              .filter((id) => Boolean(id) && id !== "undefined"),
-          ),
-        );
-
-        const motoResults = await Promise.allSettled(
-          motoIds.map(async (id) => {
-            const mRes = await fetch(`${apiUrl}/api/v1/motorcycles/${id}`, {
-              headers: { Authorization: `Bearer ${token}` },
-              cache: "no-store",
-            });
-            if (mRes.ok) {
-              const mData = await mRes.json().catch(() => null);
-              if (mData && typeof mData === "object") {
-                return mData as Record<string, unknown>;
-              }
-            }
-            return null;
-          }),
-        );
-
-        for (const res of motoResults) {
-          if (res.status === "fulfilled" && res.value) {
-            allFleetMotos.push(res.value);
-          }
-        }
-      }
-
-      // Combina e deduplica motocicletas
-      const motoMap = new Map<string, Record<string, unknown>>();
-      for (const m of [...ownMotorcycles, ...allFleetMotos]) {
-        const id = String(m.id || m.license_plate || Math.random());
-        if (!motoMap.has(id)) {
-          motoMap.set(id, m);
-        }
-      }
-      const combinedMotorcycles = Array.from(motoMap.values());
-
-      return NextResponse.json({
-        pendingRider: toPublicPendingRider(pendingRider),
-        riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
-        motorcycles: combinedMotorcycles,
-        total: combinedMotorcycles.length,
-        role: "admin",
-      });
+      return finalize(
+        NextResponse.json({
+          pendingRider: toPublicPendingRider(pendingRider),
+          riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
+          motorcycles: fleetMotorcycles,
+          total: fleetMotorcycles.length,
+          role: clientRole,
+        }),
+      );
     }
 
     // Fluxo padrão para usuário com perfil comum (rider)
@@ -148,25 +108,29 @@ export async function GET(request: NextRequest) {
       // Se o perfil ainda não existe (404), trata como normal com lista vazia
       if (!riderRes.ok) {
         if (riderRes.status === 404) {
-          return NextResponse.json({
-            pendingRider: toPublicPendingRider(pendingRider),
-            riderProfile: null,
-            motorcycles: [],
-            total: 0,
-            role: "rider",
-          });
+          return finalize(
+            NextResponse.json({
+              pendingRider: toPublicPendingRider(pendingRider),
+              riderProfile: null,
+              motorcycles: [],
+              total: 0,
+              role: "rider",
+            }),
+          );
         }
 
-        return NextResponse.json(
-          {
-            message: getVehicleError(riderRes.status),
-            pendingRider: toPublicPendingRider(pendingRider),
-            riderProfile: null,
-            motorcycles: [],
-            total: 0,
-            role: "rider",
-          },
-          { status: toPublicStatus(riderRes.status) },
+        return finalize(
+          NextResponse.json(
+            {
+              message: getVehicleError(riderRes.status),
+              pendingRider: toPublicPendingRider(pendingRider),
+              riderProfile: null,
+              motorcycles: [],
+              total: 0,
+              role: "rider",
+            },
+            { status: toPublicStatus(riderRes.status) },
+          ),
         );
       }
 
@@ -177,13 +141,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (!riderId) {
-      return NextResponse.json({
-        pendingRider: toPublicPendingRider(pendingRider),
-        riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
-        motorcycles: [],
-        total: 0,
-        role: "rider",
-      });
+      return finalize(
+        NextResponse.json({
+          pendingRider: toPublicPendingRider(pendingRider),
+          riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
+          motorcycles: [],
+          total: 0,
+          role: "rider",
+        }),
+      );
     }
 
     const query = new URLSearchParams({ rider_id: riderId });
@@ -195,32 +161,38 @@ export async function GET(request: NextRequest) {
     );
 
     if (!motoRes.ok) {
-      return NextResponse.json(
-        {
-          message: getVehicleError(motoRes.status),
-          pendingRider: toPublicPendingRider(pendingRider),
-          riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
-          motorcycles: [],
-          total: 0,
-          role: "rider",
-        },
-        { status: toPublicStatus(motoRes.status) },
+      return finalize(
+        NextResponse.json(
+          {
+            message: getVehicleError(motoRes.status),
+            pendingRider: toPublicPendingRider(pendingRider),
+            riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
+            motorcycles: [],
+            total: 0,
+            role: "rider",
+          },
+          { status: toPublicStatus(motoRes.status) },
+        ),
       );
     }
 
     const motorcycles = extractMotorcyclesList(data);
 
-    return NextResponse.json({
-      pendingRider: toPublicPendingRider(pendingRider),
-      riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
-      motorcycles,
-      total: motorcycles.length,
-      role: "rider",
-    });
+    return finalize(
+      NextResponse.json({
+        pendingRider: toPublicPendingRider(pendingRider),
+        riderProfile: existingRiderData ? toPublicPendingRider(existingRiderData as unknown as PendingRider) : null,
+        motorcycles,
+        total: motorcycles.length,
+        role: "rider",
+      }),
+    );
   } catch {
-    return NextResponse.json(
-      { message: "Nao foi possivel conectar ao servidor." },
-      { status: 502 },
+    return finalize(
+      NextResponse.json(
+        { message: "Nao foi possivel conectar ao servidor." },
+        { status: 502 },
+      ),
     );
   }
 }
@@ -238,18 +210,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Dados invalidos." }, { status: 400 });
   }
 
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json(
-      { message: "Sua sessao expirou. Entre novamente." },
+  const session = await getSessionOrRefresh(request);
+  if (!session) {
+    const unauth = NextResponse.json(
+      { message: "Sua sessao expirou. Entre novamente.", code: "SESSION_EXPIRED" },
       { status: 401 },
     );
+    clearAuthCookies(unauth);
+    return unauth;
   }
 
+  const token = session.token;
   const role = await resolveUserRole(request, token);
 
-  // Regra de Negócio: Usuário padrão (rider) NÃO pode criar mais de 1 veículo
-  if (role !== "admin") {
+  const finalize = (res: NextResponse) => {
+    if (session.refreshed && session.newAccessToken) {
+      applyAuthCookies(res, {
+        accessToken: session.newAccessToken,
+        refreshToken: session.newRefreshToken,
+        role,
+      });
+    }
+    return res;
+  };
+
+  // Regra de Negócio: Usuário padrão (rider) sem plano multi-veículo NÃO pode criar mais de 1 veículo
+  if (!isPlatformOrTenantAdmin(role)) {
     try {
       const { response: riderRes, data: riderData } = await callAuthenticatedApi(
         "/api/v1/riders/me",
@@ -272,12 +258,14 @@ export async function POST(request: NextRequest) {
           if (motoRes.ok && motoData) {
             const existingMotos = extractMotorcyclesList(motoData);
             if (existingMotos.length >= 1) {
-              return NextResponse.json(
-                {
-                  message:
-                    "Limite de veículos atingido. O perfil padrão de piloto permite o cadastro de no máximo 1 veículo.",
-                },
-                { status: 403 },
+              return finalize(
+                NextResponse.json(
+                  {
+                    message:
+                      "Limite de veículos atingido. O perfil padrão de piloto permite o cadastro de no máximo 1 veículo.",
+                  },
+                  { status: 403 },
+                ),
               );
             }
           }
@@ -316,17 +304,21 @@ export async function POST(request: NextRequest) {
         );
 
         if (!response.ok) {
-          return NextResponse.json(
-            { message: getVehicleError(response.status) },
-            { status: toPublicStatus(response.status) },
+          return finalize(
+            NextResponse.json(
+              { message: getVehicleError(response.status) },
+              { status: toPublicStatus(response.status) },
+            ),
           );
         }
 
         riderId = getId(data);
         if (!riderId) {
-          return NextResponse.json(
-            { message: "Resposta invalida ao cadastrar o piloto." },
-            { status: 502 },
+          return finalize(
+            NextResponse.json(
+              { message: "Resposta invalida ao cadastrar o piloto." },
+              { status: 502 },
+            ),
           );
         }
       }
@@ -359,24 +351,38 @@ export async function POST(request: NextRequest) {
         path: "/",
         maxAge: PENDING_RIDER_MAX_AGE,
       });
-      return result;
+      return finalize(result);
     }
 
     const result = NextResponse.json({ registered: true });
     result.cookies.delete(PENDING_RIDER_COOKIE);
-    return result;
+    return finalize(result);
   } catch {
-    return NextResponse.json(
-      { message: "Nao foi possivel conectar ao servidor." },
-      { status: 502 },
+    return finalize(
+      NextResponse.json(
+        { message: "Nao foi possivel conectar ao servidor." },
+        { status: 502 },
+      ),
     );
   }
 }
 
 async function resolveUserRole(request: NextRequest, token: string): Promise<UserRole> {
   const cookieRole = request.cookies.get(ROLE_COOKIE)?.value;
-  if (cookieRole === "admin") return "admin";
-  if (cookieRole === "rider") return "rider";
+  if (
+    cookieRole &&
+    [
+      "admin",
+      "platform_admin",
+      "tenant_owner",
+      "tenant_admin",
+      "tenant_operator",
+      "manager",
+      "rider",
+    ].includes(cookieRole)
+  ) {
+    return cookieRole as UserRole;
+  }
 
   try {
     const { response, data } = await callApiMe(token);

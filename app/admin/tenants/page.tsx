@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   BarChart3,
@@ -27,6 +28,8 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { useTenant } from "@/app/components/tenant-provider";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 import { AVAILABLE_MODULES, type TenantItem, type TenantStats } from "@/lib/types/tenant";
 
 const PRESET_COLORS = [
@@ -40,7 +43,21 @@ const PRESET_COLORS = [
 ];
 
 export default function WhiteLabelAdminPage() {
+  const router = useRouter();
+  const currentUser = useCurrentUser();
   const { tenant: activePublicTenant } = useTenant();
+
+  // Role Protection
+  useEffect(() => {
+    if (currentUser.status === "loading") return;
+    if (currentUser.status === "unauthenticated") {
+      router.replace(`/login?expired=1&from=${encodeURIComponent("/admin/tenants")}`);
+      return;
+    }
+    if (currentUser.status === "authenticated" && !isPlatformOrTenantAdmin(currentUser.user.role)) {
+      router.replace("/dashboard");
+    }
+  }, [currentUser, router]);
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [selectedTenant, setSelectedTenant] = useState<TenantItem | null>(null);
   const [tenantStats, setTenantStats] = useState<TenantStats | null>(null);
@@ -106,10 +123,19 @@ export default function WhiteLabelAdminPage() {
   );
 
   useEffect(() => {
+    if (currentUser.status !== "authenticated" || !isPlatformOrTenantAdmin(currentUser.user.role)) {
+      return;
+    }
     let ignore = false;
     async function loadTenants() {
       try {
         const res = await fetch("/api/admin/tenants");
+        if (res.status === 401) {
+          if (typeof window !== "undefined") {
+            window.location.replace("/login?expired=1&from=" + encodeURIComponent("/admin/tenants"));
+          }
+          return;
+        }
         if (!ignore && res.ok) {
           const data = await res.json();
           const list: TenantItem[] = Array.isArray(data) ? data : [];
@@ -132,7 +158,7 @@ export default function WhiteLabelAdminPage() {
     return () => {
       ignore = true;
     };
-  }, [activePublicTenant.slug, selectTenant]);
+  }, [currentUser, activePublicTenant.slug, selectTenant]);
 
   const handleSaveBranding = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -6,21 +6,25 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bike,
+  Building2,
   ChevronDown,
   Cpu,
   History,
   LayoutDashboard,
   LogOut,
+  Palette,
   Radio,
   Settings,
   Shield,
   ShieldAlert,
   Sparkles,
   User,
+  Users,
   Zap,
 } from "lucide-react";
 
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { notifyAuthChange, useCurrentUser } from "@/hooks/use-current-user";
+import { isMasterAdmin, isManager } from "@/lib/auth";
 
 export function UserDropdownMenu() {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,7 +35,9 @@ export function UserDropdownMenu() {
   const currentUser = useCurrentUser();
 
   const user = currentUser.status === "authenticated" ? currentUser.user : null;
-  const isAdmin = user?.role === "admin";
+  const role = user?.role;
+  const isMaster = isMasterAdmin(role);
+  const isMgr = isManager(role);
 
   const email = user?.email || "piloto@rideon.com";
   const userInitials = email
@@ -42,9 +48,12 @@ export function UserDropdownMenu() {
   const logout = async () => {
     setLoggingOut(true);
     try {
+      notifyAuthChange("logout");
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      router.push("/login");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
       setLoggingOut(false);
       setIsOpen(false);
     }
@@ -110,12 +119,14 @@ export function UserDropdownMenu() {
             </span>
             <span
               className={`rounded px-1.5 py-0.2 text-[9px] font-black uppercase tracking-widest ${
-                isAdmin
+                isMaster
                   ? "bg-primary text-white"
-                  : "bg-secondary text-primary border border-primary/30"
+                  : isMgr
+                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                    : "bg-secondary text-primary border border-primary/30"
               }`}
             >
-              {isAdmin ? "ADMIN" : "PILOTO"}
+              {isMaster ? "ADMIN" : isMgr ? "GESTOR" : "PILOTO"}
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
@@ -159,12 +170,14 @@ export function UserDropdownMenu() {
                     </p>
                     <span
                       className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                        isAdmin
+                        isMaster
                           ? "bg-primary text-white"
-                          : "bg-primary/20 text-primary border border-primary/30"
+                          : isMgr
+                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            : "bg-primary/20 text-primary border border-primary/30"
                       }`}
                     >
-                      {isAdmin ? "Admin" : "Piloto"}
+                      {isMaster ? "Master Admin" : isMgr ? "Gestor" : "Piloto"}
                     </span>
                   </div>
                   <p className="truncate text-xs text-muted-foreground font-mono">
@@ -237,56 +250,170 @@ export function UserDropdownMenu() {
                 </span>
               </Link>
 
-              <Link
-                href="/dashboard/vehicles"
-                onClick={() => setIsOpen(false)}
-                className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
-                    <Bike className="size-3.5" />
-                  </div>
-                  <span>Meus Veículos</span>
-                </div>
-                <span className="rounded bg-primary/15 px-1.5 py-0.2 text-[9px] font-bold text-primary">
-                  Garagem
-                </span>
-              </Link>
+              {isMaster ? (
+                <>
+                  <Link
+                    href="/admin/managers"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Building2 className="size-3.5" />
+                      </div>
+                      <span>Gerentes</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Master
+                    </span>
+                  </Link>
 
-              <Link
-                href="/dashboard/devices"
-                onClick={() => setIsOpen(false)}
-                className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
-                    <Cpu className="size-3.5" />
-                  </div>
-                  <span>Dispositivos & GPS</span>
-                </div>
-                {isAdmin ? (
-                  <span className="rounded bg-primary px-1.5 py-0.2 text-[9px] font-black uppercase text-white">
-                    Admin
-                  </span>
-                ) : (
-                  <span className="rounded bg-primary/15 px-1.5 py-0.2 text-[9px] font-bold text-primary">
-                    GPS
-                  </span>
-                )}
-              </Link>
+                  <Link
+                    href="/admin/customers"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Users className="size-3.5" />
+                      </div>
+                      <span>Clientes</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Global
+                    </span>
+                  </Link>
 
-              <Link
-                href="/dashboard/history"
-                onClick={() => setIsOpen(false)}
-                className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
-                    <History className="size-3.5" />
-                  </div>
-                  <span>Histórico de Trajetos</span>
-                </div>
-              </Link>
+                  <Link
+                    href="/admin/vehicles"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Bike className="size-3.5" />
+                      </div>
+                      <span>Veículos & Frota</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Global
+                    </span>
+                  </Link>
+
+                  <Link
+                    href="/admin/devices"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Cpu className="size-3.5" />
+                      </div>
+                      <span>Equipamentos</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Global
+                    </span>
+                  </Link>
+                </>
+              ) : isMgr ? (
+                <>
+                  <Link
+                    href="/admin/customers"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Users className="size-3.5" />
+                      </div>
+                      <span>Clientes</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Carteira
+                    </span>
+                  </Link>
+
+                  <Link
+                    href="/admin/vehicles"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Bike className="size-3.5" />
+                      </div>
+                      <span>Veículos & Frota</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Frota
+                    </span>
+                  </Link>
+
+                  <Link
+                    href="/admin/devices"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Cpu className="size-3.5" />
+                      </div>
+                      <span>Equipamentos</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      IMEI
+                    </span>
+                  </Link>
+
+                  <Link
+                    href="/admin/tenants"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Palette className="size-3.5" />
+                      </div>
+                      <span>White-Label</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Marca
+                    </span>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/dashboard/vehicles"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Bike className="size-3.5" />
+                      </div>
+                      <span>Meus Veículos</span>
+                    </div>
+                    <span className="rounded bg-primary/15 px-1.5 py-0.2 text-[9px] font-bold text-primary">
+                      Garagem
+                    </span>
+                  </Link>
+
+                  <Link
+                    href="/dashboard/history"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <History className="size-3.5" />
+                      </div>
+                      <span>Histórico de Trajetos</span>
+                    </div>
+                  </Link>
+                </>
+              )}
 
               <div className="my-1 border-t border-border/60" />
 

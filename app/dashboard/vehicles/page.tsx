@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   Activity,
+  AlertCircle,
   Bike,
   CalendarDays,
   CheckCircle2,
@@ -31,6 +32,7 @@ import { Button } from "@/app/components/ui/button";
 import { CalendarPicker } from "@/app/components/ui/calendar-picker";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { isMasterAdmin, isManager } from "@/lib/auth";
 import {
   VehicleMiniCard,
   type VehicleCardData,
@@ -91,8 +93,12 @@ export default function VehiclesPage() {
   const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
   const [formColor, setFormColor] = useState("");
 
-  const isAdmin =
-    currentUser.status === "authenticated" && currentUser.user.role === "admin";
+  const isMaster =
+    currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role);
+  const isMgr =
+    currentUser.status === "authenticated" && isManager(currentUser.user.role);
+  const isFleetUser = isMaster || isMgr;
+  const isAdmin = isFleetUser;
 
   const effectiveRider: RegisteredRider = registeredRider || {
     name:
@@ -116,7 +122,14 @@ export default function VehiclesPage() {
         });
 
         if (!response.ok) {
-          throw new Error();
+          const errData = (await response.json().catch(() => null)) as { message?: string; code?: string } | null;
+          if (response.status === 401 || errData?.code === "SESSION_EXPIRED") {
+            if (typeof window !== "undefined") {
+              window.location.replace("/login?expired=1&from=" + encodeURIComponent("/dashboard/vehicles"));
+            }
+            return;
+          }
+          throw new Error(errData?.message || "Não foi possível carregar os dados de veículos.");
         }
 
         const data = (await response.json()) as {
@@ -168,9 +181,13 @@ export default function VehiclesPage() {
         } else {
           setView("new");
         }
-      } catch {
+      } catch (err) {
         if (!active) return;
-        setError("Não foi possível carregar os dados de veículos.");
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Não foi possível carregar os dados de veículos.";
+        setError(message);
         setView("new");
       }
     }
@@ -371,6 +388,31 @@ export default function VehiclesPage() {
         {/* ========================================================================= */}
         <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
           {/* Ambient Cyber Grid & Glow Accents */}
+        {isFleetUser && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 shrink-0">
+                <Bike className="size-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                  {isMaster ? "Visão Global da Frota (Admin)" : "Painel Avançado de Frota (Gestor)"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {isMaster
+                    ? "Para vincular dispositivos (IMEI), telemetria em tempo real e controle de condutores de todos os parceiros, use a central de Frota."
+                    : "Você pode vincular rastreadores, gerenciar condutores e acompanhar a telemetria detalhada de todos os veículos da sua empresa no painel de Frota."}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin/vehicles"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
+            >
+              Ir para Controle de Frota
+            </Link>
+          </div>
+        )}
           <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
 
@@ -381,9 +423,13 @@ export default function VehiclesPage() {
                   <Sparkles className="size-3.5" />
                   Central RideOn
                 </span>
-                {isAdmin ? (
+                {isMaster ? (
+                  <span className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-400 border border-red-500/20">
+                    Modo Master Admin • Global
+                  </span>
+                ) : isMgr ? (
                   <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-400 border border-amber-500/20">
-                    Modo Frotas & Administrador
+                    Modo Frota da Empresa • Gestor
                   </span>
                 ) : (
                   <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
@@ -393,13 +439,19 @@ export default function VehiclesPage() {
               </div>
 
               <h1 className="text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
-                {isAdmin ? "Gestão de Veículos da Frota" : "Seus Veículos & Cadastro"}
+                {isMaster
+                  ? "Veículos Globais da Plataforma"
+                  : isMgr
+                    ? "Veículos da Frota da Sua Empresa"
+                    : "Seus Veículos & Cadastro"}
               </h1>
 
               <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                {isAdmin
-                  ? "Monitore e gerencie todos os veículos cadastrados na central com telemetria GPS e controle administrativo."
-                  : "Acompanhe os dados da sua motocicleta vinculada, verifique a proteção em tempo real ou conclua o cadastro."}
+                {isMaster
+                  ? "Monitore todos os veículos cadastrados na central com telemetria GPS e controle administrativo."
+                  : isMgr
+                    ? "Monitore e gerencie todos os veículos da sua empresa com telemetria GPS e controle operacional."
+                    : "Acompanhe os dados da sua motocicleta vinculada, verifique a proteção em tempo real ou conclua o cadastro."}
               </p>
             </div>
 
@@ -476,16 +528,30 @@ export default function VehiclesPage() {
         {error && (
           <div
             role="alert"
-            className="flex items-center justify-between rounded-xl border border-primary/60 bg-primary/10 p-4 text-sm font-medium text-primary shadow-lg"
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-primary/50 bg-primary/10 p-4 text-xs font-semibold text-primary shadow-lg backdrop-blur-md"
           >
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={() => setError("")}
-              className="text-primary hover:opacity-75"
-            >
-              <X className="size-4" />
-            </button>
+            <div className="flex items-center gap-3">
+              <AlertCircle className="size-5 shrink-0 text-primary" />
+              <span>{error}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {error.toLowerCase().includes("sessão") && (
+                <Link
+                  href="/login?expired=1&from=/dashboard/vehicles"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:opacity-90 transition-all"
+                >
+                  Fazer Login Novamente
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={() => setError("")}
+                className="text-primary hover:opacity-75 p-1"
+                title="Fechar alerta"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -778,7 +844,7 @@ export default function VehiclesPage() {
           </section>
         )}
 
-        {/* ========================================================================= */}s
+        {/* ========================================================================= */}
         {/* SEÇÃO 5: FORMULÁRIO DE CADASTRO COM PREVIEW DE PLACA EM TEMPO REAL        */}
         {/* ========================================================================= */}
         {((motorcycles.length === 0 && (view === "new" || view === "pending-form")) || showAddForm) && (

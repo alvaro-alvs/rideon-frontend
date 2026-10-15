@@ -21,6 +21,7 @@ import {
   notifyAuthChange,
   useCurrentUser,
 } from "@/hooks/use-current-user";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 
 export default function LoginPage() {
   return (
@@ -48,17 +49,18 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const registered = searchParams.get("registered") === "1";
+  const expired = searchParams.get("expired") === "1";
   const returnTo = searchParams.get("from") || "/dashboard";
 
   const isAlreadyLoggedIn =
-    isClientSessionActive() || currentUser.status === "authenticated";
+    !expired && (isClientSessionActive() || currentUser.status === "authenticated");
 
   // Check if session is already active and bypass login immediately
   useEffect(() => {
     if (isAlreadyLoggedIn) {
       const destination =
         currentUser.status === "authenticated" &&
-        currentUser.user.role === "admin"
+        isPlatformOrTenantAdmin(currentUser.user.role)
           ? "/admin"
           : "/dashboard";
       router.replace(destination);
@@ -91,7 +93,7 @@ function LoginForm() {
       notifyAuthChange("login");
 
       const target =
-        data.role === "admin" && returnTo === "/dashboard"
+        isPlatformOrTenantAdmin(data.role) && returnTo === "/dashboard"
           ? "/admin"
           : returnTo;
       router.push(target);
@@ -147,6 +149,14 @@ function LoginForm() {
           <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-400">
             <CheckCircle2 className="size-4 shrink-0 text-emerald-400" />
             <span>Conta criada com sucesso! Faça login para continuar.</span>
+          </div>
+        )}
+
+        {/* Expired Session Notice */}
+        {expired && !error && (
+          <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs font-semibold text-amber-400">
+            <AlertCircle className="size-4 shrink-0 text-amber-400" />
+            <span>Sua sessão expirou por inatividade. Por favor, entre novamente para continuar.</span>
           </div>
         )}
 

@@ -23,6 +23,7 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { DeviceCard } from "@/app/admin/devices/components/device-card";
+import { isPlatformOrTenantAdmin } from "@/lib/auth";
 import { DeviceCreateModal } from "@/app/admin/devices/components/device-create-modal";
 import { DeviceLinkModal } from "@/app/admin/devices/components/device-link-modal";
 import { DeviceMapModal } from "@/app/admin/devices/components/device-map-modal";
@@ -63,10 +64,11 @@ export default function AdminDevicesPage() {
   // Client-side role protection
   useEffect(() => {
     if (currentUser.status === "loading") return;
-    if (
-      currentUser.status === "unauthenticated" ||
-      (currentUser.status === "authenticated" && currentUser.user.role !== "admin")
-    ) {
+    if (currentUser.status === "unauthenticated") {
+      router.replace(`/login?expired=1&from=${encodeURIComponent("/admin/devices")}`);
+      return;
+    }
+    if (currentUser.status === "authenticated" && !isPlatformOrTenantAdmin(currentUser.user.role)) {
       router.replace("/dashboard");
     }
   }, [currentUser, router]);
