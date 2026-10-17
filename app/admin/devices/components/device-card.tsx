@@ -5,6 +5,7 @@ import {
   Activity,
   Bike,
   CheckCircle2,
+  Clock,
   Copy,
   Cpu,
   Eye,
@@ -228,7 +229,7 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
         </div>
 
         {/* Telemetry / Last Location Box */}
-        <div className="rounded-2xl border border-border/60 bg-background/50 p-3.5 space-y-1.5">
+        <div className="rounded-2xl border border-border/60 bg-background/50 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
               <MapPin className="size-3.5 text-primary" />
@@ -237,7 +238,7 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
 
             {hasLastPosition ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                <span className="size-1.5 rounded-full bg-emerald-500" />
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.9)]" />
                 {position?.timestamp
                   ? formatRelativeTime(position.timestamp)
                   : "Online"}
@@ -248,15 +249,32 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
           </div>
 
           {position ? (
-            <div className="flex items-center justify-between text-xs pt-0.5">
-              <span className="font-mono text-[11px] text-foreground">
-                {position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}
-              </span>
+            <div className="space-y-1.5 pt-0.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-[11px] font-semibold text-foreground tracking-tight">
+                  {position.latitude.toFixed(5)}, {position.longitude.toFixed(5)}
+                </span>
 
-              <span className="flex items-center gap-1 text-[11px] font-bold text-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
-                <Activity className="size-3 text-primary" />
-                {position.speed ? `${position.speed} km/h` : "0 km/h"}
-              </span>
+                <span className="flex items-center gap-1 text-[11px] font-bold text-foreground bg-secondary/80 px-2 py-0.5 rounded-md">
+                  <Activity className="size-3 text-primary" />
+                  {position.speed ? `${position.speed} km/h` : "0 km/h"}
+                </span>
+              </div>
+
+              {position.timestamp && (
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/40 pt-1.5">
+                  <span className="flex items-center gap-1 truncate">
+                    <Clock className="size-3 text-primary/80 shrink-0" />
+                    <span>Transmissão:</span>
+                    <span className="font-mono text-foreground font-medium">
+                      {formatFullDateTime(position.timestamp)}
+                    </span>
+                  </span>
+                  <span className="text-[9px] text-neutral-400 font-medium shrink-0 ml-1">
+                    ({formatRelativeTime(position.timestamp)})
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-[11px] text-neutral-500 italic">
@@ -273,15 +291,21 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
             className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
               device.status === "active"
                 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                : device.status === "standby"
+                ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
                 : "bg-neutral-800 text-neutral-400 border border-neutral-700"
             }`}
           >
-            {device.status === "active" ? "Ativo" : "Inativo"}
+            {device.status === "active"
+              ? "Ativo"
+              : device.status === "standby"
+              ? "Standby"
+              : "Inativo"}
           </span>
 
-          {device.last_seen_at && (
+          {(device.last_seen_at || position?.timestamp) && (
             <span className="text-[10px] text-muted-foreground">
-              Visto {formatRelativeTime(device.last_seen_at)}
+              Visto {formatRelativeTime(device.last_seen_at || position?.timestamp || "")}
             </span>
           )}
         </div>
@@ -315,6 +339,23 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
       </div>
     </article>
   );
+}
+
+function formatFullDateTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return isoString;
+  }
 }
 
 function formatRelativeTime(isoString: string): string {

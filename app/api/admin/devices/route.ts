@@ -143,23 +143,53 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // 2b. Busca última posição da moto
+        // 2b. Busca última posição do dispositivo ou da moto
         let last_position: DeviceLastPosition | null = null;
-        if (motorcycleId) {
-          const locRes = await fetch(
-            `${apiUrl}/api/v1/motorcycles/${motorcycleId}/location`,
-            {
-              method: "GET",
-              headers: { Authorization: `Bearer ${token}` },
-              cache: "no-store",
-            },
-          );
+        if (rawDev.last_position) {
+          last_position = extractLastPosition(rawDev.last_position as unknown as Record<string, unknown>);
+        }
 
-          if (locRes.ok) {
-            const locRaw: unknown = await locRes.json().catch(() => null);
-            if (locRaw && typeof locRaw === "object") {
-              last_position = extractLastPosition(locRaw as Record<string, unknown>);
+        if (!last_position && rawDev.id) {
+          try {
+            const devLocRes = await fetch(
+              `${apiUrl}/api/v1/devices/${rawDev.id}/location`,
+              {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+                cache: "no-store",
+              },
+            );
+
+            if (devLocRes.ok) {
+              const devLocRaw: unknown = await devLocRes.json().catch(() => null);
+              if (devLocRaw && typeof devLocRaw === "object") {
+                last_position = extractLastPosition(devLocRaw as Record<string, unknown>);
+              }
             }
+          } catch {
+            // fallback
+          }
+        }
+
+        if (!last_position && motorcycleId) {
+          try {
+            const locRes = await fetch(
+              `${apiUrl}/api/v1/motorcycles/${motorcycleId}/location`,
+              {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+                cache: "no-store",
+              },
+            );
+
+            if (locRes.ok) {
+              const locRaw: unknown = await locRes.json().catch(() => null);
+              if (locRaw && typeof locRaw === "object") {
+                last_position = extractLastPosition(locRaw as Record<string, unknown>);
+              }
+            }
+          } catch {
+            // fallback
           }
         }
 
@@ -168,8 +198,8 @@ export async function GET(request: NextRequest) {
           serial_number: rawDev.serial_number,
           protocol: rawDev.protocol,
           firmware_version: rawDev.firmware_version,
-          status: rawDev.status === "active" ? "active" : "inactive",
-          last_seen_at: rawDev.last_seen_at ?? null,
+          status: rawDev.status || "active",
+          last_seen_at: rawDev.last_seen_at ?? last_position?.timestamp ?? null,
           last_position,
           motorcycle,
           created_at: rawDev.created_at,
@@ -372,6 +402,27 @@ function normalizeMoto(raw: Record<string, unknown>): AssociatedMotorcycle {
 function extractLastPosition(
   raw: Record<string, unknown>,
 ): DeviceLastPosition | null {
+  if (!raw) return null;
+
+  // Case 1: directly has latitude and longitude
+  if (typeof raw.latitude === "number" && typeof raw.longitude === "number") {
+    return {
+      latitude: raw.latitude,
+      longitude: raw.longitude,
+      altitude: typeof raw.altitude === "number" ? raw.altitude : undefined,
+      accuracy: typeof raw.accuracy === "number" ? raw.accuracy : undefined,
+      speed: typeof raw.speed === "number" ? raw.speed : undefined,
+      heading: typeof raw.heading === "number" ? raw.heading : undefined,
+      timestamp: String(raw.timestamp || new Date().toISOString()),
+    };
+  }
+
+  // Case 2: has last_position sub-object
+  if (raw.last_position && typeof raw.last_position === "object") {
+    return extractLastPosition(raw.last_position as Record<string, unknown>);
+  }
+
+  // Case 3: nested position + motion
   const pos = raw.position as
     | {
         latitude?: number;

@@ -4,12 +4,14 @@
  */
 export type RawDevice = {
   id: string;
-  motorcycle_id: string;
+  motorcycle_id?: string | null;
   serial_number: string;
   protocol?: string;
   firmware_version?: string;
-  status: "active" | "inactive" | string;
+  status: "active" | "inactive" | "standby" | "provisioned" | string;
   last_seen_at?: string | null;
+  has_position?: boolean;
+  last_position?: DeviceLastPosition | null;
   created_at: string;
 };
 
@@ -46,17 +48,17 @@ export type AssociatedMotorcycle = {
 
 /**
  * Tipo composto utilizado pela view de admin.
- * É montado pelo BFF a partir de 3 chamadas ao backend:
- *   1. GET /api/v1/motorcycles (sem rider_id → todas as motos)
- *   2. GET /api/v1/devices?motorcycle_id={id}
- *   3. GET /api/v1/motorcycles/{id}/location (para last_position)
+ * É montado pelo BFF a partir de chamadas ao backend:
+ *   1. GET /api/v1/devices
+ *   2. GET /api/v1/devices/{id}/location ou GET /api/v1/motorcycles/{id}/location
+ *   3. GET /api/v1/motorcycles/{id}
  */
 export type Device = {
   id: string;           // device id
   serial_number: string;
   protocol?: string;
   firmware_version?: string;
-  status: "active" | "inactive";
+  status: "active" | "inactive" | "standby" | "provisioned" | string;
   last_seen_at?: string | null;
   last_position?: DeviceLastPosition | null;
   motorcycle?: AssociatedMotorcycle | null;

@@ -24,6 +24,7 @@ export async function proxy(request: NextRequest) {
     pathname !== "/api/health";
   const isProtectedPage =
     pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/settings") ||
     (pathname.startsWith("/admin") && !pathname.startsWith("/api/"));
 
   const host = request.headers.get("host") || "localhost";
@@ -46,6 +47,22 @@ export async function proxy(request: NextRequest) {
 
   // Case 1: User visits login or register while session is active -> redirect to home
   if (isAuthPage) {
+    // The client sends users to /login?expired=1 after the backend rejected the
+    // session (401/403 on /api/auth/me). The JWT may still look valid locally
+    // (not expired), so redirecting back to the dashboard here would create an
+    // endless /dashboard <-> /login loop. Drop the stale cookies and show the page.
+    if (request.nextUrl.searchParams.get("expired") === "1") {
+      const nextRes = NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+      if (sessionToken || refreshToken) {
+        clearAuthCookies(nextRes);
+      }
+      return finalizeResponse(nextRes);
+    }
+
     if (sessionToken && !isTokenExpired(sessionToken)) {
       return finalizeResponse(NextResponse.redirect(new URL(userHome, request.url)));
     }

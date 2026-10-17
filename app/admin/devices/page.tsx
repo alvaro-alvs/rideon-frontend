@@ -543,14 +543,30 @@ export default function AdminDevicesPage() {
                           {/* Last Position */}
                           <td className="px-3 py-4">
                             {pos ? (
-                              <div className="font-mono text-[11px] text-muted-foreground">
-                                <span className="text-foreground font-semibold">
-                                  {pos.latitude.toFixed(4)}, {pos.longitude.toFixed(4)}
-                                </span>
-                                {pos.speed !== undefined && (
-                                  <span className="ml-2 text-primary font-bold">
-                                    {pos.speed} km/h
+                              <div className="font-mono text-[11px] text-muted-foreground space-y-0.5">
+                                <div>
+                                  <span className="text-foreground font-semibold">
+                                    {pos.latitude.toFixed(5)}, {pos.longitude.toFixed(5)}
                                   </span>
+                                  {pos.speed !== undefined && (
+                                    <span className="ml-2 text-primary font-bold">
+                                      {pos.speed} km/h
+                                    </span>
+                                  )}
+                                </div>
+                                {pos.timestamp && (
+                                  <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <span>
+                                      {new Date(pos.timestamp).toLocaleString("pt-BR", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        second: "2-digit",
+                                      })}
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             ) : (

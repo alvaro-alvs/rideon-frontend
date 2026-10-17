@@ -4,6 +4,7 @@ import {
   applyAuthCookies,
   callAuthApi,
   callApiMe,
+  extractErrorCode,
   getPublicError,
   getUserRole,
   hasAccessToken,
@@ -48,6 +49,21 @@ export async function POST(request: Request) {
       const { response: meRes, data: meData } = await callApiMe(data.access_token);
       if (meRes.ok && meData) {
         role = getUserRole(meData);
+      } else if (meRes.status === 401 || meRes.status === 403) {
+        // The credentials are valid but this account cannot use the portal
+        // (e.g. TENANT_ACCESS_DENIED / TENANT_SUSPENDED). Do NOT create a
+        // session, otherwise every protected page would bounce back to /login.
+        const code = extractErrorCode(meData);
+        return NextResponse.json(
+          {
+            message:
+              code === "TENANT_SUSPENDED"
+                ? "A conta desta empresa esta suspensa. Contate o suporte."
+                : "Sua conta nao tem acesso a este portal.",
+            code,
+          },
+          { status: 403 },
+        );
       }
     } catch {
       // Non-fatal — default to "rider" (safe fallback for legacy accounts)

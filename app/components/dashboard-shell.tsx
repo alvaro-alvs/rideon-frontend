@@ -63,7 +63,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Global" },
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Global" },
       { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "Global" },
-      { label: "White-Label", href: "/admin/tenants", icon: Palette, badge: "SaaS" },
+      { label: "Organizações", href: "/admin/tenants", icon: Building2, badge: "SaaS" },
       { label: "Configurações", href: "/dashboard/settings", icon: Settings },
     ];
   } else if (manager) {
@@ -72,7 +72,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Carteira" },
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Frota" },
       { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "IMEI" },
-      { label: "White-Label", href: "/admin/tenants", icon: Palette, badge: "Marca" },
+      { label: "Organizações", href: "/admin/tenants", icon: Building2, badge: "Marca" },
       { label: "Configurações", href: "/dashboard/settings", icon: Settings },
     ];
   } else {

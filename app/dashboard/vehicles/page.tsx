@@ -33,6 +33,7 @@ import { CalendarPicker } from "@/app/components/ui/calendar-picker";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isMasterAdmin, isManager } from "@/lib/auth";
+import { formatPhone } from "@/lib/phone";
 import {
   VehicleMiniCard,
   type VehicleCardData,
@@ -225,20 +226,9 @@ export default function VehiclesPage() {
     }
   };
 
-  // Formatação de telefone em tempo real
+  // Formatação de telefone em tempo real (expansível para celular com 9º dígito)
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 11) value = value.slice(0, 11);
-
-    let formatted = value;
-    if (value.length > 6) {
-      formatted = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
-    } else if (value.length > 2) {
-      formatted = `(${value.slice(0, 2)}) ${value.slice(2)}`;
-    } else if (value.length > 0) {
-      formatted = `(${value}`;
-    }
-    setFormRiderPhone(formatted);
+    setFormRiderPhone(formatPhone(e.target.value));
   };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -473,38 +463,61 @@ export default function VehiclesPage() {
               </div>
 
               {/* Metric 2: Rastreamento Ativo */}
-              <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
-                  <Radio className="size-4.5 animate-pulse" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    Rastreamento
-                  </p>
-                  <p className="text-base font-black text-emerald-400">
-                    {view === "loading"
-                      ? "..."
-                      : motorcycles.length > 0
-                        ? `${motorcycles.length} Ativo${motorcycles.length > 1 ? "s" : ""}`
-                        : "0 Ativos"}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const trackedCount = motorcycles.filter((m) => Boolean(m.device)).length;
+                return (
+                  <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
+                    <div className={`flex size-9 items-center justify-center rounded-xl ${
+                      trackedCount > 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
+                    }`}>
+                      <Radio className={`size-4.5 ${trackedCount > 0 ? "animate-pulse" : ""}`} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        Rastreamento
+                      </p>
+                      <p className={`text-base font-black ${trackedCount > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
+                        {view === "loading"
+                          ? "..."
+                          : trackedCount > 0
+                            ? `${trackedCount} Vinculado${trackedCount > 1 ? "s" : ""}`
+                            : "0 Vinculados"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Metric 3: Prontidão de Telemetria */}
-              <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-                  <Activity className="size-4.5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    Telemetria
-                  </p>
-                  <p className="text-base font-black text-blue-400">
-                    {motorcycles.length > 0 ? "100% Online" : "Standby"}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const liveCount = motorcycles.filter((m) => Boolean(m.device && (m.has_position || m.last_position))).length;
+                const hasDeviceWithoutPosition = motorcycles.some((m) => Boolean(m.device) && !m.has_position && !m.last_position);
+                return (
+                  <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
+                    <div className={`flex size-9 items-center justify-center rounded-xl ${
+                      liveCount > 0 ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"
+                    }`}>
+                      <Activity className="size-4.5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        Telemetria
+                      </p>
+                      <p className={`text-base font-black ${
+                        liveCount > 0 ? "text-blue-400" : hasDeviceWithoutPosition ? "text-amber-400" : "text-muted-foreground"
+                      }`}>
+                        {view === "loading"
+                          ? "..."
+                          : liveCount > 0
+                            ? `${liveCount} GPS Ativo`
+                            : hasDeviceWithoutPosition
+                              ? "Em Busca"
+                              : "Standby"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Metric 4: Alerta de Segurança */}
               {/* <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
@@ -588,12 +601,25 @@ export default function VehiclesPage() {
                     id="registered-vehicles-title"
                     className="text-lg font-black uppercase tracking-tight text-foreground"
                   >
-                    {isAdmin ? "Veículos Cadastrados na Frota" : "Sua Motocicleta Conectada"}
+                    {isAdmin
+                      ? "Veículos Cadastrados na Frota"
+                      : motorcycles.some((m) => m.device)
+                      ? "Sua Motocicleta Conectada"
+                      : "Sua Motocicleta Cadastrada"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    {motorcycles.length === 1
-                      ? "1 veículo monitorado em tempo real"
-                      : `${motorcycles.length} veículos registrados`}
+                    {(() => {
+                      const liveCount = motorcycles.filter(
+                        (m) => m.device && (m.has_position || m.last_position),
+                      ).length;
+                      if (liveCount > 0) {
+                        return `${liveCount} de ${motorcycles.length} veículo(s) monitorado(s) em tempo real`;
+                      }
+                      if (motorcycles.some((m) => m.device)) {
+                        return `${motorcycles.length} veículo(s) com rastreador vinculado (aguardando sinal)`;
+                      }
+                      return `${motorcycles.length} veículo(s) cadastrado(s) • Aguardando ativação de rastreador`;
+                    })()}
                   </p>
                 </div>
               </div>

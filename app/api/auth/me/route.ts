@@ -5,6 +5,7 @@ import {
   applyAuthCookies,
   callApiMe,
   clearAuthCookies,
+  extractErrorCode,
   getUserRole,
   hasAccessToken,
   hasRefreshToken,
@@ -73,11 +74,22 @@ export async function GET(request: NextRequest) {
     }
 
     if (!response.ok) {
+      const code = extractErrorCode(data);
       const errorResponse = NextResponse.json(
-        { message: "Sessao expirada ou invalida." },
+        {
+          message:
+            response.status === 403
+              ? "Sua conta nao tem acesso a este portal."
+              : "Sessao expirada ou invalida.",
+          code: code ?? (response.status === 401 ? "SESSION_EXPIRED" : undefined),
+        },
         { status: response.status >= 500 ? 502 : response.status },
       );
-      if (response.status === 401) {
+      // 401 (invalid/expired) and 403 (tenant denied/suspended) both make the
+      // current session unusable. Clearing cookies is essential: otherwise
+      // proxy.ts sees a non-expired JWT on /login and redirects back to the
+      // dashboard, creating an endless redirect loop.
+      if (response.status === 401 || response.status === 403) {
         clearAuthCookies(errorResponse);
       }
       return errorResponse;

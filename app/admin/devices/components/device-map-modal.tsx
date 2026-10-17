@@ -340,14 +340,17 @@ function DeviceMapModalContent({
 
   // 2. High-frequency REST polling fallback / complement (every 3.5s while open)
   useEffect(() => {
-    if (!device.motorcycle?.id) return;
+    if (!device.motorcycle?.id && !device.id) return;
 
-    const motoId = device.motorcycle.id;
     let active = true;
 
     const pollLocation = async () => {
       try {
-        const res = await fetch(`/api/motorcycles/${motoId}/location`, {
+        const url = device.motorcycle?.id
+          ? `/api/motorcycles/${device.motorcycle.id}/location`
+          : `/api/admin/devices/${device.id}/location`;
+
+        const res = await fetch(url, {
           cache: "no-store",
         });
         if (!res.ok || !active) return;

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 32" fill="none" role="img" aria-label="RideOn">
+  <rect x="0" y="2" width="28" height="28" rx="4" fill="#EF251B"/>
+  <text x="14" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="16" fill="#FFFFFF" text-anchor="middle">R</text>
+  <text x="38" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-style="italic" font-size="20" letter-spacing="0.04em" fill="#F3F1EE">
+    RIDE<tspan fill="#EF251B">ON</tspan>
+  </text>
+</svg>

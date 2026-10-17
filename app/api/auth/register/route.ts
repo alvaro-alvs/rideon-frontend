@@ -51,15 +51,29 @@ export async function POST(request: Request) {
 
       if (loginRes.ok && hasAccessToken(loginData)) {
         let role = "rider";
+        let sessionUsable = true;
         try {
           const { response: meRes, data: meData } = await callApiMe(
             loginData.access_token,
           );
           if (meRes.ok && meData) {
             role = getUserRole(meData);
+          } else if (meRes.status === 401 || meRes.status === 403) {
+            // Account exists but cannot use this portal yet; never create a
+            // session that every protected page would reject (redirect loop).
+            sessionUsable = false;
           }
         } catch {
           // Default role is "rider" for newly registered users
+        }
+
+        if (!sessionUsable) {
+          return NextResponse.json({
+            registered: true,
+            authenticated: false,
+            autoLoggedIn: false,
+            message: "Conta criada com sucesso. Faca login para acessar.",
+          });
         }
 
         const successResponse = NextResponse.json({

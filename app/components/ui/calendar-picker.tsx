@@ -184,9 +184,9 @@ export function CalendarPicker({
     : "";
 
   return (
-    <div ref={containerRef} className={`relative ${isOpen ? "z-50" : "z-0"} grid gap-2 text-xs font-bold uppercase tracking-wider text-foreground ${className}`}>
+    <div ref={containerRef} className={`relative ${isOpen ? "z-50" : "z-0"} space-y-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground ${className}`}>
       {label && (
-        <label htmlFor={inputId} className="cursor-pointer">
+        <label htmlFor={inputId} className="block cursor-pointer">
           {label} {required && <span className="text-primary">*</span>}
         </label>
       )}
@@ -207,23 +207,23 @@ export function CalendarPicker({
         type="button"
         disabled={disabled}
         onClick={handleToggleOpen}
-        className={`group flex w-full items-center justify-between rounded-xl border bg-secondary/80 px-3.5 py-3 text-left transition-all duration-200 ${
+        className={`group flex w-full items-center justify-between rounded-xl border bg-background px-3.5 py-2.5 text-left transition-all duration-200 ${
           isOpen
-            ? "border-primary ring-2 ring-primary/20 shadow-lg shadow-primary/10"
-            : "border-border/80 hover:border-primary/50 hover:bg-secondary"
+            ? "border-primary ring-1 ring-primary shadow-lg shadow-primary/10"
+            : "border-border hover:border-primary/50 hover:bg-secondary/40"
         } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
       >
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <CalendarDays
             className={`size-4 shrink-0 transition-colors ${
               isOpen || currentValue ? "text-primary" : "text-muted-foreground"
             }`}
           />
           <span
-            className={`truncate text-sm font-medium ${
-              currentValue ? "text-foreground font-semibold" : "text-muted-foreground/70 lowercase font-normal"
+            className={`truncate text-xs ${
+              currentValue ? "text-foreground font-semibold" : "text-muted-foreground font-normal lowercase"
             }`}
           >
             {formattedDisplay || placeholder}

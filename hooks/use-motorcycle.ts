@@ -11,11 +11,21 @@ export type Motorcycle = {
   license_plate?: string;
   status?: string;
   device?: {
+    id?: string;
     serial_number?: string;
     protocol?: string;
+    firmware_version?: string;
     status?: string;
     last_communication?: string;
-  };
+    last_seen_at?: string | null;
+  } | null;
+  has_position?: boolean;
+  last_position?: {
+    latitude: number;
+    longitude: number;
+    speed?: number;
+    timestamp: string;
+  } | null;
 };
 
 export type UseMotorcycleResult = {

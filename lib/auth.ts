@@ -197,7 +197,7 @@ export async function callAuthenticatedApi(
   endpoint: string,
   token: string,
   payload?: Record<string, unknown>,
-  method: "GET" | "POST" = "POST",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE" = "POST",
 ): Promise<ApiResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -232,6 +232,21 @@ export function getPublicError(status: number) {
   if (status === 401) return "E-mail ou senha invalidos.";
   if (status === 409) return "Este e-mail ja esta cadastrado.";
   return "Nao foi possivel concluir a operacao. Tente novamente.";
+}
+
+/**
+ * Extracts the machine-readable error code from a backend error body.
+ * Supports both `{ error: "CODE" }` (tenant middleware) and
+ * `{ error: { code: "CODE" } }` (standard API errors).
+ */
+export function extractErrorCode(data: Record<string, unknown> | null): string | undefined {
+  const error = data?.error;
+  if (typeof error === "string" && error.length > 0) return error;
+  if (error && typeof error === "object") {
+    const code = (error as Record<string, unknown>).code;
+    if (typeof code === "string" && code.length > 0) return code;
+  }
+  return undefined;
 }
 
 export function hasAccessToken(data: Record<string, unknown> | null): data is {

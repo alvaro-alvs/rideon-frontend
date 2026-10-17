@@ -23,6 +23,11 @@ export type Customer = {
   id: string; // Rider ID
   user_id: string;
   tenant_id?: string;
+  tenant_name?: string;
+  tenant_slug?: string;
+  manager_id?: string;
+  manager_name?: string;
+  manager_email?: string;
   name: string;
   email: string;
   phone: string;
