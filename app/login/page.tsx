@@ -264,15 +264,26 @@ function LoginForm() {
         </Button>
 
         {/* Bottom Switcher */}
-        <p className="pt-2 text-center text-xs text-muted-foreground">
-          Ainda não tem acesso?{" "}
-          <Link
-            href="/register"
-            className="font-bold text-primary transition-colors hover:underline"
-          >
-            Cadastre-se gratuitamente
-          </Link>
-        </p>
+        <div className="pt-2 text-center text-xs space-y-1.5">
+          <p className="text-muted-foreground">
+            Ainda não tem acesso?{" "}
+            <Link
+              href="/register"
+              className="font-bold text-primary transition-colors hover:underline"
+            >
+              Cadastre-se gratuitamente
+            </Link>
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Cadastrado pela empresa ou gestor?{" "}
+            <Link
+              href="/register"
+              className="font-semibold text-foreground hover:text-primary transition-colors underline"
+            >
+              Ative ou consulte sua conta
+            </Link>
+          </p>
+        </div>
       </form>
     </AuthLayout>
   );

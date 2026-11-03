@@ -78,8 +78,8 @@ export const DEFAULT_TENANT_CONFIG: TenantPublicConfig = {
   status: "active",
   branding: {
     brand_name: "RideOn",
-    logo_url: "",
-    favicon_url: "/favicon.ico",
+    logo_url: "/logomark.svg",
+    favicon_url: "/favicon.svg",
     primary_color: "#ef251b",
     secondary_color: "#1d1d1d",
     accent_color: "#ff3b30",

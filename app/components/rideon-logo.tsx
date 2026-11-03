@@ -7,9 +7,10 @@ import { useTenant } from "@/app/components/tenant-provider";
 type RideOnLogoProps = {
   compact?: boolean;
   href?: string;
+  className?: string;
 };
 
-export function RideOnLogo({ compact = false, href }: RideOnLogoProps) {
+export function RideOnLogo({ compact = false, href, className = "" }: RideOnLogoProps) {
   const { branding } = useTenant();
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const brandName = branding.brand_name || "RideOn";
@@ -35,13 +36,14 @@ export function RideOnLogo({ compact = false, href }: RideOnLogoProps) {
     branding.logo_url &&
     branding.logo_url.trim() !== "" &&
     branding.logo_url !== "/logo.svg" &&
+    branding.logo_url !== "/logomark.svg" &&
     !imgError &&
     !isRideOn
   );
 
   const mark = (
     <span
-      className="inline-flex items-center gap-2.5 text-xl font-black italic leading-none tracking-[0.04em] text-foreground"
+      className={`inline-flex items-center gap-2.5 text-xl font-black italic leading-none tracking-[0.04em] text-foreground ${className}`}
       aria-label={brandName}
     >
       {hasCustomImage ? (
@@ -50,11 +52,19 @@ export function RideOnLogo({ compact = false, href }: RideOnLogoProps) {
         <img
           src={branding.logo_url}
           alt={brandName}
-          className="h-8 max-h-8 w-auto object-contain"
+          className="h-8 max-h-8 w-auto object-contain shrink-0"
           onError={() => setFailedUrl(branding.logo_url || null)}
         />
+      ) : isRideOn ? (
+        // Official RideOn Logomark Icon
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src="/logomark-icon.svg"
+          alt="RideOn"
+          className="h-8 max-h-8 w-auto object-contain shrink-0 drop-shadow-sm"
+        />
       ) : (
-        // Styled Brand Initial Badge (RideOn original red square with 'R')
+        // Styled Brand Initial Badge for fallback partners
         <span className="grid size-7 place-items-center rounded-sm bg-primary text-sm font-black not-italic text-primary-foreground shadow-sm shadow-primary/20">
           {initial}
         </span>

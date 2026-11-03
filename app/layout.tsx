@@ -12,11 +12,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const tenant = await fetchTenantConfig(host);
   const brandName = tenant.branding.brand_name || "RideOn";
 
+  const faviconUrl = tenant.branding.favicon_url || "/favicon.svg";
+
   return {
     title: `${brandName} | Rastreamento e Segurança`,
     description: `Localização em tempo real, telemetria e gestão inteligente com ${brandName}.`,
     icons: {
-      icon: tenant.branding.favicon_url || "/favicon.ico",
+      icon: [
+        { url: faviconUrl, type: faviconUrl.endsWith(".svg") ? "image/svg+xml" : undefined },
+        { url: "/favicon.ico" },
+      ],
+      shortcut: "/favicon.ico",
+      apple: faviconUrl,
     },
   };
 }

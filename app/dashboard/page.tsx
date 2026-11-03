@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -22,6 +22,7 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { FirstLoginPasswordModal } from "@/app/dashboard/components/first-login-password-modal";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -104,6 +105,11 @@ export default function DashboardPage() {
   return (
     <DashboardShell>
       <div className="mx-auto max-w-6xl py-6 space-y-8">
+        {/* Suggestion modal / banner on first login */}
+        <Suspense fallback={null}>
+          <FirstLoginPasswordModal />
+        </Suspense>
+
         {/* Top Header & Plan Info */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

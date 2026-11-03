@@ -29,6 +29,21 @@ export async function POST(request: Request) {
     const { response, data } = await callAuthApi("register", payload);
 
     if (!response.ok) {
+      if (response.status === 409 && data && typeof data === "object") {
+        const errObj = (data as Record<string, unknown>).error as Record<string, unknown> | undefined;
+        if (errObj && (errObj.matches || errObj.code === "USER_ALREADY_EXISTS")) {
+          return NextResponse.json(
+            {
+              registered: false,
+              userExists: true,
+              message: (errObj.message as string) || "Identificamos um usuário já cadastrado com estes dados.",
+              matches: errObj.matches || [],
+            },
+            { status: 409 },
+          );
+        }
+      }
+
       return NextResponse.json(
         { message: getPublicError(response.status) },
         { status: response.status >= 500 ? 502 : response.status },

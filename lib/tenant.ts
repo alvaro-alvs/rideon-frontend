@@ -34,8 +34,8 @@ export async function fetchTenantConfig(hostOrSlug?: string): Promise<TenantPubl
       status: data.status || DEFAULT_TENANT_CONFIG.status,
       branding: {
         brand_name: data.branding?.brand_name || DEFAULT_TENANT_CONFIG.branding.brand_name,
-        logo_url: data.branding?.logo_url || "",
-        favicon_url: data.branding?.favicon_url || "/favicon.ico",
+        logo_url: data.branding?.logo_url || DEFAULT_TENANT_CONFIG.branding.logo_url,
+        favicon_url: data.branding?.favicon_url || DEFAULT_TENANT_CONFIG.branding.favicon_url,
         primary_color: data.branding?.primary_color || DEFAULT_TENANT_CONFIG.branding.primary_color,
         secondary_color: data.branding?.secondary_color || DEFAULT_TENANT_CONFIG.branding.secondary_color,
         accent_color: data.branding?.accent_color || DEFAULT_TENANT_CONFIG.branding.accent_color,

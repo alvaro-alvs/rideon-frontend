@@ -519,7 +519,7 @@ export default function OrganizationsAdminPage() {
                           className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 shadow-inner"
                           style={{ backgroundColor: `${primaryColorValue}15` }}
                         >
-                          {currentLogo && currentLogo !== "/logo.svg" ? (
+                          {currentLogo && currentLogo !== "/logo.svg" && currentLogo !== "/logomark.svg" ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={currentLogo}
@@ -528,6 +528,13 @@ export default function OrganizationsAdminPage() {
                               onError={(e) => {
                                 (e.target as HTMLElement).style.display = "none";
                               }}
+                            />
+                          ) : t.slug === "rideon" || (t.trade_name && t.trade_name.toLowerCase() === "rideon") ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src="/logomark-icon.svg"
+                              alt={t.trade_name}
+                              className="size-7 object-contain"
                             />
                           ) : (
                             <span
@@ -910,6 +917,9 @@ export default function OrganizationsAdminPage() {
                       {logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={logoUrl} alt="Logo Preview" className="h-6 w-auto object-contain" />
+                      ) : (brandName || "RideOn").toLowerCase() === "rideon" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src="/logomark-icon.svg" alt="RideOn" className="h-6 w-auto object-contain" />
                       ) : (
                         <span
                           className="grid size-6 place-items-center rounded text-xs font-black text-white"

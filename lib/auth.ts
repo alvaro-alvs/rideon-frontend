@@ -74,9 +74,28 @@ export function isCustomer(role: UserRole | string | undefined): boolean {
 }
 
 
+export type MatchCorrespondence = {
+  user_id: string;
+  first_name: string;
+  masked_name: string;
+  masked_email: string;
+  masked_phone?: string;
+  tenant_name?: string;
+  tenant_slug?: string;
+  role: string;
+  match_type: "both" | "email" | "name" | string;
+  is_pre_registered: boolean;
+  must_change_password?: boolean;
+};
+
 type AuthPayload = {
   email: string;
-  password: string;
+  password?: string;
+  name?: string;
+  user_id?: string;
+  current_password?: string;
+  new_password?: string;
+  [key: string]: unknown;
 };
 
 export type RiderPayload = {
@@ -151,16 +170,22 @@ export function isValidVehicleRegistration(
 }
 
 export async function callAuthApi(
-  endpoint: "login" | "register",
-  payload: AuthPayload,
+  endpoint: "login" | "register" | "lookup" | "claim" | "change-password" | string,
+  payload: Record<string, unknown>,
+  token?: string,
 ): Promise<ApiResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${getApiUrl()}/api/v1/auth/${endpoint}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
       cache: "no-store",
