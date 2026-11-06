@@ -99,6 +99,7 @@ export default function SettingsPage() {
   // Preferences State
   const [ignitionAlerts, setIgnitionAlerts] = useState(true);
   const [speedLimitAlert, setSpeedLimitAlert] = useState(true);
+  const [adminAllVehiclesNotif, setAdminAllVehiclesNotif] = useState(false);
   const [maxSpeedKmH, setMaxSpeedKmH] = useState(110);
   const [speedUnit, setSpeedUnit] = useState<"kmh" | "mph">("kmh");
   const [prefSavedMessage, setPrefSavedMessage] = useState<string | null>(null);
@@ -111,6 +112,9 @@ export default function SettingsPage() {
 
       const storedSpeed = localStorage.getItem("rideon_max_speed");
       if (storedSpeed) setMaxSpeedKmH(Number(storedSpeed));
+
+      const storedAllVehicles = localStorage.getItem("rideon_admin_all_vehicles_notif");
+      if (storedAllVehicles !== null) setAdminAllVehiclesNotif(storedAllVehicles === "true");
 
       const storedUnit = localStorage.getItem("rideon_speed_unit");
       if (storedUnit === "mph" || storedUnit === "kmh") setSpeedUnit(storedUnit);
@@ -1079,6 +1083,44 @@ export default function SettingsPage() {
               </h3>
 
               <div className="space-y-4">
+                {/* Opção para Admins: Notificações de Todos os Veículos (Desabilitada por padrão) */}
+                {isPlatformOrTenantAdmin(profileData?.user?.role || "rider") && (
+                  <div className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold uppercase tracking-wide text-foreground">
+                          Notificações de Toda a Frota
+                        </p>
+                        <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                          Admin
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Por padrão desabilitado. Habilite para acompanhar alertas e notificações de todos os veículos da organização.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !adminAllVehiclesNotif;
+                        setAdminAllVehiclesNotif(next);
+                        if (typeof window !== "undefined") {
+                          localStorage.setItem("rideon_admin_all_vehicles_notif", String(next));
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        adminAllVehiclesNotif ? "bg-primary" : "bg-zinc-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          adminAllVehiclesNotif ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
+
                 {/* Alerta de Ignição */}
                 <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-secondary/30 p-4">
                   <div className="space-y-1">

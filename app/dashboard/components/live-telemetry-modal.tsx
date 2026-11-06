@@ -5,7 +5,9 @@ import {
   Activity,
   BatteryCharging,
   Compass,
+  Info,
   MapPin,
+  MapPinOff,
   Radio,
   RefreshCw,
   Wifi,
@@ -16,6 +18,7 @@ import {
 
 import { GoogleMapView } from "./google-map-view";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
+import { isValidCoordinate } from "@/lib/geo";
 
 interface LiveTelemetryModalProps {
   isOpen: boolean;
@@ -47,6 +50,7 @@ export interface TelemetryPoint {
   device?: {
     battery?: number;
     signal?: number;
+    ignition?: boolean;
   };
 }
 
@@ -82,12 +86,19 @@ function LiveTelemetryModalContent({
     if (locationState.status === "ok" && !seededRef.current) {
       seededRef.current = true;
       setTelemetry(locationState.data);
-      setHistory([
-        {
-          latitude: locationState.data.position.latitude,
-          longitude: locationState.data.position.longitude,
-        },
-      ]);
+      if (
+        isValidCoordinate(
+          locationState.data.position.latitude,
+          locationState.data.position.longitude,
+        )
+      ) {
+        setHistory([
+          {
+            latitude: locationState.data.position.latitude,
+            longitude: locationState.data.position.longitude,
+          },
+        ]);
+      }
     }
   }, [locationState]);
 
@@ -105,7 +116,7 @@ function LiveTelemetryModalContent({
 
       if (envWs) {
         try {
-          const parsed = new URL(envWs);
+          const parsed = new URL(envWs, window.location.origin);
           if (
             window.location.hostname !== "localhost" &&
             window.location.hostname !== "127.0.0.1" &&
@@ -166,6 +177,7 @@ function LiveTelemetryModalContent({
         ? {
             battery: toNum(device.Battery ?? device.battery),
             signal: toNum(device.Signal ?? device.signal),
+            ignition: device.Ignition ?? device.ignition,
           }
         : undefined,
     };
@@ -187,40 +199,50 @@ function LiveTelemetryModalContent({
 
       try {
         const res = await fetch("/api/auth/token", { cache: "no-store" });
+        if (!isMounted) return;
+
         if (!res.ok) {
           console.warn(
             "[WS] Falha ao obter token de autenticação (/api/auth/token status:",
             res.status,
             ")",
           );
-          if (isMounted) setConnectionStatus("error");
+          setConnectionStatus("error");
           return;
         }
 
         const data = await res.json();
-        const token = data.token;
+        if (!isMounted) return;
 
+        const token = data.token;
         if (!token) {
           console.warn("[WS] Token de autenticação não retornado pela API");
-          if (isMounted) setConnectionStatus("error");
+          setConnectionStatus("error");
           return;
         }
 
         const wsUrl = resolveWsUrl(token);
         console.log("[WS] Conectando ao WebSocket...");
 
+        // Remove handlers do socket anterior antes de fechar para evitar que eventos de close/error espúrios disparem
         if (wsRef.current) {
-          wsRef.current.close();
+          const oldWs = wsRef.current;
           wsRef.current = null;
+          oldWs.onopen = null;
+          oldWs.onmessage = null;
+          oldWs.onerror = null;
+          oldWs.onclose = null;
+          oldWs.close();
         }
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
+          if (!isMounted) return;
           console.log("[WS] Conectado com sucesso");
           retryCountRef.current = 0;
-          if (isMounted) setConnectionStatus("connected");
+          setConnectionStatus("connected");
         };
 
         ws.onmessage = (event) => {
@@ -230,16 +252,26 @@ function LiveTelemetryModalContent({
             if (!mapped || !isMounted) return;
 
             // Correlaciona imediatamente a telemetria com a motocicleta ativa
-            if (
-              motorcycleId &&
-              mapped.motorcycle_id &&
-              mapped.motorcycle_id !== motorcycleId
-            ) {
+            const activeId = (motorcycleId || "").toLowerCase();
+            const eventMotoId = (mapped.motorcycle_id || "").toLowerCase();
+            const activeImei = (telemetry.imei || "").toLowerCase();
+            const eventImei = (mapped.imei || "").toLowerCase();
+
+            if (activeId && eventMotoId && eventMotoId !== activeId) {
+              return;
+            }
+
+            if (activeImei && eventImei && eventImei !== activeImei) {
               return;
             }
 
             setTelemetry(mapped);
-            if (mapped.position.latitude && mapped.position.longitude) {
+            if (
+              isValidCoordinate(
+                mapped.position.latitude,
+                mapped.position.longitude,
+              )
+            ) {
               setHistory((prev) => [
                 ...prev.slice(-49),
                 {
@@ -253,42 +285,49 @@ function LiveTelemetryModalContent({
           }
         };
 
-        ws.onerror = (e) => {
-          console.error("[WS] Erro no WebSocket:", e);
-          if (isMounted) setConnectionStatus("error");
+        ws.onerror = () => {
+          if (!isMounted || intentionalCloseRef.current) return;
+          // Eventos de erro do WebSocket no navegador são vazios ({}) por especificação W3C.
+          // Detalhes de motivo e código de encerramento são capturados no ws.onclose.
+          const sanitizedUrl = wsUrl.replace(/([?&]token=)[^&]+/, "$1***");
+          console.warn(`[WS] Falha na conexão WebSocket com ${sanitizedUrl}`);
+          setConnectionStatus("error");
         };
 
         ws.onclose = (e) => {
+          if (!isMounted) return;
+
+          if (intentionalCloseRef.current) {
+            setConnectionStatus("disconnected");
+            return;
+          }
+
           console.log(
-            `[WS] Fechado (código: ${e.code}, motivo: "${e.reason || "sem detalhes"}")`,
+            `[WS] Desconectado (código: ${e.code}, motivo: "${e.reason || "sem detalhes"}")`,
           );
-          if (isMounted) {
-            if (intentionalCloseRef.current) {
-              setConnectionStatus("disconnected");
-            } else {
-              setConnectionStatus("error");
-              // Tentativa de reconexão automática com backoff exponencial
-              if (retryCountRef.current < 5) {
-                const delay = Math.min(
-                  1500 * Math.pow(1.8, retryCountRef.current),
-                  10000,
-                );
-                retryCountRef.current += 1;
-                console.log(
-                  `[WS] Tentando reconectar em ${Math.round(delay)}ms (tentativa ${retryCountRef.current}/5)...`,
-                );
-                reconnectTimeoutRef.current = setTimeout(() => {
-                  if (isMounted) {
-                    connect();
-                  }
-                }, delay);
+          setConnectionStatus("error");
+
+          // Tentativa de reconexão automática com backoff exponencial
+          if (retryCountRef.current < 5) {
+            const delay = Math.min(
+              1500 * Math.pow(1.8, retryCountRef.current),
+              10000,
+            );
+            retryCountRef.current += 1;
+            console.log(
+              `[WS] Tentando reconectar em ${Math.round(delay)}ms (tentativa ${retryCountRef.current}/5)...`,
+            );
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isMounted && !intentionalCloseRef.current) {
+                connect();
               }
-            }
+            }, delay);
           }
         };
       } catch (err) {
-        console.error("[WS] Erro na inicialização:", err);
-        if (isMounted) setConnectionStatus("error");
+        if (!isMounted || intentionalCloseRef.current) return;
+        console.warn("[WS] Erro na inicialização:", err);
+        setConnectionStatus("error");
       }
     }
 
@@ -302,11 +341,94 @@ function LiveTelemetryModalContent({
         reconnectTimeoutRef.current = null;
       }
       if (wsRef.current) {
-        wsRef.current.close();
+        const ws = wsRef.current;
         wsRef.current = null;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        ws.close();
       }
     };
   }, [motorcycleId, reconnectTrigger]);
+
+  // 2. High-frequency REST polling fallback / complement (every 3.5s while modal is open)
+  // Garante que, caso o rastreador comece a pontuar enquanto o modal está aberto,
+  // os dados mais recentes sejam refletidos imediatamente sem depender unicamente de push.
+  useEffect(() => {
+    if (!motorcycleId) return;
+
+    let active = true;
+
+    const pollLocation = async () => {
+      try {
+        const res = await fetch(`/api/motorcycles/${motorcycleId}/location`, {
+          cache: "no-store",
+        });
+        if (!active || !res.ok) return;
+
+        const data = (await res.json()) as Record<string, unknown>;
+        const mapped = mapToTelemetry(data);
+        if (!active || !mapped) return;
+
+        if (
+          isValidCoordinate(
+            mapped.position.latitude,
+            mapped.position.longitude,
+          )
+        ) {
+          setTelemetry((prev) => {
+            const prevTime = prev.timestamp ? new Date(prev.timestamp).getTime() : 0;
+            const nextTime = mapped.timestamp ? new Date(mapped.timestamp).getTime() : Date.now();
+            if (nextTime >= prevTime) {
+              return mapped;
+            }
+            return prev;
+          });
+
+          setHistory((prev) => {
+            const last = prev[prev.length - 1];
+            if (
+              !last ||
+              last.latitude !== mapped.position.latitude ||
+              last.longitude !== mapped.position.longitude
+            ) {
+              return [
+                ...prev.slice(-49),
+                {
+                  latitude: mapped.position.latitude,
+                  longitude: mapped.position.longitude,
+                },
+              ];
+            }
+            return prev;
+          });
+        }
+      } catch {
+        // Silencioso em caso de falha transitória
+      }
+    };
+
+    // Consulta inicial e loop a cada 3.5 segundos
+    void pollLocation();
+    const interval = setInterval(() => {
+      void pollLocation();
+    }, 3500);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [motorcycleId]);
+
+  const hasValidLocation = Boolean(
+    telemetry &&
+      isValidCoordinate(telemetry.position?.latitude, telemetry.position?.longitude),
+  );
+  const isLoadingLocation =
+    (locationState.status === "loading" || locationState.status === "idle") &&
+    !seededRef.current &&
+    !hasValidLocation;
 
   const currentSpeed = telemetry.motion?.speed ?? 0;
   const currentBattery = telemetry.device?.battery ?? 0;
@@ -348,6 +470,11 @@ function LiveTelemetryModalContent({
                     </>
                   )}
                 </span>
+                {!hasValidLocation && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                    <MapPinOff className="size-3" /> Sem GPS
+                  </span>
+                )}
                 {(connectionStatus === "error" || connectionStatus === "disconnected") && (
                   <button
                     onClick={() => {
@@ -384,11 +511,9 @@ function LiveTelemetryModalContent({
         </div>
 
         {/* Modal Content / Map Area */}
-        <div className="relative flex-1 bg-black">
-          {/* Overlay enquanto a localização inicial não chegou da API */}
-          {(locationState.status === "idle" ||
-            locationState.status === "loading") && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm">
+        <div className="relative flex-1 bg-black overflow-hidden">
+          {isLoadingLocation ? (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 backdrop-blur-sm">
               <span className="relative flex size-10">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-40" />
                 <span className="relative inline-flex size-10 items-center justify-center rounded-full bg-primary/10">
@@ -396,89 +521,185 @@ function LiveTelemetryModalContent({
                 </span>
               </span>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Obtendo localização...
+                Consultando última localização...
               </p>
             </div>
+          ) : !hasValidLocation ? (
+            <div className="relative flex h-full w-full flex-col items-center justify-center p-6 text-center bg-radial from-card/80 via-background/95 to-background overflow-y-auto">
+              {/* Radar pulse animation */}
+              <div className="relative mb-5">
+                <div className="absolute -inset-4 rounded-full bg-primary/15 animate-ping opacity-60" />
+                <div className="absolute -inset-8 rounded-full border border-primary/20 animate-pulse" />
+                <div className="relative flex size-20 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary shadow-xl shadow-primary/10">
+                  <Radio className="size-10 animate-pulse text-primary" />
+                </div>
+              </div>
+
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-xs font-semibold text-amber-400 mb-3 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+                </span>
+                Aguardando primeira transmissão do rastreador
+              </div>
+
+              <h3 className="text-xl md:text-2xl font-bold uppercase tracking-wide text-foreground">
+                Rastreador ainda não comunicou
+              </h3>
+
+              <p className="mt-2.5 max-w-lg text-sm text-muted-foreground leading-relaxed">
+                Este veículo ainda não enviou coordenadas GPS para o sistema. O mapa com a rota em tempo real será carregado aqui automaticamente assim que a primeira transmissão for detectada.
+              </p>
+
+              {/* Informational Status Card */}
+              <div className="mt-6 w-full max-w-md rounded-2xl border border-border bg-card/90 p-4 text-left shadow-lg backdrop-blur-sm space-y-3">
+                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <MapPinOff className="size-3.5 text-muted-foreground" />
+                    Sinal GPS do Veículo
+                  </span>
+                  <span className="font-semibold text-amber-400">
+                    Nenhuma coordenada recebida
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Wifi className="size-3.5 text-muted-foreground" />
+                    Canal em Tempo Real
+                  </span>
+                  <span
+                    className={`font-semibold flex items-center gap-1.5 ${
+                      connectionStatus === "connected"
+                        ? "text-emerald-400"
+                        : connectionStatus === "connecting"
+                          ? "text-amber-400"
+                          : "text-red-400"
+                    }`}
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${
+                        connectionStatus === "connected"
+                          ? "bg-emerald-400 animate-pulse"
+                          : connectionStatus === "connecting"
+                            ? "bg-amber-400 animate-spin"
+                            : "bg-red-400"
+                      }`}
+                    />
+                    {connectionStatus === "connected"
+                      ? "Conectado (escutando transmissões)"
+                      : connectionStatus === "connecting"
+                        ? "Conectando..."
+                        : "Desconectado"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
+                  <span className="text-muted-foreground">Veículo Vinculado</span>
+                  <span className="font-semibold text-foreground">
+                    {motorcycleInfo.model} • <span className="font-mono text-muted-foreground">{motorcycleInfo.licensePlate}</span>
+                  </span>
+                </div>
+
+                {telemetry.imei && (
+                  <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
+                    <span className="text-muted-foreground">IMEI do Rastreador</span>
+                    <span className="font-mono text-foreground font-semibold">
+                      {telemetry.imei}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-2.5 pt-1 text-[11px] text-muted-foreground leading-relaxed">
+                  <Info className="size-4 text-primary shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Dica:</strong> Para que o dispositivo sincronize com os satélites, ligue a ignição da moto e certifique-se de que o veículo esteja ao ar livre (fora de subsolos ou garagens fechadas).
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <GoogleMapView
+                position={telemetry.position}
+                heading={currentHeading}
+                history={history}
+              />
+
+              {/* Floating Live Telemetry Cards */}
+              <div className="absolute top-4 left-4 right-4 z-10 grid grid-cols-2 gap-2 sm:grid-cols-4 md:w-auto md:max-w-xl">
+                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Activity className="size-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Velocidade
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
+                    {currentSpeed.toFixed(1)}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">km/h</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
+                  <div className="flex items-center gap-2 text-primary">
+                    <BatteryCharging className="size-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Bateria
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
+                    {currentBattery}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">%</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Radio className="size-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Sinal GPRS
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
+                    {currentSignal}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">/ 5</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Compass className="size-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Direção
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
+                    {currentHeading.toFixed(0)}°
+                  </p>
+                </div>
+              </div>
+
+              {/* Bottom Floating Coordinates Bar */}
+              <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-3 border border-border bg-card/90 p-3 backdrop-blur-md text-xs">
+                <div className="flex items-center gap-2">
+                  <MapPin className="size-4 text-primary" />
+                  <span className="font-mono text-muted-foreground">
+                    Lat: <strong className="text-foreground">{telemetry.position.latitude.toFixed(6)}</strong> | Lng:{" "}
+                    <strong className="text-foreground">{telemetry.position.longitude.toFixed(6)}</strong>
+                  </span>
+                </div>
+                {telemetry.timestamp && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Última atualização:{" "}
+                    <span className="font-semibold text-foreground">
+                      {new Date(telemetry.timestamp).toLocaleTimeString()}
+                    </span>
+                  </span>
+                )}
+              </div>
+            </>
           )}
-
-          <GoogleMapView
-            position={telemetry.position}
-            heading={currentHeading}
-            history={history}
-          />
-
-          {/* Floating Live Telemetry Cards */}
-          <div className="absolute top-4 left-4 right-4 z-10 grid grid-cols-2 gap-2 sm:grid-cols-4 md:w-auto md:max-w-xl">
-            <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-              <div className="flex items-center gap-2 text-primary">
-                <Activity className="size-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Velocidade
-                </span>
-              </div>
-              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                {currentSpeed.toFixed(1)}{" "}
-                <span className="text-xs font-normal text-muted-foreground">km/h</span>
-              </p>
-            </div>
-
-            <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-              <div className="flex items-center gap-2 text-primary">
-                <BatteryCharging className="size-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Bateria
-                </span>
-              </div>
-              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                {currentBattery}{" "}
-                <span className="text-xs font-normal text-muted-foreground">%</span>
-              </p>
-            </div>
-
-            <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-              <div className="flex items-center gap-2 text-primary">
-                <Radio className="size-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Sinal GPRS
-                </span>
-              </div>
-              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                {currentSignal}{" "}
-                <span className="text-xs font-normal text-muted-foreground">/ 5</span>
-              </p>
-            </div>
-
-            <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-              <div className="flex items-center gap-2 text-primary">
-                <Compass className="size-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Direção
-                </span>
-              </div>
-              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                {currentHeading.toFixed(0)}°
-              </p>
-            </div>
-          </div>
-
-          {/* Bottom Floating Coordinates Bar */}
-          <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-3 border border-border bg-card/90 p-3 backdrop-blur-md text-xs">
-            <div className="flex items-center gap-2">
-              <MapPin className="size-4 text-primary" />
-              <span className="font-mono text-muted-foreground">
-                Lat: <strong className="text-foreground">{telemetry.position.latitude.toFixed(6)}</strong> | Lng:{" "}
-                <strong className="text-foreground">{telemetry.position.longitude.toFixed(6)}</strong>
-              </span>
-            </div>
-            {telemetry.timestamp && (
-              <span className="text-[11px] text-muted-foreground">
-                Última atualização:{" "}
-                <span className="font-semibold text-foreground">
-                  {new Date(telemetry.timestamp).toLocaleTimeString()}
-                </span>
-              </span>
-            )}
-          </div>
         </div>
       </div>
     </div>

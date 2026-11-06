@@ -54,6 +54,7 @@ export default function AdminCustomersPage() {
   const [formPassword, setFormPassword] = useState("");
   const [formTenantId, setFormTenantId] = useState("");
   const [formManagerId, setFormManagerId] = useState("");
+  const [formVehicleLimit, setFormVehicleLimit] = useState(1);
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [phoneTouched, setPhoneTouched] = useState(false);
@@ -63,6 +64,12 @@ export default function AdminCustomersPage() {
   const [selectedManagerId, setSelectedManagerId] = useState("");
   const [savingAssign, setSavingAssign] = useState(false);
   const [assignError, setAssignError] = useState("");
+
+  // Adjust Vehicle Limit Modal State (Manager & Master Admin)
+  const [adjustingCustomer, setAdjustingCustomer] = useState<Customer | null>(null);
+  const [adjustedVehicleLimit, setAdjustedVehicleLimit] = useState(1);
+  const [savingLimit, setSavingLimit] = useState(false);
+  const [limitError, setLimitError] = useState("");
 
   const phoneValidation = useMemo(() => validatePhone(formPhone), [formPhone]);
 
@@ -79,6 +86,7 @@ export default function AdminCustomersPage() {
     setPhoneTouched(false);
     setFormTenantId("");
     setFormManagerId("");
+    setFormVehicleLimit(1);
   };
 
   const handleOpenAssignModal = (cust: Customer) => {
@@ -141,6 +149,63 @@ export default function AdminCustomersPage() {
       setAssignError(err instanceof Error ? err.message : "Erro desconhecido ao salvar vinculação.");
     } finally {
       setSavingAssign(false);
+    }
+  };
+
+  const handleOpenLimitModal = (cust: Customer) => {
+    setAdjustingCustomer(cust);
+    setAdjustedVehicleLimit(cust.vehicle_limit || 1);
+    setLimitError("");
+  };
+
+  const handleCloseLimitModal = () => {
+    setAdjustingCustomer(null);
+    setAdjustedVehicleLimit(1);
+    setLimitError("");
+  };
+
+  const handleSaveLimit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!adjustingCustomer) return;
+
+    setSavingLimit(true);
+    setLimitError("");
+
+    try {
+      const res = await fetch(`/api/admin/customers/${adjustingCustomer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicle_limit: Number(adjustedVehicleLimit),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error?.message || "Falha ao ajustar limite de veículos.");
+      }
+
+      const updatedLimit = data.vehicle_limit || Number(adjustedVehicleLimit);
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === adjustingCustomer.id
+            ? {
+                ...c,
+                vehicle_limit: updatedLimit,
+              }
+            : c,
+        ),
+      );
+
+      setSuccessMessage(
+        `Limite de veículos do cliente "${adjustingCustomer.name}" atualizado para ${updatedLimit} com sucesso!`,
+      );
+      setTimeout(() => setSuccessMessage(""), 5000);
+      handleCloseLimitModal();
+    } catch (err) {
+      setLimitError(err instanceof Error ? err.message : "Erro ao salvar limite de veículos.");
+    } finally {
+      setSavingLimit(false);
     }
   };
 
@@ -240,6 +305,7 @@ export default function AdminCustomersPage() {
         phone: formPhone.trim(),
         date_of_birth: formDob,
         password: formPassword || undefined,
+        vehicle_limit: Number(formVehicleLimit) || 1,
       };
 
       if (currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role) && formTenantId) {
@@ -521,19 +587,22 @@ export default function AdminCustomersPage() {
                         </div>
                       </div>
 
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                          cust.motorcycle_count > 0
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                            : "bg-secondary text-muted-foreground border border-border"
-                        }`}
-                      >
-                        {cust.motorcycle_count === 1
-                          ? "1 Moto"
-                          : cust.motorcycle_count > 1
-                            ? `${cust.motorcycle_count} Motos`
-                            : "Sem Moto"}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                            cust.motorcycle_count > 0
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                              : "bg-secondary text-muted-foreground border border-border"
+                          }`}
+                        >
+                          {cust.motorcycle_count} / {cust.vehicle_limit || 1} {(cust.vehicle_limit || 1) === 1 ? "Moto" : "Motos"}
+                        </span>
+                        {cust.motorcycle_count >= (cust.vehicle_limit || 1) && (
+                          <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[8px] font-extrabold uppercase text-amber-400">
+                            Limite Atingido
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Tenant & Manager Badges */}
@@ -556,6 +625,16 @@ export default function AdminCustomersPage() {
                           Sem Gestor
                         </span>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLimitModal(cust)}
+                        className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[10px] font-bold text-foreground border border-border hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
+                        title="Determinar limite de veículos deste cliente"
+                      >
+                        <Bike className="size-3 text-primary shrink-0" />
+                        <span>Limite: {cust.vehicle_limit || 1}</span>
+                      </button>
 
                       {currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role) && (
                         <button
@@ -848,6 +927,25 @@ export default function AdminCustomersPage() {
                   </div>
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Bike className="size-3.5 text-primary" />
+                    Limite de Veículos Permitidos (Cota do Cliente) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    required
+                    value={formVehicleLimit}
+                    onChange={(e) => setFormVehicleLimit(Math.max(1, Number(e.target.value)))}
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Define quantos veículos o cliente pode cadastrar simultaneamente nesta organização (1 por padrão).
+                  </p>
+                </div>
+
                 <div className="mt-6 flex items-center justify-end gap-3 border-t border-border/80 pt-4">
                   <button
                     type="button"
@@ -970,6 +1068,102 @@ export default function AdminCustomersPage() {
                       </>
                     ) : (
                       <span>Confirmar Vinculação</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Ajustar Limite de Veículos do Cliente (Managers & Admin Master) */}
+        {adjustingCustomer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-md rounded-3xl border border-border/80 bg-card p-6 shadow-2xl animate-in zoom-in-95 duration-200 space-y-6 sm:p-8">
+              <div className="flex items-center justify-between border-b border-border/60 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+                    <Bike className="size-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black uppercase tracking-tight text-foreground">
+                      Ajustar Limite de Veículos
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Cliente: <b className="text-foreground">{adjustingCustomer.name}</b>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseLimitModal}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              {limitError && (
+                <div className="flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <p>{limitError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveLimit} className="space-y-4">
+                <div className="rounded-xl border border-border/70 bg-secondary/30 p-3.5 space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Veículos Cadastrados:</span>
+                    <span className="font-bold text-foreground font-mono">{adjustingCustomer.motorcycle_count || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Limite Atual:</span>
+                    <span className="font-bold text-primary font-mono">{adjustingCustomer.vehicle_limit || 1} veículo(s)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Organização:</span>
+                    <span className="font-semibold text-foreground">{adjustingCustomer.tenant_name || "Sem organização"}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Novo Limite de Veículos *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    required
+                    value={adjustedVehicleLimit}
+                    onChange={(e) => setAdjustedVehicleLimit(Math.max(1, Number(e.target.value)))}
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-bold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Ao atingir este limite, o cliente será impedido de cadastrar novos veículos na plataforma até que a cota seja reajustada.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-border/60">
+                  <button
+                    type="button"
+                    onClick={handleCloseLimitModal}
+                    className="rounded-xl border border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary/60 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingLimit}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-black uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                  >
+                    {savingLimit ? (
+                      <>
+                        <RefreshCw className="size-3.5 animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <span>Salvar Limite</span>
                     )}
                   </button>
                 </div>

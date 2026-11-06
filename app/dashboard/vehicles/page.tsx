@@ -74,6 +74,7 @@ export default function VehiclesPage() {
   const [adminPage, setAdminPage] = useState(1);
   const [showAddForm, setShowAddForm] = useState(false);
   const [reloadTrigger, setReloadTrigger] = useState(0);
+  const [vehicleLimit, setVehicleLimit] = useState(1);
 
   // Filtro de busca (Admin ou multi-veículos)
   const [searchQuery, setSearchQuery] = useState("");
@@ -138,6 +139,8 @@ export default function VehiclesPage() {
           pendingRider?: PendingRider | null;
           riderProfile?: RegisteredRider | null;
           role?: string;
+          vehicleLimit?: number;
+          hasReachedLimit?: boolean;
         };
 
         if (!active) return;
@@ -145,6 +148,9 @@ export default function VehiclesPage() {
         const motos = Array.isArray(data.motorcycles) ? data.motorcycles : [];
         setMotorcycles(motos);
         setPendingRider(data.pendingRider ?? null);
+        if (typeof data.vehicleLimit === "number" && data.vehicleLimit > 0) {
+          setVehicleLimit(data.vehicleLimit);
+        }
 
         // Identifica perfil de piloto existente a partir do backend, motos anteriores ou storage
         let foundProfile = data.riderProfile ?? null;
@@ -234,6 +240,12 @@ export default function VehiclesPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
+    if (hasReachedLimit) {
+      setError(`Limite de ${vehicleLimit} veículo(s) atingido. Sua conta de cliente atingiu a cota máxima permitida. Contate o gestor da sua empresa parceira para solicitar aumento de limite.`);
+      return;
+    }
+
     setPending(true);
 
     const formData = new FormData(event.currentTarget);
@@ -339,8 +351,40 @@ export default function VehiclesPage() {
     }
   }
 
-  // Regra de Negócio: Usuário padrão não pode cadastrar mais de 1 veículo
-  const hasReachedSingleVehicleLimit = !isAdmin && motorcycles.length >= 1;
+  // Desvincular equipamento (exclusivo para perfil administrativo)
+  const handleUnlinkDevice = async (v: VehicleCardData) => {
+    if (!isAdmin) return;
+    const deviceId = v.device?.id;
+    if (!deviceId) return;
+
+    const label = v.license_plate
+      ? `da moto ${v.license_plate}`
+      : v.model
+        ? `do veículo ${v.model}`
+        : "do veículo";
+    if (!window.confirm(`Deseja realmente desvincular o equipamento ${label}?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/devices/${deviceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unlink: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || "Falha ao desvincular o equipamento.");
+      }
+      setReloadTrigger((prev) => prev + 1);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao desvincular equipamento.");
+    }
+  };
+
+  // Regra de Negócio: Cliente comum atingiu a cota de veículos permitida pelo tenant/manager
+  const hasReachedLimit = !isAdmin && motorcycles.length >= vehicleLimit;
+  const hasReachedSingleVehicleLimit = hasReachedLimit;
 
   // Filtragem e Paginação para Admin
   const filteredMotorcycles = motorcycles.filter((moto) => {
@@ -378,31 +422,31 @@ export default function VehiclesPage() {
         {/* ========================================================================= */}
         <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
           {/* Ambient Cyber Grid & Glow Accents */}
-        {isFleetUser && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 shrink-0">
-                <Bike className="size-5" />
+          {isFleetUser && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 shrink-0">
+                  <Bike className="size-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                    {isMaster ? "Visão Global da Frota (Admin)" : "Painel Avançado de Frota (Gestor)"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {isMaster
+                      ? "Para vincular dispositivos (IMEI), telemetria em tempo real e controle de condutores de todos os parceiros, use a central de Frota."
+                      : "Você pode vincular rastreadores, gerenciar condutores e acompanhar a telemetria detalhada de todos os veículos da sua empresa no painel de Frota."}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-foreground">
-                  {isMaster ? "Visão Global da Frota (Admin)" : "Painel Avançado de Frota (Gestor)"}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {isMaster
-                    ? "Para vincular dispositivos (IMEI), telemetria em tempo real e controle de condutores de todos os parceiros, use a central de Frota."
-                    : "Você pode vincular rastreadores, gerenciar condutores e acompanhar a telemetria detalhada de todos os veículos da sua empresa no painel de Frota."}
-                </p>
-              </div>
+              <Link
+                href="/admin/vehicles"
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
+              >
+                Ir para Controle de Frota
+              </Link>
             </div>
-            <Link
-              href="/admin/vehicles"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
-            >
-              Ir para Controle de Frota
-            </Link>
-          </div>
-        )}
+          )}
           <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
 
@@ -467,9 +511,8 @@ export default function VehiclesPage() {
                 const trackedCount = motorcycles.filter((m) => Boolean(m.device)).length;
                 return (
                   <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                    <div className={`flex size-9 items-center justify-center rounded-xl ${
-                      trackedCount > 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
-                    }`}>
+                    <div className={`flex size-9 items-center justify-center rounded-xl ${trackedCount > 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
+                      }`}>
                       <Radio className={`size-4.5 ${trackedCount > 0 ? "animate-pulse" : ""}`} />
                     </div>
                     <div>
@@ -494,18 +537,16 @@ export default function VehiclesPage() {
                 const hasDeviceWithoutPosition = motorcycles.some((m) => Boolean(m.device) && !m.has_position && !m.last_position);
                 return (
                   <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                    <div className={`flex size-9 items-center justify-center rounded-xl ${
-                      liveCount > 0 ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"
-                    }`}>
+                    <div className={`flex size-9 items-center justify-center rounded-xl ${liveCount > 0 ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"
+                      }`}>
                       <Activity className="size-4.5" />
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                         Telemetria
                       </p>
-                      <p className={`text-base font-black ${
-                        liveCount > 0 ? "text-blue-400" : hasDeviceWithoutPosition ? "text-amber-400" : "text-muted-foreground"
-                      }`}>
+                      <p className={`text-base font-black ${liveCount > 0 ? "text-blue-400" : hasDeviceWithoutPosition ? "text-amber-400" : "text-muted-foreground"
+                        }`}>
                         {view === "loading"
                           ? "..."
                           : liveCount > 0
@@ -604,8 +645,8 @@ export default function VehiclesPage() {
                     {isAdmin
                       ? "Veículos Cadastrados na Frota"
                       : motorcycles.some((m) => m.device)
-                      ? "Sua Motocicleta Conectada"
-                      : "Sua Motocicleta Cadastrada"}
+                        ? "Sua Motocicleta Conectada"
+                        : "Sua Motocicleta Cadastrada"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
                     {(() => {
@@ -662,6 +703,7 @@ export default function VehiclesPage() {
                     vehicle={moto}
                     isAdmin={isAdmin}
                     onOpenTelemetry={(m) => setSelectedTelemetryMoto(m)}
+                    onUnlinkDevice={isAdmin ? handleUnlinkDevice : undefined}
                   />
                 ))}
               </div>
@@ -716,7 +758,7 @@ export default function VehiclesPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* SEÇÃO 2: BANNER DE PROTEÇÃO ATIVA (LIMITE 1 VEÍCULO PARA RIDER)           */}
+        {/* SEÇÃO 2: BANNER DE PROTEÇÃO ATIVA (LIMITE DE VEÍCULOS PARA CLIENTE)       */}
         {/* ========================================================================= */}
         {hasReachedSingleVehicleLimit && view !== "loading" && (
           <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-r from-card via-card/90 to-emerald-950/20 p-6 shadow-xl backdrop-blur-xl sm:p-8">
@@ -735,15 +777,16 @@ export default function VehiclesPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                      Proteção RideOn Ativa • Limite de 1 Veículo Atingido
+                      Proteção RideOn Ativa • Limite de {vehicleLimit} {vehicleLimit === 1 ? "Veículo" : "Veículos"} Atingido
                     </span>
                   </div>
                   <h3 className="text-xl font-black uppercase tracking-tight text-foreground sm:text-2xl">
-                    Sua moto está monitorada e segura
+                    {motorcycles.length === 1 ? "Sua moto está monitorada e segura" : "Seus veículos estão monitorados e seguros"}
                   </h3>
                   <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                    Usuários padrão possuem direito a 1 motocicleta conectada simultaneamente.
-                    Seu veículo já está vinculado à central de telemetria com rastreamento GPS e alerta antifurto.
+                    {vehicleLimit === 1
+                      ? "Clientes possuem direito a 1 motocicleta conectada simultaneamente por padrão. Seu veículo já está vinculado à central de telemetria com rastreamento GPS e alerta antifurto."
+                      : `Sua conta possui direito a ${vehicleLimit} veículos cadastrados simultaneamente (${motorcycles.length} de ${vehicleLimit} em uso). Para cadastrar veículos adicionais, solicite o aumento do limite ao gestor da sua organização.`}
                   </p>
                 </div>
               </div>
@@ -757,14 +800,24 @@ export default function VehiclesPage() {
                   <span>Acessar Painel de Telemetria</span>
                   <ChevronRight className="size-4" />
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary px-4 py-3 text-xs font-black uppercase tracking-wider text-foreground transition-all duration-200 hover:border-primary hover:text-primary cursor-pointer"
-                >
-                  <Plus className="size-4" />
-                  <span>Cadastrar Outro Veículo</span>
-                </button>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForm(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary px-4 py-3 text-xs font-black uppercase tracking-wider text-foreground transition-all duration-200 hover:border-primary hover:text-primary cursor-pointer"
+                  >
+                    <Plus className="size-4" />
+                    <span>Cadastrar Outro Veículo</span>
+                  </button>
+                ) : (
+                  <div
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-bold uppercase tracking-wider text-amber-400"
+                    title={`Limite de ${vehicleLimit} veículo(s) atingido`}
+                  >
+                    <Lock className="size-4" />
+                    <span>Limite Atingido ({motorcycles.length}/{vehicleLimit})</span>
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -873,7 +926,7 @@ export default function VehiclesPage() {
         {/* ========================================================================= */}
         {/* SEÇÃO 5: FORMULÁRIO DE CADASTRO COM PREVIEW DE PLACA EM TEMPO REAL        */}
         {/* ========================================================================= */}
-        {((motorcycles.length === 0 && (view === "new" || view === "pending-form")) || showAddForm) && (
+        {((motorcycles.length === 0 && (view === "new" || view === "pending-form")) || (showAddForm && (!hasReachedLimit || isAdmin))) && (
           <div id="vehicle-form-section" className="space-y-6">
             {motorcycles.length > 0 && (
               <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-secondary/40 px-5 py-3.5 backdrop-blur-sm">
@@ -987,8 +1040,8 @@ export default function VehiclesPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`flex size-10 items-center justify-center rounded-xl transition-all duration-300 ${useRegisteredRider
-                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10"
-                              : "bg-primary/10 text-primary border border-primary/20"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                            : "bg-primary/10 text-primary border border-primary/20"
                             }`}
                         >
                           {useRegisteredRider ? (
@@ -1025,8 +1078,8 @@ export default function VehiclesPage() {
                           type="button"
                           onClick={handleToggleRegisteredRider}
                           className={`group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md ${useRegisteredRider
-                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
-                              : "bg-primary text-white shadow-primary/25 hover:bg-primary/90 hover:scale-[1.02]"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
+                            : "bg-primary text-white shadow-primary/25 hover:bg-primary/90 hover:scale-[1.02]"
                             }`}
                           title={
                             useRegisteredRider
@@ -1067,15 +1120,15 @@ export default function VehiclesPage() {
                         <div
                           onClick={handleToggleRegisteredRider}
                           className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border p-4 transition-all duration-200 cursor-pointer ${useRegisteredRider
-                              ? "border-emerald-500/40 bg-emerald-950/20 shadow-lg shadow-emerald-500/5"
-                              : "border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
+                            ? "border-emerald-500/40 bg-emerald-950/20 shadow-lg shadow-emerald-500/5"
+                            : "border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
                             }`}
                         >
                           <div className="flex items-center gap-3">
                             <div
                               className={`flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors ${useRegisteredRider
-                                  ? "bg-emerald-500 text-white shadow-sm"
-                                  : "border-2 border-muted-foreground/50 bg-background"
+                                ? "bg-emerald-500 text-white shadow-sm"
+                                : "border-2 border-muted-foreground/50 bg-background"
                                 }`}
                             >
                               {useRegisteredRider && <Lock className="size-3.5" />}
@@ -1225,7 +1278,7 @@ export default function VehiclesPage() {
         )}
 
         {/* Botão para abrir formulário caso já tenha veículos e form esteja recolhido */}
-        {!showAddForm && motorcycles.length > 0 && view !== "success" && (
+        {!showAddForm && motorcycles.length > 0 && view !== "success" && (!hasReachedLimit || isAdmin) && (
           <div className="pt-2">
             <button
               type="button"
@@ -1306,10 +1359,10 @@ function FormField({
       </span>
       <span
         className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-all duration-200 ${isLocked
-            ? "border-emerald-500/40 bg-secondary/90 shadow-inner ring-1 ring-emerald-500/20"
-            : disabled || readOnly
-              ? "cursor-not-allowed opacity-75 bg-secondary/50 border-border/40"
-              : "border-border/80 bg-secondary/80 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
+          ? "border-emerald-500/40 bg-secondary/90 shadow-inner ring-1 ring-emerald-500/20"
+          : disabled || readOnly
+            ? "cursor-not-allowed opacity-75 bg-secondary/50 border-border/40"
+            : "border-border/80 bg-secondary/80 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
           }`}
       >
         <Icon className={`size-4 shrink-0 ${isLocked ? "text-emerald-400" : "text-muted-foreground"}`} />

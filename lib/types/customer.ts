@@ -33,6 +33,7 @@ export type Customer = {
   phone: string;
   date_of_birth: string;
   status: string;
+  vehicle_limit?: number;
   motorcycle_count: number;
   motorcycles: CustomerMotorcycle[];
   created_at: string;

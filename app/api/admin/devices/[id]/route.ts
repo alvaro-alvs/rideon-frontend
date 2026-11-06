@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { getApiUrl, SESSION_COOKIE } from "@/lib/auth";
+import {
+  getApiUrl,
+  isPlatformOrTenantAdmin,
+  resolveUserRole,
+  SESSION_COOKIE,
+} from "@/lib/auth";
 
 /**
  * PATCH /api/admin/devices/[id]
@@ -25,6 +30,14 @@ export async function PATCH(
     return NextResponse.json(
       { message: "Sua sessão expirou ou não está autenticada." },
       { status: 401 },
+    );
+  }
+
+  const role = await resolveUserRole(request, token);
+  if (!isPlatformOrTenantAdmin(role)) {
+    return NextResponse.json(
+      { message: "Acesso negado: clientes e usuários não administradores não podem alterar ou desvincular equipamentos." },
+      { status: 403 },
     );
   }
 
@@ -144,6 +157,14 @@ export async function GET(
     return NextResponse.json(
       { message: "Sua sessão expirou ou não está autenticada." },
       { status: 401 },
+    );
+  }
+
+  const role = await resolveUserRole(request, token);
+  if (!isPlatformOrTenantAdmin(role)) {
+    return NextResponse.json(
+      { message: "Acesso negado: clientes e usuários não administradores não podem alterar ou desvincular equipamentos." },
+      { status: 403 },
     );
   }
 

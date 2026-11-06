@@ -2,27 +2,65 @@
 
 import { useEffect, useRef } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
+import { isValidCoordinate } from "@/lib/geo";
 
-interface GoogleMapViewProps {
+export interface GoogleMapViewProps {
   position: {
     latitude: number;
     longitude: number;
   };
   heading?: number;
   history?: Array<{ latitude: number; longitude: number }>;
+  zoom?: number;
+  interactive?: boolean;
+  markerType?: "arrow" | "pin";
+  showCircle?: boolean;
+  className?: string;
 }
+
+const PIN_SVG_PATH =
+  "M 12 2 C 7.58 2 4 5.58 4 10 c 0 5.25 8 13 8 13 s 8 -7.75 8 -13 c 0 -4.42 -3.58 -8 -8 -8 z M 12 13 c -1.66 0 -3 -1.34 -3 -3 s 1.34 -3 3 -3 s 3 1.34 3 3 s -1.34 3 -3 3 z";
 
 export function GoogleMapView({
   position,
   heading = 0,
   history = [],
+  zoom,
+  interactive = true,
+  markerType = "arrow",
+  showCircle = false,
+  className,
 }: GoogleMapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapInstance = useRef<google.maps.Map | null>(null);
   const markerInstance = useRef<google.maps.Marker | null>(null);
+  const circleInstance = useRef<google.maps.Circle | null>(null);
   const polylineInstance = useRef<google.maps.Polyline | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  const getMarkerIcon = (type: "arrow" | "pin", angle: number): google.maps.Symbol => {
+    if (type === "pin") {
+      return {
+        path: PIN_SVG_PATH,
+        scale: 1.8,
+        anchor: new google.maps.Point(12, 23),
+        fillColor: "#ef251b",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
+      };
+    }
+    return {
+      path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+      scale: 6,
+      fillColor: "#ef251b",
+      fillOpacity: 1,
+      strokeColor: "#ffffff",
+      strokeWeight: 2,
+      rotation: angle,
+    };
+  };
 
   useEffect(() => {
     if (!apiKey || !mapRef.current) return;
@@ -32,38 +70,59 @@ export function GoogleMapView({
       v: "weekly",
     });
 
+    let isMounted = true;
+
     importLibrary("maps")
       .then(() => {
-        if (!mapRef.current) return;
+        if (!mapRef.current || !isMounted) return;
+
+        const hasValidInitial = isValidCoordinate(position.latitude, position.longitude);
+        const center = hasValidInitial
+          ? { lat: position.latitude, lng: position.longitude }
+          : { lat: -23.5505, lng: -46.6333 }; // Default neutro (São Paulo)
 
         const map = new google.maps.Map(mapRef.current, {
-          center: { lat: position.latitude, lng: position.longitude },
-          zoom: 16,
+          center,
+          zoom: zoom ?? (hasValidInitial ? 16 : 10),
           styles: darkMapStyle,
-          disableDefaultUI: false,
-          zoomControl: true,
+          disableDefaultUI: !interactive,
+          gestureHandling: interactive ? "auto" : "none",
+          keyboardShortcuts: interactive,
+          zoomControl: interactive,
           mapTypeControl: false,
           streetViewControl: false,
+          fullscreenControl: false,
+          clickableIcons: false,
         });
 
-        const marker = new google.maps.Marker({
-          position: { lat: position.latitude, lng: position.longitude },
-          map,
-          title: "Moto em tempo real",
-          icon: {
-            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 6,
-            fillColor: "#ef251b",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-            rotation: heading,
-          },
-        });
+        const marker = hasValidInitial
+          ? new google.maps.Marker({
+              position: center,
+              map,
+              title: markerType === "pin" ? "Última posição do veículo" : "Moto em tempo real",
+              icon: getMarkerIcon(markerType, heading),
+            })
+          : null;
+
+        const circle =
+          showCircle && hasValidInitial
+            ? new google.maps.Circle({
+                map,
+                center,
+                radius: 40,
+                fillColor: "#ef251b",
+                fillOpacity: 0.22,
+                strokeColor: "#ef251b",
+                strokeOpacity: 0.7,
+                strokeWeight: 1.5,
+              })
+            : null;
 
         const polyline = new google.maps.Polyline({
           map,
-          path: history.map((p) => ({ lat: p.latitude, lng: p.longitude })),
+          path: history
+            .filter((p) => isValidCoordinate(p.latitude, p.longitude))
+            .map((p) => ({ lat: p.latitude, lng: p.longitude })),
           geodesic: true,
           strokeColor: "#ef251b",
           strokeOpacity: 0.8,
@@ -72,39 +131,92 @@ export function GoogleMapView({
 
         googleMapInstance.current = map;
         markerInstance.current = marker;
+        circleInstance.current = circle;
         polylineInstance.current = polyline;
       })
       .catch((err: unknown) => {
         console.error("Erro ao carregar Google Maps API:", err);
       });
-  }, [apiKey]);
 
-  // Atualizar o marcador e pan no mapa quando a posição mudar
+    return () => {
+      isMounted = false;
+      if (markerInstance.current) {
+        markerInstance.current.setMap(null);
+        markerInstance.current = null;
+      }
+      if (circleInstance.current) {
+        circleInstance.current.setMap(null);
+        circleInstance.current = null;
+      }
+      if (polylineInstance.current) {
+        polylineInstance.current.setMap(null);
+        polylineInstance.current = null;
+      }
+      googleMapInstance.current = null;
+    };
+  }, [apiKey, interactive, markerType, showCircle, zoom]);
+
+  // Atualizar o marcador, círculo e pan no mapa quando a posição mudar
   useEffect(() => {
-    if (!googleMapInstance.current || !markerInstance.current) return;
+    if (!googleMapInstance.current) return;
+
+    const hasValidPos = isValidCoordinate(position.latitude, position.longitude);
+    if (!hasValidPos) return;
 
     const latLng = { lat: position.latitude, lng: position.longitude };
-    markerInstance.current.setPosition(latLng);
 
-    // Atualizar rotação
-    const icon = markerInstance.current.getIcon() as google.maps.Symbol | null;
-    if (icon && typeof icon === "object") {
-      markerInstance.current.setIcon({
-        ...icon,
-        rotation: heading,
+    if (!markerInstance.current) {
+      markerInstance.current = new google.maps.Marker({
+        position: latLng,
+        map: googleMapInstance.current,
+        title: markerType === "pin" ? "Última posição do veículo" : "Moto em tempo real",
+        icon: getMarkerIcon(markerType, heading),
       });
+      googleMapInstance.current.setZoom(zoom ?? 16);
+    } else {
+      markerInstance.current.setPosition(latLng);
+      markerInstance.current.setIcon(getMarkerIcon(markerType, heading));
+    }
+
+    if (showCircle) {
+      if (!circleInstance.current) {
+        circleInstance.current = new google.maps.Circle({
+          map: googleMapInstance.current,
+          center: latLng,
+          radius: 40,
+          fillColor: "#ef251b",
+          fillOpacity: 0.22,
+          strokeColor: "#ef251b",
+          strokeOpacity: 0.7,
+          strokeWeight: 1.5,
+        });
+      } else {
+        circleInstance.current.setCenter(latLng);
+      }
+    } else if (circleInstance.current) {
+      circleInstance.current.setMap(null);
+      circleInstance.current = null;
     }
 
     googleMapInstance.current.panTo(latLng);
 
     if (polylineInstance.current && history.length > 0) {
       polylineInstance.current.setPath(
-        history.map((p) => ({ lat: p.latitude, lng: p.longitude })),
+        history
+          .filter((p) => isValidCoordinate(p.latitude, p.longitude))
+          .map((p) => ({ lat: p.latitude, lng: p.longitude })),
       );
     }
-  }, [position.latitude, position.longitude, heading, history]);
+  }, [position.latitude, position.longitude, heading, history, markerType, showCircle, zoom]);
 
   if (!apiKey) {
+    if (!interactive) {
+      return (
+        <div className="relative flex h-full w-full items-center justify-center bg-card">
+          <div className="mini-map absolute inset-0 opacity-40" />
+        </div>
+      );
+    }
     // Renderização visual de fallback responsiva caso a chave não esteja configurada
     return (
       <div className="relative flex h-full w-full flex-col items-center justify-center bg-card p-6 text-center">
@@ -134,7 +246,7 @@ export function GoogleMapView({
     );
   }
 
-  return <div ref={mapRef} className="h-full w-full" />;
+  return <div ref={mapRef} className={className ?? "h-full w-full"} />;
 }
 
 // Estilo Dark personalizado para o Google Maps

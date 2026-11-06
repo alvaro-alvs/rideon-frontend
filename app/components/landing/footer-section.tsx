@@ -69,7 +69,9 @@ export function FooterSection() {
                 <span className="text-muted-foreground">Central de Atendimento 24h</span>
               </li>
               <li>
-                <span className="text-muted-foreground">Protocolos de Emergência</span>
+                <a href="mailto:contato@rideonbrasil.com" className="hover:text-primary transition-colors">
+                  contato@rideonbrasil.com
+                </a>
               </li>
             </ul>
           </div>
@@ -81,9 +83,13 @@ export function FooterSection() {
             © {new Date().getFullYear()} RideOn. Todos os direitos reservados.
           </p>
           <div className="flex items-center gap-6 text-xs text-muted-foreground">
-            <span className="hover:text-foreground cursor-pointer transition-colors">Termos de Uso</span>
+            <Link href="/termos" className="hover:text-foreground transition-colors">
+              Termos de Uso
+            </Link>
             <span>•</span>
-            <span className="hover:text-foreground cursor-pointer transition-colors">Privacidade</span>
+            <Link href="/privacidade" className="hover:text-foreground transition-colors">
+              Privacidade & LGPD
+            </Link>
           </div>
         </div>
       </div>

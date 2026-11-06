@@ -71,6 +71,7 @@ export default function OrganizationsAdminPage() {
   // Modal: Quotas & Feature Flags
   const [settingsModalTenant, setSettingsModalTenant] = useState<TenantItem | null>(null);
   const [deviceLimit, setDeviceLimit] = useState(50);
+  const [customerVehicleLimit, setCustomerVehicleLimit] = useState(1);
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function OrganizationsAdminPage() {
   const [newTaxID, setNewTaxID] = useState("");
   const [newPrimaryColor, setNewPrimaryColor] = useState("#EF251B");
   const [newDeviceLimit, setNewDeviceLimit] = useState(100);
+  const [newCustomerVehicleLimit, setNewCustomerVehicleLimit] = useState(1);
   const [createModalError, setCreateModalError] = useState<string | null>(null);
   const [taxIDTouched, setTaxIDTouched] = useState(false);
 
@@ -253,6 +255,7 @@ export default function OrganizationsAdminPage() {
   const openSettingsModal = (tenant: TenantItem) => {
     setSettingsModalTenant(tenant);
     setDeviceLimit(tenant.settings?.device_limit || 50);
+    setCustomerVehicleLimit(tenant.settings?.customer_vehicle_limit || 1);
     setEnabledModules(tenant.settings?.enabled_modules || ["telemetry", "tracking"]);
     setSettingsError(null);
   };
@@ -282,6 +285,7 @@ export default function OrganizationsAdminPage() {
         body: JSON.stringify({
           enabled_modules: enabledModules,
           device_limit: Number(deviceLimit),
+          customer_vehicle_limit: Number(customerVehicleLimit) || 1,
         }),
       });
 
@@ -339,6 +343,7 @@ export default function OrganizationsAdminPage() {
             custom_domains: [`app.${newSlug.trim().toLowerCase()}.com.br`],
             enabled_modules: ["telemetry", "tracking", "devices", "motorcycles", "riders"],
             device_limit: Number(newDeviceLimit) || 100,
+            customer_vehicle_limit: Number(newCustomerVehicleLimit) || 1,
           },
         }),
       });
@@ -607,6 +612,17 @@ export default function OrganizationsAdminPage() {
                           style={{ width: `${Math.min(usagePercent, 100)}%` }}
                         />
                       </div>
+                    </div>
+
+                    {/* Limite por Cliente */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs">
+                      <span className="text-[11px] font-bold uppercase text-muted-foreground flex items-center gap-1.5">
+                        <Bike className="size-3.5 text-primary" />
+                        Limite por Cliente
+                      </span>
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {t.settings?.customer_vehicle_limit || 1} {(t.settings?.customer_vehicle_limit || 1) === 1 ? "veículo" : "veículos"}
+                      </span>
                     </div>
 
                     {/* Módulos Badge Preview */}
@@ -1036,6 +1052,33 @@ export default function OrganizationsAdminPage() {
                   </div>
                 </div>
 
+                {/* Limite Padrão de Veículos por Cliente */}
+                <div className="space-y-2 rounded-2xl border border-border/80 bg-secondary/30 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bike className="size-4 text-primary" />
+                      <label className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        Limite Padrão de Veículos por Cliente
+                      </label>
+                    </div>
+                    <span className="text-xs font-mono text-muted-foreground">Padrão: 1</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Define o limite máximo de veículos que cada cliente desta organização pode cadastrar (1 por padrão).
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={customerVehicleLimit}
+                      onChange={(e) => setCustomerVehicleLimit(Math.max(1, Number(e.target.value)))}
+                      className="w-32 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-bold text-foreground focus:border-primary focus:outline-none"
+                    />
+                    <span className="text-xs text-muted-foreground">veículo(s) por cliente</span>
+                  </div>
+                </div>
+
                 {/* Módulos Habilitados */}
                 <div className="space-y-3">
                   <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -1335,6 +1378,18 @@ export default function OrganizationsAdminPage() {
                       min="1"
                       value={newDeviceLimit}
                       onChange={(e) => setNewDeviceLimit(Number(e.target.value))}
+                      className="w-full rounded-xl border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
+                      Limite por Cliente (Motos)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newCustomerVehicleLimit}
+                      onChange={(e) => setNewCustomerVehicleLimit(Math.max(1, Number(e.target.value)))}
                       className="w-full rounded-xl border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
                     />
                   </div>

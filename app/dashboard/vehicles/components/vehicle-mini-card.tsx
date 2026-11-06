@@ -14,6 +14,7 @@ import {
   Radio,
   RadioOff,
   ShieldCheck,
+  Unlink,
   X,
 } from "lucide-react";
 import { VehiclePlatePreview } from "./vehicle-plate-preview";
@@ -54,10 +55,12 @@ export function VehicleMiniCard({
   vehicle,
   isAdmin = false,
   onOpenTelemetry,
+  onUnlinkDevice,
 }: {
   vehicle: VehicleCardData;
   isAdmin?: boolean;
   onOpenTelemetry?: (vehicle: VehicleCardData) => void;
+  onUnlinkDevice?: (vehicle: VehicleCardData) => void;
 }) {
   const modelText =
     `${vehicle.brand ?? ""} ${vehicle.model ?? ""}`.trim() || "Motocicleta";
@@ -155,10 +158,6 @@ export function VehicleMiniCard({
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
-
-  const deviceProtocolName = vehicle.device?.protocol
-    ? `${vehicle.device.protocol.toUpperCase()} GPS`
-    : "Rastreador GPS";
 
   const maskedSerial = vehicle.device?.serial_number
     ? vehicle.device.serial_number.length > 8
@@ -288,37 +287,57 @@ export function VehicleMiniCard({
 
           {/* Equipment Status & Hardware Information Box */}
           {hasDevice ? (
-            <div className="mt-3.5 flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-secondary/40 px-3 py-2 text-xs backdrop-blur-sm">
-              <div className="flex items-center gap-2 min-w-0">
-                <Cpu className="size-3.5 text-primary shrink-0" />
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-semibold text-foreground">
-                    {deviceProtocolName}
-                  </p>
-                  {maskedSerial && (
-                    <p className="text-[10px] font-mono text-muted-foreground truncate">
-                      Serial: {maskedSerial}
+            <div className="mt-3.5 flex flex-col gap-2 rounded-xl border border-border/70 bg-secondary/40 p-3 text-xs backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Cpu className="size-3.5 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-semibold text-foreground">
+                      Rastreador GPS
+                    </p>
+                    {maskedSerial && (
+                      <p className="text-[10px] font-mono text-muted-foreground truncate">
+                        Serial: {maskedSerial}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider ${
+                      hasReportedPosition
+                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                        : "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                    }`}
+                  >
+                    {hasReportedPosition ? "Posição Ativa" : "Sem Sinal GPS"}
+                  </span>
+                  {lastPositionData?.speed !== undefined && hasReportedPosition && (
+                    <p className="text-[9px] text-muted-foreground font-mono mt-0.5">
+                      {Math.round(lastPositionData.speed)} km/h
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="shrink-0 text-right">
-                <span
-                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider ${
-                    hasReportedPosition
-                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
-                      : "bg-amber-500/15 text-amber-400 border border-amber-500/20"
-                  }`}
-                >
-                  {hasReportedPosition ? "Posição Ativa" : "Sem Sinal GPS"}
-                </span>
-                {lastPositionData?.speed !== undefined && hasReportedPosition && (
-                  <p className="text-[9px] text-muted-foreground font-mono mt-0.5">
-                    {Math.round(lastPositionData.speed)} km/h
-                  </p>
-                )}
-              </div>
+              {/* Apenas para Admin: badge button pequeno para desvincular equipamento */}
+              {isAdmin && onUnlinkDevice && (
+                <div className="flex items-center justify-end pt-1.5 border-t border-border/40">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnlinkDevice(vehicle);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors cursor-pointer"
+                    title="Desvincular equipamento deste veículo"
+                  >
+                    <Unlink className="size-2.5" />
+                    <span>Desvincular</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-dashed border-amber-500/25 bg-amber-500/5 p-2.5 text-xs">

@@ -7,9 +7,7 @@ import {
   Activity,
   BatteryCharging,
   Bike,
-  Compass,
   Lock,
-  MapPin,
   Maximize2,
   Plus,
   Radio,
@@ -22,12 +20,14 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
 import { FirstLoginPasswordModal } from "@/app/dashboard/components/first-login-password-modal";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useTenant } from "@/app/components/tenant-provider";
 import { isMasterAdmin, isManager } from "@/lib/auth";
+import { isValidCoordinate } from "@/lib/geo";
 
 export default function DashboardPage() {
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -58,8 +58,8 @@ export default function DashboardPage() {
 
   const motorcycleModel = motorcycle
     ? `${motorcycle.brand ?? ""} ${motorcycle.model ?? ""}`.trim() ||
-      motorcycle.model ||
-      "Motocicleta"
+    motorcycle.model ||
+    "Motocicleta"
     : "";
 
   const motorcyclePlate = motorcycle?.license_plate || "";
@@ -74,15 +74,44 @@ export default function DashboardPage() {
 
   const battery =
     locationState.status === "ok" && locationState.data.device?.battery != null
-      ? `${locationState.data.device.battery.toFixed(1)} V`
+      ? `${Math.round(locationState.data.device.battery)}%`
       : hasVehicle
-        ? "12.6 V"
+        ? "100%"
         : "--";
 
   const isIgnitionOn =
     locationState.status === "ok" &&
-    locationState.data.motion?.speed != null &&
-    locationState.data.motion.speed > 0;
+    (locationState.data.device?.ignition != null
+      ? locationState.data.device.ignition
+      : locationState.data.motion?.speed != null && locationState.data.motion.speed > 0);
+
+  // Posição válida para renderizar no mapa em miniatura
+  const hasLiveCoords =
+    locationState.status === "ok" &&
+    isValidCoordinate(
+      locationState.data.position.latitude,
+      locationState.data.position.longitude,
+    );
+
+  const hasStoredCoords =
+    isValidCoordinate(
+      motorcycle?.last_position?.latitude,
+      motorcycle?.last_position?.longitude,
+    );
+
+  const activePosition = hasLiveCoords
+    ? locationState.data.position
+    : hasStoredCoords
+      ? {
+        latitude: motorcycle!.last_position!.latitude,
+        longitude: motorcycle!.last_position!.longitude,
+      }
+      : null;
+
+  const activeHeading =
+    locationState.status === "ok" && locationState.data.motion?.heading != null
+      ? locationState.data.motion.heading
+      : undefined;
 
   const handleMapClick = () => {
     if (hasVehicle) {
@@ -123,11 +152,10 @@ export default function DashboardPage() {
               </p>
               {hasVehicle && (
                 <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
-                    isFleetUser || isMultiVehiclePlan
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${isFleetUser || isMultiVehiclePlan
                       ? "bg-primary/20 text-primary border border-primary/40"
                       : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                  }`}
+                    }`}
                 >
                   <ShieldCheck className="size-3.5" />
                   {isFleetUser
@@ -197,19 +225,17 @@ export default function DashboardPage() {
                   <button
                     key={bike.id ?? bike.license_plate}
                     onClick={() => bike.id && setSelectedVehicleId(bike.id)}
-                    className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-all ${
-                      isSelected
+                    className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-all ${isSelected
                         ? "border-primary bg-primary/10 shadow-md shadow-primary/10 text-foreground ring-1 ring-primary/40"
                         : "border-border/70 bg-card/50 text-muted-foreground hover:border-border hover:bg-card/90 hover:text-foreground"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
-                        className={`grid size-9 shrink-0 place-items-center rounded-md ${
-                          isSelected
+                        className={`grid size-9 shrink-0 place-items-center rounded-md ${isSelected
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted text-muted-foreground"
-                        }`}
+                          }`}
                       >
                         <Bike className="size-5" />
                       </div>
@@ -264,7 +290,7 @@ export default function DashboardPage() {
           <article className="relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/40">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">
-                Tensão da Bateria
+                Bateria
               </span>
               <div className="grid size-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-400">
                 <BatteryCharging className="size-4" />
@@ -284,19 +310,17 @@ export default function DashboardPage() {
                 Ignição
               </span>
               <div
-                className={`grid size-8 place-items-center rounded-lg ${
-                  isIgnitionOn
+                className={`grid size-8 place-items-center rounded-lg ${isIgnitionOn
                     ? "bg-emerald-500/15 text-emerald-400"
                     : "bg-amber-500/15 text-amber-400"
-                }`}
+                  }`}
               >
                 <Zap className="size-4" />
               </div>
             </div>
             <p
-              className={`mt-4 text-3xl font-extrabold tracking-tight ${
-                isIgnitionOn ? "text-emerald-400" : "text-amber-400"
-              }`}
+              className={`mt-4 text-3xl font-extrabold tracking-tight ${isIgnitionOn ? "text-emerald-400" : "text-amber-400"
+                }`}
             >
               {isLoading ? "..." : hasVehicle ? (isIgnitionOn ? "Ligada" : "Desligada") : "--"}
             </p>
@@ -330,29 +354,40 @@ export default function DashboardPage() {
           onClick={handleMapClick}
           tabIndex={0}
           role="button"
+          aria-label="Abrir mapa de telemetria em tempo real"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               handleMapClick();
             }
           }}
-          className="mini-map group relative h-[380px] cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-lg transition-all duration-300 hover:border-primary hover:shadow-xl hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary"
+          className="group relative h-[380px] sm:h-[420px] cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-lg transition-all duration-300 hover:border-primary hover:shadow-xl hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary"
         >
-          {/* Subtle animated scan grid line on hover */}
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/5 to-primary/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-          {/* Central Animated Vehicle Marker */}
-          <div className="absolute left-[52%] top-[46%] grid size-14 place-items-center rounded-full bg-primary shadow-xl shadow-primary/40 transition-transform duration-300 group-hover:scale-110">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
-            {hasVehicle ? (
-              <MapPin className="relative z-10 size-7 text-primary-foreground" />
+          {/* Background Map View / Fallback Grid */}
+          <div className="absolute inset-0 pointer-events-none">
+            {activePosition ? (
+              <GoogleMapView
+                position={activePosition}
+                heading={activeHeading}
+                interactive={false}
+                markerType="pin"
+                showCircle={true}
+                zoom={16}
+              />
             ) : (
-              <Plus className="relative z-10 size-7 stroke-[3] text-primary-foreground" />
+              <div className="mini-map h-full w-full opacity-60" />
             )}
           </div>
 
-          {/* Top-Right Expand Prompt Badge */}
-          <div className="absolute top-4 right-4 flex items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
+          {/* Vignette & Contrast Overlay so floating components stand out */}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/35" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/30 via-transparent to-background/30" />
+
+          {/* Subtle animated scan grid line on hover */}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/5 to-primary/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+          {/* Top-Right Floating Expand Prompt Badge */}
+          <div className="pointer-events-auto absolute top-4 right-4 z-10 flex items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md shadow-lg transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
             {hasVehicle ? (
               <>
                 <Maximize2 className="size-4" />
@@ -366,9 +401,9 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Bottom Vehicle Info Card / Registration CTA Button */}
+          {/* Bottom Floating Vehicle Info Card / Registration CTA Button */}
           {hasVehicle ? (
-            <div className="absolute bottom-5 left-5 max-w-md rounded-xl border border-border/80 bg-background/95 p-4 shadow-xl backdrop-blur transition-colors group-hover:border-primary/50">
+            <div className="pointer-events-auto absolute bottom-5 left-5 z-10 max-w-md rounded-xl border border-border/80 bg-background/95 p-4 shadow-xl backdrop-blur-md transition-colors group-hover:border-primary/50">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <span className="relative flex size-2.5">
@@ -376,17 +411,17 @@ export default function DashboardPage() {
                     <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500"></span>
                   </span>
                   <p className="text-xs font-bold uppercase tracking-[.1em] text-primary">
-                    Localização ao Vivo • GPS
+                    {hasLiveCoords ? "Localização ao Vivo • GPS" : "Última Posição Registrada"}
                   </p>
                 </div>
                 <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">
-                  {motorcyclePlate}
+                  {motorcyclePlate || "PLACA --"}
                 </span>
               </div>
               <p className="mt-1.5 text-base font-bold text-foreground">
                 {motorcycleModel}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground group-hover:text-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
                 Clique na área do mapa para abrir o painel completo de rotas e telemetria
               </p>
             </div>
@@ -394,7 +429,7 @@ export default function DashboardPage() {
             <Link
               href="/dashboard/vehicles"
               onClick={(e) => e.stopPropagation()}
-              className="group/btn absolute bottom-5 left-5 flex items-center gap-3.5 rounded-xl border border-primary/60 bg-background/95 p-4 shadow-xl backdrop-blur transition-all duration-300 hover:border-primary hover:bg-primary hover:text-primary-foreground"
+              className="group/btn pointer-events-auto absolute bottom-5 left-5 z-10 flex items-center gap-3.5 rounded-xl border border-primary/60 bg-background/95 p-4 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-primary hover:text-primary-foreground"
             >
               <div className="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground transition-colors group-hover/btn:bg-background group-hover/btn:text-primary">
                 <Plus className="size-5 stroke-[2.5]" />
@@ -408,6 +443,28 @@ export default function DashboardPage() {
                 </p>
               </div>
             </Link>
+          )}
+
+          {/* Central Placeholder if no vehicle or waiting for initial satellite fix */}
+          {!hasVehicle && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 grid size-14 place-items-center rounded-full bg-primary shadow-xl shadow-primary/40 transition-transform duration-300 group-hover:scale-110">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
+              <Plus className="relative z-10 size-7 stroke-[3] text-primary-foreground" />
+            </div>
+          )}
+          {hasVehicle && !activePosition && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-4 py-3 shadow-xl backdrop-blur-md">
+              <div className="relative flex size-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex size-3 rounded-full bg-amber-500"></span>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground">
+                Aguardando sinal GPS
+              </p>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Ligue a ignição ao ar livre para sincronizar
+              </p>
+            </div>
           )}
         </section>
 
@@ -429,11 +486,10 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsVirtualAnchorActive(!isVirtualAnchorActive)}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition ${
-                    isVirtualAnchorActive
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition ${isVirtualAnchorActive
                       ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                       : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   <Lock className="size-3.5" />
                   <span>

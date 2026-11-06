@@ -73,6 +73,44 @@ export function isCustomer(role: UserRole | string | undefined): boolean {
   return !isPlatformOrTenantAdmin(role);
 }
 
+export async function resolveUserRole(
+  request: NextRequest,
+  token?: string,
+): Promise<UserRole> {
+  const cookieRole = request.cookies.get(ROLE_COOKIE)?.value;
+  if (
+    cookieRole &&
+    [
+      "admin",
+      "platform_admin",
+      "tenant_owner",
+      "tenant_admin",
+      "tenant_operator",
+      "manager",
+      "rider",
+    ].includes(cookieRole)
+  ) {
+    return cookieRole as UserRole;
+  }
+
+  if (token) {
+    try {
+      const jwt = parseJwtPayload(token);
+      if (jwt?.role && typeof jwt.role === "string") {
+        return jwt.role as UserRole;
+      }
+      const { response, data } = await callApiMe(token);
+      if (response.ok && data) {
+        return getUserRole(data);
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  return "rider";
+}
+
 
 export type MatchCorrespondence = {
   user_id: string;

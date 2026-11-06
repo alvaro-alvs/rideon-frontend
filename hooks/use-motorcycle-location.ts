@@ -72,7 +72,7 @@ export function useMotorcycleLocation(motorcycleId: string | undefined) {
           | undefined;
 
         const device = raw.device as
-          | { battery?: number; signal?: number }
+          | { battery?: number; signal?: number; ignition?: boolean }
           | undefined;
 
         const point: TelemetryPoint = {
@@ -92,7 +92,7 @@ export function useMotorcycleLocation(motorcycleId: string | undefined) {
               }
             : undefined,
           device: device
-            ? { battery: device.battery, signal: device.signal }
+            ? { battery: device.battery, signal: device.signal, ignition: device.ignition }
             : undefined,
         };
 

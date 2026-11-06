@@ -19,6 +19,7 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  Unlink,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
@@ -77,6 +78,33 @@ export default function AdminDevicesPage() {
     void navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleUnlink = async (device: Device) => {
+    const label = device.motorcycle?.license_plate
+      ? `da moto ${device.motorcycle.license_plate}`
+      : "do veículo";
+    if (
+      !confirm(
+        `Deseja realmente desvincular o equipamento ${device.serial_number} ${label}?`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/devices/${device.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unlink: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.message || "Erro ao desvincular dispositivo.");
+      }
+      await refetch();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao desvincular.");
+    }
   };
 
   return (
@@ -266,7 +294,7 @@ export default function AdminDevicesPage() {
               {isLoading ? "..." : stats.j16Count}
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Protocolo GT06 Padrão
+              Homologado 4G LTE
             </p>
           </div>
         </div>
@@ -429,6 +457,7 @@ export default function AdminDevicesPage() {
                   device={device}
                   onOpenMap={(d) => setSelectedDeviceForMap(d)}
                   onOpenLink={(d) => setSelectedDeviceForLink(d)}
+                  onUnlink={(d) => void handleUnlink(d)}
                 />
               ))}
             </div>
@@ -441,7 +470,7 @@ export default function AdminDevicesPage() {
                     <tr>
                       <th className="py-3.5 pl-6 pr-3">Status / LED</th>
                       <th className="px-3 py-3.5">IMEI / Serial</th>
-                      <th className="px-3 py-3.5">Protocolo</th>
+                      <th className="px-3 py-3.5">Modelo</th>
                       <th className="px-3 py-3.5">Motocicleta</th>
                       <th className="px-3 py-3.5">Piloto</th>
                       <th className="px-3 py-3.5">Última Posição</th>
@@ -504,10 +533,10 @@ export default function AdminDevicesPage() {
                             </div>
                           </td>
 
-                          {/* Protocol */}
+                          {/* Modelo / Firmware */}
                           <td className="px-3 py-4">
-                            <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-primary border border-primary/20">
-                              {device.protocol || "GT06"}
+                            <span className="rounded-md bg-secondary/80 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-foreground border border-border/60">
+                              {device.firmware_version || "J16 4G"}
                             </span>
                           </td>
 
@@ -579,6 +608,18 @@ export default function AdminDevicesPage() {
                           {/* Actions */}
                           <td className="py-4 pl-3 pr-6 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {moto && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleUnlink(device)}
+                                  className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors cursor-pointer"
+                                  title="Desvincular equipamento"
+                                >
+                                  <Unlink className="size-2.5" />
+                                  <span className="hidden xl:inline">Desvincular</span>
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => setSelectedDeviceForLink(device)}

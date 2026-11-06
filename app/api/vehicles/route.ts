@@ -89,6 +89,8 @@ export async function GET(request: NextRequest) {
           motorcycles: fleetMotorcycles,
           total: fleetMotorcycles.length,
           role: clientRole,
+          vehicleLimit: 99999,
+          hasReachedLimit: false,
         }),
       );
     }
@@ -178,6 +180,17 @@ export async function GET(request: NextRequest) {
 
     const motorcycles = extractMotorcyclesList(data);
 
+    let vehicleLimit = 1;
+    if (
+      existingRiderData &&
+      typeof existingRiderData.vehicle_limit === "number" &&
+      existingRiderData.vehicle_limit > 0
+    ) {
+      vehicleLimit = existingRiderData.vehicle_limit;
+    }
+
+    const hasReachedLimit = motorcycles.length >= vehicleLimit;
+
     return finalize(
       NextResponse.json({
         pendingRider: toPublicPendingRider(pendingRider),
@@ -185,6 +198,8 @@ export async function GET(request: NextRequest) {
         motorcycles,
         total: motorcycles.length,
         role: "rider",
+        vehicleLimit,
+        hasReachedLimit,
       }),
     );
   } catch {
@@ -257,12 +272,20 @@ export async function POST(request: NextRequest) {
 
           if (motoRes.ok && motoData) {
             const existingMotos = extractMotorcyclesList(motoData);
-            if (existingMotos.length >= 1) {
+            let allowedLimit = 1;
+            if (
+              typeof riderData.vehicle_limit === "number" &&
+              riderData.vehicle_limit > 0
+            ) {
+              allowedLimit = riderData.vehicle_limit;
+            }
+
+            if (existingMotos.length >= allowedLimit) {
               return finalize(
                 NextResponse.json(
                   {
-                    message:
-                      "Limite de veículos atingido. O perfil padrão de piloto permite o cadastro de no máximo 1 veículo.",
+                    message: `Limite de veículos atingido. Sua conta de cliente permite o cadastro de no máximo ${allowedLimit} veículo(s).`,
+                    code: "QUOTA_VEHICLE_LIMIT_EXCEEDED",
                   },
                   { status: 403 },
                 ),
@@ -327,30 +350,40 @@ export async function POST(request: NextRequest) {
     }
 
     const query = new URLSearchParams({ rider_id: pendingRider.id });
-    const { response } = await callAuthenticatedApi(
+    const { response, data: createResultData } = await callAuthenticatedApi(
       `/api/v1/motorcycles?${query}`,
       token,
       payload.motorcycle,
     );
 
     if (!response.ok) {
+      const backendError =
+        (createResultData as { error?: { message?: string; code?: string }; message?: string })?.error?.message ||
+        (createResultData as { error?: { message?: string; code?: string }; message?: string })?.message;
+
+      const isQuotaError = response.status === 403;
       const result = NextResponse.json(
         {
-          message: getVehicleError(response.status),
-          pending: true,
-          pendingRider: toPublicPendingRider(pendingRider),
+          message: backendError || getVehicleError(response.status),
+          code: (createResultData as { error?: { code?: string } })?.error?.code || (isQuotaError ? "QUOTA_VEHICLE_LIMIT_EXCEEDED" : undefined),
+          pending: !isQuotaError,
+          pendingRider: isQuotaError ? null : toPublicPendingRider(pendingRider),
         },
         { status: toPublicStatus(response.status) },
       );
-      result.cookies.set({
-        name: PENDING_RIDER_COOKIE,
-        value: JSON.stringify(pendingRider),
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: PENDING_RIDER_MAX_AGE,
-      });
+      if (!isQuotaError) {
+        result.cookies.set({
+          name: PENDING_RIDER_COOKIE,
+          value: JSON.stringify(pendingRider),
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: PENDING_RIDER_MAX_AGE,
+        });
+      } else {
+        result.cookies.delete(PENDING_RIDER_COOKIE);
+      }
       return finalize(result);
     }
 

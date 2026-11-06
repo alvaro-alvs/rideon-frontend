@@ -28,7 +28,7 @@ export async function PATCH(
 
   try {
     const payload = await request.json();
-    const res = await fetch(`${apiUrl}/api/v1/customers/${id}/manager`, {
+    const res = await fetch(`${apiUrl}/api/v1/customers/${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -40,7 +40,7 @@ export async function PATCH(
     const body = await res.json().catch(() => null);
     if (!res.ok) {
       return NextResponse.json(
-        body || { message: "Falha ao vincular gestor ao cliente." },
+        body || { message: "Falha ao atualizar dados do cliente." },
         { status: res.status },
       );
     }

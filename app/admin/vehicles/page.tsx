@@ -511,12 +511,15 @@ export default function AdminVehiclesPage() {
 
                       {hasDevice ? (
                         <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2 text-[10px] text-muted-foreground font-mono">
-                          <span>Protocolo: {v.device?.protocol?.toUpperCase()}</span>
+                          <span className="text-foreground/80 font-medium font-sans">Equipamento GPS</span>
                           <button
+                            type="button"
                             onClick={() => void handleUnlinkDevice(v)}
-                            className="text-red-400 hover:text-red-300 font-bold transition-colors"
+                            className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors cursor-pointer"
+                            title="Desvincular equipamento"
                           >
-                            Desvincular
+                            <Unlink className="size-2.5" />
+                            <span>Desvincular</span>
                           </button>
                         </div>
                       ) : (

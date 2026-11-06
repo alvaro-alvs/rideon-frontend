@@ -16,6 +16,7 @@ export interface TenantSettings {
   timezone: string;
   enabled_modules: string[];
   device_limit: number;
+  customer_vehicle_limit?: number;
 }
 
 export interface TenantPublicConfig {

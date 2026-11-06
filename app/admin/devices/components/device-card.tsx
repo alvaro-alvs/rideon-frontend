@@ -11,6 +11,7 @@ import {
   Eye,
   Link2,
   MapPin,
+  Unlink,
   User,
 } from "lucide-react";
 
@@ -20,9 +21,10 @@ interface DeviceCardProps {
   device: Device;
   onOpenMap: (device: Device) => void;
   onOpenLink?: (device: Device) => void;
+  onUnlink?: (device: Device) => void;
 }
 
-export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
+export function DeviceCard({ device, onOpenMap, onOpenLink, onUnlink }: DeviceCardProps) {
   const [copied, setCopied] = useState(false);
 
   const hasLastPosition = Boolean(device.last_position);
@@ -31,7 +33,6 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
 
   const isJ16 =
     !device.protocol ||
-    device.protocol.toUpperCase() === "GT06" ||
     device.protocol.toUpperCase().includes("J16");
 
   const handleCopyImei = () => {
@@ -129,11 +130,6 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {device.protocol && (
-              <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-mono font-bold uppercase text-primary border border-primary/20">
-                {device.protocol}
-              </span>
-            )}
             {device.serial_number !== "—" && (
               <button
                 type="button"
@@ -196,18 +192,29 @@ export function DeviceCard({ device, onOpenMap, onOpenLink }: DeviceCardProps) {
                 </div>
               </div>
 
-              {onOpenLink && (
-                <div className="flex justify-end pt-1 border-t border-border/40">
+              <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                {onUnlink && (
+                  <button
+                    type="button"
+                    onClick={() => onUnlink(device)}
+                    className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors cursor-pointer"
+                    title="Desvincular equipamento"
+                  >
+                    <Unlink className="size-2.5" />
+                    <span>Desvincular</span>
+                  </button>
+                )}
+                {onOpenLink && (
                   <button
                     type="button"
                     onClick={() => onOpenLink(device)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer ml-auto"
                   >
                     <Link2 className="size-3" />
-                    <span>Gerenciar / Alterar Vínculo</span>
+                    <span>Alterar Vínculo</span>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1 text-xs">
