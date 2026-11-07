@@ -19,6 +19,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { RideOnLogo } from "@/app/components/rideon-logo";
 import { useTenant } from "@/app/components/tenant-provider";
 import { UserHeader } from "@/app/components/user-header";
+import { NotificationPermissionToast } from "@/app/components/notifications/notification-permission-toast";
 import { notifyAuthChange, useCurrentUser } from "@/hooks/use-current-user";
 
 import { isMasterAdmin, isManager } from "@/lib/auth";
@@ -232,6 +233,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <UserHeader onMenuClick={() => setMobileOpen(true)} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+
+      {/* Cross-Browser Native Notification Toast */}
+      <NotificationPermissionToast />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell,
+  BellRing,
   CheckCheck,
   Flame,
   Radio,
@@ -13,10 +14,25 @@ import {
   ExternalLink,
   Power,
   RotateCcw,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import Link from "next/link";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isPlatformOrTenantAdmin } from "@/lib/auth";
+import {
+  initAudioOnUserGesture,
+  isSoundEnabled,
+  playNotificationSound,
+  setSoundEnabled,
+} from "@/lib/notifications/sound";
+import {
+  getBrowserNotificationPermission,
+  isBrowserNotificationGranted,
+  requestBrowserNotificationPermission,
+  sendBrowserNotification,
+  subscribeToNotificationPermission,
+} from "@/lib/notifications/browser";
 
 export type NotificationItem = {
   id: string;
@@ -65,6 +81,61 @@ function formatRelativeTime(dateStr: string): string {
   }
 }
 
+const VALID_CLIENT_ALERT_TYPES = new Set([
+  // Ignição
+  "ignition_on",
+  "ignition_off",
+  "illegal_ignition",
+  // Alertas de segurança e condução
+  "speeding",
+  "power_cut",
+  "vibration_shock",
+  "towing",
+  "sos",
+  "possible_crash",
+  "tamper",
+  "fall_down",
+  "hard_braking",
+  "hard_acceleration",
+  "harsh_cornering",
+  "door_open",
+  // Telemetria e diagnóstico relevante ao cliente
+  "geofence_enter",
+  "geofence_exit",
+  "low_battery",
+  "low_external_power",
+  "gps_blind_enter",
+  "gps_blind_exit",
+  "power_off",
+]);
+
+function isRelevantClientNotification(item: BackendAlert): boolean {
+  if (!item || !item.type) return false;
+
+  // Filtrar explicitamente alertas de baixo nível, hardware 0x00 e heartbeats que não são úteis para o cliente
+  if (
+    item.type === "unknown_hardware_alarm" ||
+    item.type === "unknown" ||
+    item.type === "heartbeat" ||
+    item.type === "heartbeat_2" ||
+    item.type === "normal"
+  ) {
+    return false;
+  }
+
+  const msg = (item.message || "").toLowerCase();
+  if (
+    msg.includes("código 0x00") ||
+    msg.includes("code 0x00") ||
+    msg.includes("firmware variant") ||
+    msg.includes("heartbeat")
+  ) {
+    return false;
+  }
+
+  return VALID_CLIENT_ALERT_TYPES.has(item.type);
+}
+
 function resolveAlertCategory(type: string): NotificationItem["type"] {
   if (type === "ignition_on" || type === "ignition_off" || type === "illegal_ignition") {
     return "ignition";
@@ -77,11 +148,23 @@ function resolveAlertCategory(type: string): NotificationItem["type"] {
     type === "sos" ||
     type === "possible_crash" ||
     type === "tamper" ||
-    type === "fall_down"
+    type === "fall_down" ||
+    type === "hard_braking" ||
+    type === "hard_acceleration" ||
+    type === "harsh_cornering" ||
+    type === "door_open"
   ) {
     return "alert";
   }
-  if (type === "geofence_enter" || type === "geofence_exit" || type === "low_battery" || type === "low_external_power") {
+  if (
+    type === "geofence_enter" ||
+    type === "geofence_exit" ||
+    type === "low_battery" ||
+    type === "low_external_power" ||
+    type === "gps_blind_enter" ||
+    type === "gps_blind_exit" ||
+    type === "power_off"
+  ) {
     return "telemetry";
   }
   return "system";
@@ -105,6 +188,20 @@ function resolveAlertTitle(item: BackendAlert): string {
       return "Botão de Pânico / SOS";
     case "speeding":
       return "Excesso de Velocidade";
+    case "fall_down":
+      return "Queda da Motocicleta";
+    case "tamper":
+      return "Violação do Rastreador";
+    case "possible_crash":
+      return "Possível Colisão Detectada";
+    case "hard_braking":
+      return "Frenagem Brusca";
+    case "hard_acceleration":
+      return "Aceleração Brusca";
+    case "harsh_cornering":
+      return "Curva Brusca";
+    case "door_open":
+      return "Abertura de Baú / Compartimento";
     case "geofence_enter":
       return "Entrada em Cerca Virtual";
     case "geofence_exit":
@@ -113,8 +210,12 @@ function resolveAlertTitle(item: BackendAlert): string {
       return "Bateria do Rastreador Fraca";
     case "low_external_power":
       return "Bateria da Moto Fraca";
-    case "fall_down":
-      return "Queda da Motocicleta";
+    case "gps_blind_enter":
+      return "Entrada em Ponto Cego GPS";
+    case "gps_blind_exit":
+      return "Saída de Ponto Cego GPS";
+    case "power_off":
+      return "Rastreador Desligado";
     default:
       return item.message ? item.message.split(":")[0] : "Notificação";
   }
@@ -126,18 +227,72 @@ export function NotificationPopover() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // WebSocket & Realtime Sync References
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const knownAlertIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
 
   const currentUserState = useCurrentUser();
   const userRole = currentUserState.status === "authenticated" ? currentUserState.user.role : "rider";
   const isAdmin = isPlatformOrTenantAdmin(userRole);
 
-  // Admins do not see all vehicles by default. Option starts false (disabled by default) and can be enabled.
+  const [soundActive, setSoundActive] = useState<boolean>(() => isSoundEnabled());
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() => {
+    if (typeof window !== "undefined") {
+      return getBrowserNotificationPermission();
+    }
+    return "default";
+  });
+
+  // Keep browser notification status strictly synchronized with system settings and other components
+  useEffect(() => {
+    const unsubscribe = subscribeToNotificationPermission((perm) => {
+      setBrowserPermission(perm);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Guarantee verification is always freshly executed when user opens the notifications menu
+  useEffect(() => {
+    if (isOpen) {
+      setBrowserPermission(getBrowserNotificationPermission());
+    }
+  }, [isOpen]);
+
+  const toggleSound = () => {
+    initAudioOnUserGesture();
+    const next = !soundActive;
+    setSoundActive(next);
+    setSoundEnabled(next);
+    if (next) {
+      playNotificationSound();
+    }
+  };
+
+  const handleRequestBrowserPermission = async () => {
+    initAudioOnUserGesture();
+    const perm = await requestBrowserNotificationPermission();
+    setBrowserPermission(perm);
+    if (perm === "granted") {
+      playNotificationSound();
+      await sendBrowserNotification("RideOn • Alertas em Tempo Real", {
+        body: "Notificações do navegador ativadas com sucesso.",
+      });
+    }
+  };
+
+  // Admins see fleet notifications by default, toggleable via UI
   const [allVehicles, setAllVehicles] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("rideon_admin_all_vehicles_notif") === "true";
+      const stored = localStorage.getItem("rideon_admin_all_vehicles_notif");
+      if (stored !== null) return stored === "true";
+      return true; // Enabled by default for admin/manager fleet monitoring
     }
-    return false;
+    return true;
   });
 
   const toggleAllVehicles = () => {
@@ -150,78 +305,148 @@ export function NotificationPopover() {
     });
   };
 
-  const fetchNotifications = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: "30" });
-      if (isAdmin && allVehicles) {
-        params.set("all_vehicles", "true");
+  // Helper to build resilient WebSocket URLs across local networks, hostnames and protocols
+  const resolveWsUrl = useCallback(
+    (token: string, enableAllVehicles: boolean): string => {
+      const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+      const protocol = isHttps ? "wss:" : "ws:";
+      const currentHost = (typeof window !== "undefined" && window.location.hostname) || "localhost";
+      const envWs = process.env.NEXT_PUBLIC_WS_URL;
+
+      if (envWs) {
+        try {
+          const parsed = new URL(envWs, window.location.origin);
+          if (
+            currentHost !== "localhost" &&
+            currentHost !== "127.0.0.1" &&
+            (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+          ) {
+            parsed.hostname = currentHost;
+          }
+          if (isHttps && parsed.protocol === "ws:") {
+            parsed.protocol = "wss:";
+          }
+          parsed.searchParams.set("token", token);
+          if (enableAllVehicles) {
+            parsed.searchParams.set("all_vehicles", "true");
+          }
+          return parsed.toString();
+        } catch {
+          // fallback
+        }
       }
-      const res = await fetch(`/api/notifications?${params.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        const data: BackendAlert[] = Array.isArray(json.data) ? json.data : [];
-        const items: NotificationItem[] = data.map((d) => ({
-          id: d.id,
-          title: resolveAlertTitle(d),
-          message: d.message,
-          timestamp: formatRelativeTime(d.created_at),
-          type: resolveAlertCategory(d.type),
-          unread: !d.read && d.status !== "acknowledged" && d.status !== "resolved",
-          link: d.motorcycle_id ? `/dashboard?vehicle=${d.motorcycle_id}` : undefined,
-          rawType: d.type,
-          createdAt: d.created_at,
-        }));
-        setNotifications(items);
+
+      return `${protocol}//${currentHost}:8080/ws?token=${encodeURIComponent(token)}${
+        enableAllVehicles ? "&all_vehicles=true" : ""
+      }`;
+    },
+    [],
+  );
+
+  const fetchNotifications = useCallback(
+    async (silent = false) => {
+      if (!silent) setIsLoading(true);
+      try {
+        const params = new URLSearchParams({ limit: "30" });
+        if (isAdmin && allVehicles) {
+          params.set("all_vehicles", "true");
+        }
+        const res = await fetch(`/api/notifications?${params.toString()}`);
+        if (res.ok) {
+          const json = await res.json();
+          const data: BackendAlert[] = Array.isArray(json.data) ? json.data : [];
+          const validData = data.filter(isRelevantClientNotification);
+
+          const items: NotificationItem[] = validData.map((d) => ({
+            id: d.id,
+            title: resolveAlertTitle(d),
+            message: d.message,
+            timestamp: formatRelativeTime(d.created_at),
+            type: resolveAlertCategory(d.type),
+            unread: !d.read && d.status !== "acknowledged" && d.status !== "resolved",
+            link: d.motorcycle_id ? `/dashboard?vehicle=${d.motorcycle_id}` : undefined,
+            rawType: d.type,
+            createdAt: d.created_at,
+          }));
+
+          // Check if any fresh alerts arrived via polling fallback
+          if (initialLoadDoneRef.current) {
+            for (const item of items) {
+              if (!knownAlertIdsRef.current.has(item.id) && item.unread) {
+                // If created in the last 2 minutes, trigger sound & desktop notification
+                const ageMs = Date.now() - new Date(item.createdAt).getTime();
+                if (ageMs < 120000) {
+                  playNotificationSound();
+                  sendBrowserNotification(item.title, {
+                    body: item.message,
+                    link: item.link,
+                  });
+                }
+              }
+            }
+          }
+
+          // Register all seen alert IDs
+          for (const item of items) {
+            knownAlertIdsRef.current.add(item.id);
+          }
+          initialLoadDoneRef.current = true;
+
+          setNotifications(items);
+        }
+      } catch (err) {
+        if (!silent) console.warn("Falha ao carregar notificacoes:", err);
+      } finally {
+        if (!silent) setIsLoading(false);
       }
-    } catch (err) {
-      console.warn("Falha ao carregar notificacoes:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAdmin, allVehicles]);
+    },
+    [isAdmin, allVehicles],
+  );
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // WebSocket Live Updates
+  // WebSocket Live Updates with resilient auto-reconnect and smart fallback polling
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
     async function connectWs() {
+      if (!isMountedRef.current) return;
+
       try {
         const tokenRes = await fetch("/api/auth/token");
         if (!tokenRes.ok) return;
         const { token } = await tokenRes.json();
-        if (!token || !isMounted) return;
+        if (!token || !isMountedRef.current) return;
 
-        const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-        const proto = isHttps ? "wss:" : "ws:";
-        const host = (typeof window !== "undefined" && window.location.hostname) || "localhost";
-        const envWs = process.env.NEXT_PUBLIC_WS_URL;
-
-        let wsUrl = `${proto}//${host}:8080/ws?token=${encodeURIComponent(token)}`;
-        if (envWs) {
-          try {
-            const parsed = new URL(envWs, window.location.origin);
-            if (isHttps && parsed.protocol === "ws:") parsed.protocol = "wss:";
-            parsed.searchParams.set("token", token);
-            if (isAdmin && allVehicles) parsed.searchParams.set("all_vehicles", "true");
-            wsUrl = parsed.toString();
-          } catch {
-            // fallback
-          }
-        } else if (isAdmin && allVehicles) {
-          wsUrl += "&all_vehicles=true";
-        }
+        const wsUrl = resolveWsUrl(token, isAdmin && allVehicles);
 
         if (wsRef.current) {
-          wsRef.current.close();
+          const old = wsRef.current;
+          wsRef.current = null;
+          old.onopen = null;
+          old.onmessage = null;
+          old.onerror = null;
+          old.onclose = null;
+          try {
+            old.close();
+          } catch {
+            // Ignore
+          }
         }
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (!isMountedRef.current) return;
+          retryCountRef.current = 0;
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+          }
+        };
 
         ws.onmessage = (event) => {
           try {
@@ -239,6 +464,11 @@ export function NotificationPopover() {
                 created_at: data.created_at || new Date().toISOString(),
               };
 
+              // Ignore non-relevant notifications (e.g. heartbeat, raw 0x00 firmware diagnostics)
+              if (!isRelevantClientNotification(newAlert)) {
+                return;
+              }
+
               const newItem: NotificationItem = {
                 id: newAlert.id,
                 title: resolveAlertTitle(newAlert),
@@ -251,11 +481,38 @@ export function NotificationPopover() {
                 createdAt: newAlert.created_at,
               };
 
+              // Mark as known to prevent duplicate polling chimes
+              knownAlertIdsRef.current.add(newItem.id);
+
+              // Play modern satisfying audio chime
+              playNotificationSound();
+
+              // Send cross-browser native system notification
+              sendBrowserNotification(newItem.title, {
+                body: newItem.message,
+                link: newItem.link,
+              });
+
               setNotifications((prev) => [newItem, ...prev.filter((item) => item.id !== newItem.id)]);
             }
           } catch {
             // Ignore non-alert messages
           }
+        };
+
+        ws.onerror = () => {
+          // W3C WebSocket errors are intentionally opaque
+        };
+
+        ws.onclose = () => {
+          if (!isMountedRef.current) return;
+          // Exponential backoff reconnect: 1.5s, 3s, 5s... max 8s
+          const delay = Math.min(1500 * Math.pow(1.4, retryCountRef.current), 8000);
+          retryCountRef.current += 1;
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = setTimeout(() => {
+            connectWs();
+          }, delay);
         };
       } catch (err) {
         console.warn("[WS] Erro ao conectar websocket de notificações:", err);
@@ -264,13 +521,64 @@ export function NotificationPopover() {
 
     connectWs();
 
-    return () => {
-      isMounted = false;
-      if (wsRef.current) {
-        wsRef.current.close();
+    // Reconnect immediately when browser regains network connectivity
+    const handleOnline = () => {
+      connectWs();
+      fetchNotifications(true);
+    };
+    window.addEventListener("online", handleOnline);
+
+    // Refresh and reconnect immediately when tab comes back into focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        if (
+          !wsRef.current ||
+          wsRef.current.readyState === WebSocket.CLOSED ||
+          wsRef.current.readyState === WebSocket.CLOSING
+        ) {
+          connectWs();
+        }
+        fetchNotifications(true);
       }
     };
-  }, [isAdmin, allVehicles]);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Periodic background sync polling as an unbreakable fail-safe (every 10s)
+    const pollInterval = setInterval(() => {
+      if (!isMountedRef.current) return;
+      if (
+        !wsRef.current ||
+        wsRef.current.readyState === WebSocket.CLOSED ||
+        wsRef.current.readyState === WebSocket.CLOSING
+      ) {
+        connectWs();
+      }
+      fetchNotifications(true);
+    }, 10000);
+
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener("online", handleOnline);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(pollInterval);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        try {
+          ws.close();
+        } catch {
+          // Ignore
+        }
+      }
+    };
+  }, [isAdmin, allVehicles, resolveWsUrl, fetchNotifications]);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
 
@@ -402,10 +710,25 @@ export function NotificationPopover() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {/* Audio chime toggle */}
                 <button
                   type="button"
-                  onClick={fetchNotifications}
+                  onClick={toggleSound}
+                  title={soundActive ? "Som ativo (clique para mutar)" : "Som mudo (clique para ativar)"}
+                  aria-label={soundActive ? "Desativar sons" : "Ativar sons"}
+                  className={`rounded p-1 transition-colors ${
+                    soundActive
+                      ? "text-primary hover:bg-primary/10"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+                >
+                  {soundActive ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fetchNotifications(false)}
                   title="Atualizar"
                   className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                 >
@@ -424,6 +747,25 @@ export function NotificationPopover() {
                 )}
               </div>
             </div>
+
+            {/* Browser Notifications Activation Banner: Oculto se já estiver ativo ou não suportado */}
+            {browserPermission === "default" && !isBrowserNotificationGranted() && (
+              <div className="flex items-center justify-between border-b border-primary/20 bg-primary/10 px-4 py-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <BellRing className="size-3.5 text-primary shrink-0 animate-pulse" />
+                  <span className="text-[11px] font-medium text-zinc-300 truncate">
+                    Receber alertas no navegador
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestBrowserPermission}
+                  className="rounded-lg bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm hover:bg-primary/90 transition-all shrink-0"
+                >
+                  Ativar
+                </button>
+              </div>
+            )}
 
             {/* Admin Toggle: View all vehicles (Disabled by default, toggleable) */}
             {isAdmin && (

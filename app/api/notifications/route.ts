@@ -39,6 +39,36 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Filter out non-actionable hardware diagnostics, raw code 0x00 and heartbeats
+    if (data && Array.isArray((data as { data?: unknown[] }).data)) {
+      const payload = data as { data: Array<{ type?: string; message?: string }>; total?: number };
+      payload.data = payload.data.filter((item) => {
+        if (!item || !item.type) return false;
+        if (
+          item.type === "unknown_hardware_alarm" ||
+          item.type === "unknown" ||
+          item.type === "heartbeat" ||
+          item.type === "heartbeat_2" ||
+          item.type === "normal"
+        ) {
+          return false;
+        }
+        const msg = (item.message || "").toLowerCase();
+        if (
+          msg.includes("código 0x00") ||
+          msg.includes("code 0x00") ||
+          msg.includes("firmware variant") ||
+          msg.includes("heartbeat")
+        ) {
+          return false;
+        }
+        return true;
+      });
+      if (typeof payload.total === "number") {
+        payload.total = payload.data.length;
+      }
+    }
+
     const res = NextResponse.json(data);
     if (session.refreshed && session.newAccessToken) {
       applyAuthCookies(res, {

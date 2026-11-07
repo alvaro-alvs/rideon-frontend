@@ -42,6 +42,7 @@ import { VehiclePlatePreview } from "./components/vehicle-plate-preview";
 import {
   BrandQuickSelect,
   ColorQuickSelect,
+  getColorHex,
 } from "./components/brand-quick-select";
 
 type PendingRider = {
@@ -418,12 +419,16 @@ export default function VehiclesPage() {
     <DashboardShell>
       <div className="mx-auto max-w-6xl space-y-10 py-4">
         {/* ========================================================================= */}
-        {/* HERO HEADER & STATS SUMMARY BAR                                           */}
+        {/* HERO HEADER & STATS / ACTIVE VEHICLE BAR                                  */}
         {/* ========================================================================= */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-          {/* Ambient Cyber Grid & Glow Accents */}
+        <header className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-card/40 via-card/15 to-transparent p-6 sm:p-8 backdrop-blur-md">
+          {/* Ambient Cyber Glow Accents - Efeito Difuso */}
+          <div className="pointer-events-none absolute -right-16 -top-16 size-80 rounded-full bg-primary/10 blur-3xl opacity-75" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 size-80 rounded-full bg-emerald-500/10 blur-3xl opacity-70" />
+
+          {/* Banner do Fleet User / Gestor */}
           {isFleetUser && (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg backdrop-blur-md">
+            <div className="relative z-10 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg backdrop-blur-md">
               <div className="flex items-center gap-3">
                 <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 shrink-0">
                   <Bike className="size-5" />
@@ -447,10 +452,9 @@ export default function VehiclesPage() {
               </Link>
             </div>
           )}
-          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
 
           <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            {/* Lado Esquerdo: Identificação & Título */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
@@ -489,91 +493,212 @@ export default function VehiclesPage() {
               </p>
             </div>
 
-            {/* Real-time Metrics Bar (4 Cards) */}
-            <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-3.5">
-              {/* Metric 1: Total Veículos */}
-              <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Bike className="size-4.5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    {isAdmin ? "Total Frota" : "Veículo"}
-                  </p>
-                  <p className="text-base font-black text-foreground">
-                    {view === "loading" ? "..." : motorcycles.length}
-                  </p>
-                </div>
-              </div>
-
-              {/* Metric 2: Rastreamento Ativo */}
-              {(() => {
-                const trackedCount = motorcycles.filter((m) => Boolean(m.device)).length;
-                return (
-                  <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                    <div className={`flex size-9 items-center justify-center rounded-xl ${trackedCount > 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
-                      }`}>
-                      <Radio className={`size-4.5 ${trackedCount > 0 ? "animate-pulse" : ""}`} />
+            {/* Lado Direito: Condicional conforme perfil e estado de veículos */}
+            <div className="shrink-0">
+              {isFleetUser ? (
+                /* ========================================================================= */
+                /* INSIGHTS DE RESUMO QUANTITATIVO (PARA GESTOR / MASTER)                    */
+                /* ========================================================================= */
+                <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 shadow-xl backdrop-blur-md sm:min-w-[360px]">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Activity className="size-3.5" />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        Resumo Quantitativo da Frota
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Rastreamento
-                      </p>
-                      <p className={`text-base font-black ${trackedCount > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
-                        {view === "loading"
-                          ? "..."
-                          : trackedCount > 0
-                            ? `${trackedCount} Vinculado${trackedCount > 1 ? "s" : ""}`
-                            : "0 Vinculados"}
-                      </p>
-                    </div>
+                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
+                      {motorcycles.length > 0
+                        ? `${Math.round(
+                            (motorcycles.filter((m) => Boolean(m.device)).length /
+                              motorcycles.length) *
+                              100,
+                          )}% Vinculados`
+                        : "0%"}
+                    </span>
                   </div>
-                );
-              })()}
 
-              {/* Metric 3: Prontidão de Telemetria */}
-              {(() => {
-                const liveCount = motorcycles.filter((m) => Boolean(m.device && (m.has_position || m.last_position))).length;
-                const hasDeviceWithoutPosition = motorcycles.some((m) => Boolean(m.device) && !m.has_position && !m.last_position);
-                return (
-                  <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                    <div className={`flex size-9 items-center justify-center rounded-xl ${liveCount > 0 ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"
-                      }`}>
-                      <Activity className="size-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Telemetria
-                      </p>
-                      <p className={`text-base font-black ${liveCount > 0 ? "text-blue-400" : hasDeviceWithoutPosition ? "text-amber-400" : "text-muted-foreground"
-                        }`}>
-                        {view === "loading"
-                          ? "..."
-                          : liveCount > 0
-                            ? `${liveCount} GPS Ativo`
-                            : hasDeviceWithoutPosition
-                              ? "Em Busca"
-                              : "Standby"}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* KPI 1: Total Veículos */}
+                    <div className="rounded-xl border border-border/50 bg-secondary/40 p-2.5 transition-colors hover:border-border">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Bike className="size-3.5 text-primary" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Total Frota</span>
+                      </div>
+                      <p className="mt-1 text-lg font-black text-foreground">
+                        {view === "loading" ? "..." : motorcycles.length}
                       </p>
                     </div>
+
+                    {/* KPI 2: Rastreamento Vinculado */}
+                    {(() => {
+                      const trackedCount = motorcycles.filter((m) => Boolean(m.device)).length;
+                      return (
+                        <div className="rounded-xl border border-border/50 bg-secondary/40 p-2.5 transition-colors hover:border-border">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Radio className={`size-3.5 ${trackedCount > 0 ? "text-emerald-400 animate-pulse" : "text-zinc-500"}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Rastreamento</span>
+                          </div>
+                          <p className={`mt-1 text-lg font-black ${trackedCount > 0 ? "text-emerald-400" : "text-foreground"}`}>
+                            {view === "loading" ? "..." : trackedCount}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    {/* KPI 3: Telemetria Ativa */}
+                    {(() => {
+                      const liveCount = motorcycles.filter(
+                        (m) => Boolean(m.device && (m.has_position || m.last_position)),
+                      ).length;
+                      return (
+                        <div className="rounded-xl border border-border/50 bg-secondary/40 p-2.5 transition-colors hover:border-border">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Activity className={`size-3.5 ${liveCount > 0 ? "text-blue-400" : "text-zinc-500"}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">GPS Ativo</span>
+                          </div>
+                          <p className={`mt-1 text-lg font-black ${liveCount > 0 ? "text-blue-400" : "text-foreground"}`}>
+                            {view === "loading" ? "..." : liveCount}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    {/* KPI 4: Standby */}
+                    {(() => {
+                      const liveCount = motorcycles.filter(
+                        (m) => Boolean(m.device && (m.has_position || m.last_position)),
+                      ).length;
+                      const standbyCount = Math.max(0, motorcycles.length - liveCount);
+                      return (
+                        <div className="rounded-xl border border-border/50 bg-secondary/40 p-2.5 transition-colors hover:border-border">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <ShieldCheck className={`size-3.5 ${standbyCount === 0 && motorcycles.length > 0 ? "text-emerald-400" : "text-amber-400"}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Standby</span>
+                          </div>
+                          <p className={`mt-1 text-lg font-black ${standbyCount > 0 ? "text-amber-400" : "text-muted-foreground"}`}>
+                            {view === "loading" ? "..." : standbyCount}
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
-                );
-              })()}
+                </div>
+              ) : motorcycles.length === 1 ? (
+                /* ========================================================================= */
+                /* CARD DO VEÍCULO ATIVO COM MÍNIMOS DETALHES (CLIENTE NO LIMITE DE 1 MOTO)  */
+                /* ========================================================================= */
+                (() => {
+                  const moto = motorcycles[0];
+                  const hasDevice = Boolean(moto.device);
+                  const hasGps = Boolean(
+                    moto.device && (moto.has_position || moto.last_position),
+                  );
+                  const modelText =
+                    `${moto.brand ?? ""} ${moto.model ?? ""}`.trim() || "Motocicleta";
+                  const colorHex = getColorHex(moto.color);
 
-              {/* Metric 4: Alerta de Segurança */}
-              {/* <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 shadow-inner backdrop-blur-md">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
-                  <ShieldCheck className="size-4.5" />
+                  return (
+                    <div className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-card/90 via-card/65 to-emerald-950/20 p-4 shadow-xl backdrop-blur-xl transition-all duration-300 hover:border-emerald-500/50 w-full sm:min-w-[340px] max-w-sm">
+                      {/* Glow sutil difuso dentro do card */}
+                      <div className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-emerald-500/15 blur-xl" />
+
+                      <div className="relative z-10 space-y-3">
+                        {/* Topo: Status Ativo + Mini Placa */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex size-2.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                              Veículo Ativo • Protegido
+                            </span>
+                          </div>
+                          <VehiclePlatePreview plate={moto.license_plate} size="sm" />
+                        </div>
+
+                        {/* Modelo e Mínimos Detalhes */}
+                        <div>
+                          <h3 className="text-base font-black uppercase tracking-tight text-foreground truncate">
+                            {modelText}
+                          </h3>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground font-medium">
+                            {moto.year && <span>Ano {moto.year}</span>}
+                            {moto.color && (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  className="size-2 rounded-full ring-1 ring-border"
+                                  style={{ backgroundColor: colorHex }}
+                                />
+                                {moto.color}
+                              </span>
+                            )}
+                            {moto.rider?.name && (
+                              <span
+                                className="truncate max-w-[120px] text-foreground/80 font-semibold"
+                                title={moto.rider.name}
+                              >
+                                • {moto.rider.name.split(" ")[0]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Rodapé: Conexão GPS + Ação Direta */}
+                        <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2.5">
+                          <div className="flex items-center gap-1.5">
+                            {hasGps ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-400">
+                                <Radio className="size-3.5 animate-pulse text-emerald-400" />
+                                GPS Conectado
+                              </span>
+                            ) : hasDevice ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-400">
+                                <Radio className="size-3.5 text-amber-400" />
+                                Sinal Pendente
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                                Sem Rastreador
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTelemetryMoto(moto)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-all cursor-pointer"
+                            title="Abrir telemetria ao vivo"
+                          >
+                            <Activity className="size-3.5" />
+                            Telemetria
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                /* Cliente com 0 veículos ou outros estados */
+                <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/40 p-4 backdrop-blur-md">
+                  <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Bike className="size-4.5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Status
+                    </p>
+                    <p className="text-xs font-bold text-foreground">
+                      {motorcycles.length === 0
+                        ? "Pronto para Conectar"
+                        : `${motorcycles.length} Veículos Cadastrados`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    Segurança
-                  </p>
-                  <p className="text-base font-black text-amber-400">
-                    Protegido 24/7
-                  </p>
-                </div>
-              </div> */}
+              )}
             </div>
           </div>
         </header>
@@ -632,7 +757,7 @@ export default function VehiclesPage() {
         {/* ========================================================================= */}
         {view !== "loading" && motorcycles.length > 0 && (
           <section aria-labelledby="registered-vehicles-title" className="space-y-6">
-            <div className="flex flex-col gap-4 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Bike className="size-4.5" />

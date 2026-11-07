@@ -177,7 +177,7 @@ function LiveTelemetryModalContent({
         ? {
             battery: toNum(device.Battery ?? device.battery),
             signal: toNum(device.Signal ?? device.signal),
-            ignition: device.Ignition ?? device.ignition,
+            ignition: typeof (device.Ignition ?? device.ignition) === "boolean" ? ((device.Ignition ?? device.ignition) as boolean) : undefined,
           }
         : undefined,
     };
