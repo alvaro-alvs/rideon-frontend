@@ -31,13 +31,13 @@ export function FooterSection() {
             </h4>
             <ul className="mt-4 space-y-2.5 text-xs text-muted-foreground">
               <li>
-                <Link href="/#recursos" className="transition-colors hover:text-primary">
-                  Recursos & Sensores
+                <Link href="/#plataforma" className="transition-colors hover:text-primary">
+                  Cockpit da Plataforma
                 </Link>
               </li>
               <li>
-                <Link href="/#plataforma" className="transition-colors hover:text-primary">
-                  Cockpit da Plataforma
+                <Link href="/#recursos" className="transition-colors hover:text-primary">
+                  Recursos & Sensores
                 </Link>
               </li>
               <li>

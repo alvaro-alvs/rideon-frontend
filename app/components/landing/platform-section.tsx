@@ -81,7 +81,7 @@ export function PlatformSection() {
   };
 
   return (
-    <section id="plataforma" className="relative overflow-hidden py-24 lg:py-32">
+    <section id="plataforma" className="relative overflow-hidden border-t border-border/80 py-24 lg:py-32">
       {/* Subtle background ambient gradients */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute right-0 top-1/4 h-[600px] w-[600px] rounded-full bg-primary/6 blur-[140px]" />

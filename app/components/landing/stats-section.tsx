@@ -32,7 +32,7 @@ const stats = [
 
 export function StatsSection() {
   return (
-    <section className="relative border-y border-border/80 bg-surface/50 py-16 sm:py-20">
+    <section className="relative border-t border-border/80 bg-surface/50 py-16 sm:py-20">
       {/* Background radial accent */}
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,rgba(239,37,27,0.06),transparent)]" />
 

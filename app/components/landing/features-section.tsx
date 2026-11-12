@@ -186,7 +186,7 @@ export function FeaturesSection() {
   return (
     <section
       id="recursos"
-      className="relative overflow-hidden border-b border-border/80 bg-surface/80 py-24 lg:py-32"
+      className="relative overflow-hidden border-t border-border/80 bg-surface/80 py-24 lg:py-32"
     >
       {/* Background glow and subtle dot grid with radial fade */}
       <div className="pointer-events-none absolute inset-0 -z-10">

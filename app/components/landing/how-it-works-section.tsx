@@ -32,7 +32,7 @@ const steps = [
 
 export function HowItWorksSection() {
   return (
-    <section className="relative overflow-hidden py-24 lg:py-32">
+    <section className="relative overflow-hidden border-t border-border/80 py-24 lg:py-32">
       {/* Background decoration */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-1/2 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/4 blur-[130px]" />

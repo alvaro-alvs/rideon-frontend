@@ -28,11 +28,11 @@ export function PublicHeader() {
           <Link href="/" className="nav-link">
             Inicio
           </Link>
-          <Link href="/#recursos" className="nav-link">
-            Recursos
-          </Link>
           <Link href="/#plataforma" className="nav-link">
             Plataforma
+          </Link>
+          <Link href="/#recursos" className="nav-link">
+            Recursos
           </Link>
         </nav>
         <div className="hidden items-center gap-3 md:flex">
@@ -86,18 +86,18 @@ export function PublicHeader() {
               Inicio
             </Link>
             <Link
-              href="/#recursos"
-              className="mobile-nav-link"
-              onClick={() => setOpen(false)}
-            >
-              Recursos
-            </Link>
-            <Link
               href="/#plataforma"
               className="mobile-nav-link"
               onClick={() => setOpen(false)}
             >
               Plataforma
+            </Link>
+            <Link
+              href="/#recursos"
+              className="mobile-nav-link"
+              onClick={() => setOpen(false)}
+            >
+              Recursos
             </Link>
             <div className="mt-3">
               {isAuthenticated ? (
