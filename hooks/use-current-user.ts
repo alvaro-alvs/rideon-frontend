@@ -48,6 +48,13 @@ export function useCurrentUser(): State {
     let isMounted = true;
 
     const runFetch = () => {
+      if (!isClientSessionActive()) {
+        if (isMounted) {
+          setState({ status: "unauthenticated" });
+        }
+        return;
+      }
+
       fetch("/api/auth/me", {
         credentials: "same-origin",
         cache: "no-store",

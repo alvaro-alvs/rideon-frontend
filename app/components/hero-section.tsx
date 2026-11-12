@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
@@ -45,14 +45,31 @@ const VEHICLES: VehicleSlide[] = [
 export function HeroSection() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(1);
+  const [isInView, setIsInView] = useState(true);
+  const sectionRef = useRef<HTMLElement>(null);
   const rotatingTextRef = useRef<RotatingTextRef>(null);
 
   const currentVehicle = VEHICLES[currentIndex];
 
-  const handleNextFromRotation = (newIndex: number) => {
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+      },
+      { threshold: 0.05 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleNextFromRotation = useCallback((newIndex: number) => {
     setDirection(1);
     setCurrentIndex(newIndex);
-  };
+  }, []);
 
   const handleManualSelect = (index: number) => {
     if (index === currentIndex) return;
@@ -62,7 +79,10 @@ export function HeroSection() {
   };
 
   return (
-    <section className="relative flex min-h-[720px] items-center overflow-hidden pt-24 pb-16 lg:min-h-[820px]">
+    <section
+      ref={sectionRef}
+      className="relative flex min-h-[720px] items-center overflow-hidden pt-24 pb-16 lg:min-h-[820px]"
+    >
       {/* Background Slides with Horizontal Sliding Animation */}
       <div className="absolute inset-0 overflow-hidden bg-background">
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
@@ -105,7 +125,7 @@ export function HeroSection() {
               src={currentVehicle.image}
               alt={currentVehicle.alt}
               fill
-              priority
+              priority={currentIndex === 0}
               className="object-cover object-center"
               sizes="100vw"
             />
@@ -179,7 +199,7 @@ export function HeroSection() {
                 rotationInterval={4200}
                 splitBy="characters"
                 onNext={handleNextFromRotation}
-                auto
+                auto={isInView}
                 loop
               />
             </div>

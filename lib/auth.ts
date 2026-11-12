@@ -499,7 +499,7 @@ export function applyAuthCookies(
   response.cookies.set({
     name: CLIENT_SESSION_COOKIE,
     value: "1",
-    maxAge: SESSION_MAX_AGE,
+    maxAge: data.refreshToken ? REFRESH_MAX_AGE : SESSION_MAX_AGE,
     httpOnly: false,
     secure: isProduction,
     sameSite: "lax",

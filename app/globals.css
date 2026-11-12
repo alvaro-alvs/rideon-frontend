@@ -157,3 +157,17 @@ input {
     );
   }
 }
+
+@keyframes map-alert-pulse {
+  0%, 100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-map-alert-pulse {
+  animation: map-alert-pulse 0.75s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}

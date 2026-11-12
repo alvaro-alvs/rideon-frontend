@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef } from 'react';
 import { motion, type Variants } from 'motion/react';
 import {
   Activity,
@@ -98,15 +98,15 @@ const cardVariants: Variants = {
 };
 
 function FeatureCard({ feature }: { feature: (typeof features)[number] }) {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [isHovered, setIsHovered] = useState(false);
+  const spotlightRef = useRef<HTMLDivElement>(null);
 
   function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const spotlight = spotlightRef.current;
+    if (!spotlight) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    setMousePosition({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    spotlight.style.background = `radial-gradient(360px circle at ${x}px ${y}px, rgba(239, 37, 27, 0.14), transparent 75%)`;
   }
 
   const Icon = feature.icon;
@@ -116,17 +116,12 @@ function FeatureCard({ feature }: { feature: (typeof features)[number] }) {
       variants={cardVariants}
       whileHover={{ y: -6, transition: { type: 'spring', stiffness: 320, damping: 22 } }}
       onMouseMove={handleMouseMove}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-card/50 p-7 sm:p-8 backdrop-blur-xl transition-all duration-300 hover:border-primary/40 hover:bg-card/80 hover:shadow-[0_20px_45px_-15px_rgba(239,37,27,0.18)]"
     >
-      {/* Interactive Cursor Spotlight */}
+      {/* Interactive Cursor Spotlight (DOM ref update — zero React re-renders) */}
       <div
-        className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-300"
-        style={{
-          opacity: isHovered ? 1 : 0,
-          background: `radial-gradient(360px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(239, 37, 27, 0.14), transparent 75%)`,
-        }}
+        ref={spotlightRef}
+        className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
 
       {/* Top ambient glow line */}
