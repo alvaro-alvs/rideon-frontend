@@ -5,18 +5,15 @@ import {
   Activity,
   ArrowRightLeft,
   Bike,
+  Building2,
   CheckCircle2,
-  ChevronDown,
   Clock,
   Copy,
-  Cpu,
   Eye,
   History,
-  Info,
   Link2,
   MapPin,
   Radio,
-  Shield,
   Unlink,
   User,
 } from "lucide-react";
@@ -31,6 +28,7 @@ interface DeviceCardProps {
   onOpenTransfer?: (device: Device) => void;
   onOpenAudit?: (device: Device) => void;
   canManageTransfers?: boolean;
+  showManager?: boolean;
 }
 
 export function DeviceCard({
@@ -41,17 +39,14 @@ export function DeviceCard({
   onOpenTransfer,
   onOpenAudit,
   canManageTransfers = false,
+  showManager = false,
 }: DeviceCardProps) {
   const [copied, setCopied] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
 
   const hasLastPosition = Boolean(device.last_position);
   const position = device.last_position;
   const moto = device.motorcycle;
   const isLinked = Boolean(moto);
-
-  const isJ16 =
-    !device.protocol || device.protocol.toUpperCase().includes("J16");
 
   const handleCopyImei = () => {
     if (!device.serial_number || device.serial_number === "—") return;
@@ -60,130 +55,84 @@ export function DeviceCard({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const statusLabel = hasLastPosition
+    ? "Online"
+    : device.status === "standby"
+      ? "Standby"
+      : "Sem sinal";
+
+  const lastActivity = device.last_seen_at || position?.timestamp;
+
   return (
     <article
-      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border transition-all duration-300 ${isLinked
-          ? "border-emerald-500/45 bg-gradient-to-b from-neutral-900 via-neutral-950 to-black shadow-[0_10px_30px_-15px_rgba(16,185,129,0.28)] hover:border-emerald-400/70"
-          : "border-border/70 bg-gradient-to-b from-card/95 via-neutral-950/95 to-black/95 opacity-95 hover:border-amber-500/40 hover:opacity-100"
-        }`}
+      className={`group flex flex-col justify-between overflow-hidden rounded-2xl border bg-card/90 backdrop-blur-md transition-all duration-200 ${
+        hasLastPosition
+          ? "border-emerald-500/40 shadow-[0_8px_24px_-14px_rgba(16,185,129,0.3)] hover:border-emerald-400/70"
+          : isLinked
+            ? "border-border/80 hover:border-primary/40"
+            : "border-border/60 opacity-95 hover:border-amber-500/40 hover:opacity-100"
+      }`}
     >
-      {/* Top J16 Hardware Chassis Accent Bar */}
-      <div
-        className={`h-1 w-full ${isLinked
-            ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500"
-            : "bg-gradient-to-r from-neutral-700 via-amber-500/50 to-neutral-700"
-          }`}
-      />
-
-      {/* Subtle Hardware Side Ribs (J16 Tracker Aesthetic) */}
-      <div className="pointer-events-none absolute inset-y-8 left-0 flex flex-col justify-center gap-1 opacity-25">
-        <span className="h-3 w-0.5 rounded-r bg-neutral-400" />
-        <span className="h-3 w-0.5 rounded-r bg-neutral-400" />
-        <span className="h-3 w-0.5 rounded-r bg-neutral-400" />
-      </div>
-      <div className="pointer-events-none absolute inset-y-8 right-0 flex flex-col justify-center gap-1 opacity-25">
-        <span className="h-3 w-0.5 rounded-l bg-neutral-400" />
-        <span className="h-3 w-0.5 rounded-l bg-neutral-400" />
-        <span className="h-3 w-0.5 rounded-l bg-neutral-400" />
-      </div>
-
       <div className="p-4 space-y-3">
-        {/* Header: J16 Model Identity + Hardware LEDs */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={`flex size-9 shrink-0 items-center justify-center rounded-xl border ${isLinked
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                  : "border-border/80 bg-secondary/80 text-muted-foreground"
-                }`}
+        {/* Top Row: Status + Badges + Relative Time */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${
+                hasLastPosition
+                  ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                  : device.status === "standby"
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                    : "border-border bg-secondary text-muted-foreground"
+              }`}
             >
-              <Cpu className="size-4.5" />
-            </div>
+              <span
+                className={`size-1.5 rounded-full ${
+                  hasLastPosition
+                    ? "bg-emerald-400 animate-pulse"
+                    : device.status === "standby"
+                      ? "bg-amber-400"
+                      : "bg-neutral-500"
+                }`}
+              />
+              {statusLabel}
+            </span>
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-black uppercase tracking-wider text-foreground">
-                  {isJ16 ? "J16 4G" : "Tracker"}
-                </span>
-                <span
-                  className={`rounded px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider border ${isLinked
-                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                    }`}
-                >
-                  {isLinked ? "Vinculado" : "Em Estoque"}
-                </span>
-                {device.discovered_via_broker && (
-                  <span
-                    className="inline-flex items-center gap-0.5 rounded bg-sky-500/10 px-1.5 py-0.2 text-[9px] font-bold uppercase text-sky-400 border border-sky-500/25"
-                    title="Descoberto via Broker"
-                  >
-                    <Radio className="size-2.5" />
-                    Broker
-                  </span>
-                )}
-              </div>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">
-                {device.firmware_version || "J16-4G"}
-                {device.last_seen_at || position?.timestamp
-                  ? ` · ${formatRelativeTime(device.last_seen_at || position?.timestamp || "")}`
-                  : ""}
-              </p>
-            </div>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                isLinked
+                  ? "border-blue-500/25 bg-blue-500/10 text-blue-400"
+                  : "border-amber-500/25 bg-amber-500/10 text-amber-400"
+              }`}
+            >
+              {isLinked ? "Vinculado" : "Estoque"}
+            </span>
+
+            {device.discovered_via_broker && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-400"
+                title="Descoberto via Broker"
+              >
+                <Radio className="size-2.5" />
+                Broker
+              </span>
+            )}
           </div>
 
-          {/* J16 Physical LEDs: GPS (Green), GSM (Amber), PWR (Red) */}
-          <div
-            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-2 py-1 shrink-0"
-            title="LEDs do Rastreador: GPS / GSM / Energia"
-          >
-            <span
-              title={hasLastPosition ? "GPS Fixado" : "GPS sem sinal"}
-              className={`size-2 rounded-full ${hasLastPosition
-                  ? "bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.9)]"
-                  : "bg-neutral-700"
-                }`}
-            />
-            <span
-              title={
-                device.status === "active"
-                  ? "GSM 4G Ativo"
-                  : "GSM em Standby/Inativo"
-              }
-              className={`size-2 rounded-full ${device.status === "active"
-                  ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.85)]"
-                  : "bg-neutral-700"
-                }`}
-            />
-            <span
-              title="Alimentação DC 9-90V"
-              className="size-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.8)]"
-            />
-          </div>
+          {lastActivity && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground shrink-0">
+              <Clock className="size-2.5" />
+              {formatRelativeTime(lastActivity)}
+            </span>
+          )}
         </div>
 
-        {/* J16 Hardware Label Plate: IMEI + Status */}
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-neutral-900/90 px-3 py-2 shadow-inner">
+        {/* IMEI / Serial Row */}
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-background/60 px-3 py-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">
-                IMEI
-              </span>
-              <span
-                className={`rounded-full px-1.5 py-0 text-[8px] font-black uppercase tracking-wider ${device.status === "active"
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : device.status === "standby"
-                      ? "bg-amber-500/15 text-amber-400"
-                      : "bg-neutral-800 text-neutral-400"
-                  }`}
-              >
-                {device.status === "active"
-                  ? "Ativo"
-                  : device.status === "standby"
-                    ? "Standby"
-                    : "Inativo"}
-              </span>
-            </div>
+            <span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              IMEI / Serial
+            </span>
             <p className="font-mono text-xs sm:text-sm font-bold tracking-wider text-foreground truncate">
               {device.serial_number}
             </p>
@@ -193,7 +142,7 @@ export function DeviceCard({
             <button
               type="button"
               onClick={handleCopyImei}
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-background/80 text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
+              className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-secondary/80 text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
               title="Copiar IMEI"
             >
               {copied ? (
@@ -205,12 +154,23 @@ export function DeviceCard({
           )}
         </div>
 
-        {/* Vehicle Binding Section (Differentiated when linked vs unlinked) */}
+        {/* Manager Assignment (visible to Platform Admin) */}
+        {showManager && (
+          <div className="flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 truncate">
+              <Building2 className="size-3 text-violet-400 shrink-0" />
+              <span className="truncate font-medium text-foreground/85">
+                {device.manager_email || "Exclusivo Admin (Sem gerente)"}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {/* Vehicle & Rider Unified Block */}
         {moto ? (
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/20 px-3 py-2.5 space-y-2">
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/15 px-3 py-2.5 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              {/* Mercosul Plate */}
-              <div className="inline-flex shrink-0 items-center overflow-hidden rounded-md border border-blue-500/60 bg-neutral-950 text-[11px] font-extrabold shadow-sm">
+              <div className="inline-flex shrink-0 items-center overflow-hidden rounded-md border border-blue-500/60 bg-neutral-950 text-[11px] font-extrabold">
                 <span className="bg-blue-600 px-1 py-0.5 text-[8px] font-black text-white uppercase">
                   BR
                 </span>
@@ -231,7 +191,7 @@ export function DeviceCard({
                     </span>
                   ) : (
                     <span>
-                      {moto.year} • {moto.color}
+                      {moto.year} · {moto.color}
                     </span>
                   )}
                 </p>
@@ -284,75 +244,40 @@ export function DeviceCard({
           </div>
         )}
 
-        {/* Expandable Details (Coordinates & Telemetry only shown when clicked) */}
-        {showDetails && (
-          <div className="rounded-xl border border-border/70 bg-black/50 p-3 space-y-2 text-[11px] animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                <MapPin className="size-3 text-primary" />
-                Coordenadas GPS
+        {/* Unified Telemetry Summary Line */}
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-secondary/40 px-2.5 py-1.5 text-[10px] text-muted-foreground">
+          {position ? (
+            <>
+              <span className="inline-flex items-center gap-1 font-mono text-foreground/90 truncate">
+                <MapPin className="size-3 text-primary shrink-0" />
+                {position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}
               </span>
-              {hasLastPosition ? (
-                <span className="font-mono font-semibold text-foreground">
-                  {position!.latitude.toFixed(5)}, {position!.longitude.toFixed(5)}
-                </span>
-              ) : (
-                <span className="italic text-neutral-500">Sem coordenadas</span>
-              )}
-            </div>
-
-            {position && (
-              <div className="flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Activity className="size-3 text-primary" />
-                  Velocidade:{" "}
-                  <b className="text-foreground">
-                    {position.speed ? `${position.speed} km/h` : "0 km/h"}
-                  </b>
-                </span>
-                {position.timestamp && (
-                  <span className="flex items-center gap-1 font-mono">
-                    <Clock className="size-3 text-primary/80" />
-                    {formatFullDateTime(position.timestamp)}
-                  </span>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-1.5 text-[10px] text-muted-foreground">
-              <span className="font-mono">
-                {device.protocol || "J16"}
-                {device.last_source_ip ? ` · IP ${device.last_source_ip}` : ""}
+              <span className="inline-flex items-center gap-1 font-bold text-primary shrink-0">
+                <Activity className="size-3" />
+                {position.speed ? `${position.speed} km/h` : "0 km/h"}
               </span>
-            </div>
-          </div>
-        )}
+            </>
+          ) : (
+            <span className="inline-flex items-center gap-1 italic text-neutral-500">
+              <MapPin className="size-3 shrink-0" />
+              Sem coordenadas recentes
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Compact Card Footer */}
-      <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-black/40 px-4 py-2.5">
-        <button
-          type="button"
-          onClick={() => setShowDetails((prev) => !prev)}
-          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-        >
-          <Info className="size-3.5 text-primary" />
-          <span>{showDetails ? "Ocultar info" : "Mais info"}</span>
-          <ChevronDown
-            className={`size-3.5 transition-transform duration-200 ${showDetails ? "rotate-180" : ""
-              }`}
-          />
-        </button>
-
+      <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-background/40 px-4 py-2.5">
         <div className="flex items-center gap-1.5">
           {onOpenAudit && (
             <button
               type="button"
               onClick={() => onOpenAudit(device)}
-              className="flex size-7 items-center justify-center rounded-lg border border-border/70 bg-secondary/80 text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-secondary/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
               title="Auditoria de comunicações"
             >
-              <History className="size-3.5" />
+              <History className="size-3" />
+              <span>Auditoria</span>
             </button>
           )}
 
@@ -360,46 +285,31 @@ export function DeviceCard({
             <button
               type="button"
               onClick={() => onOpenTransfer(device)}
-              className="flex size-7 items-center justify-center rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
-              title="Transferir para Tenant Manager"
+              className="inline-flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
+              title="Transferir para Gerente"
             >
-              <ArrowRightLeft className="size-3.5" />
+              <ArrowRightLeft className="size-3" />
+              <span>Transferir</span>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => onOpenMap(device)}
-            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${hasLastPosition
-                ? "border-primary/50 bg-primary/15 text-primary hover:bg-primary hover:text-white"
-                : "border-border/70 bg-secondary/80 text-muted-foreground hover:border-primary hover:text-foreground"
-              }`}
-            title="Ver posição no mapa"
-          >
-            <Eye className="size-3.5" />
-            <span>Mapa</span>
-          </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => onOpenMap(device)}
+          className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            hasLastPosition
+              ? "border-primary/50 bg-primary/15 text-primary hover:bg-primary hover:text-white"
+              : "border-border/70 bg-secondary/80 text-muted-foreground hover:border-primary hover:text-foreground"
+          }`}
+          title="Ver posição no mapa"
+        >
+          <Eye className="size-3.5" />
+          <span>Mapa</span>
+        </button>
       </div>
     </article>
   );
-}
-
-function formatFullDateTime(isoString: string): string {
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-    return d.toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  } catch {
-    return isoString;
-  }
 }
 
 function formatRelativeTime(isoString: string): string {

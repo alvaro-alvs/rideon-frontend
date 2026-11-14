@@ -1,5 +1,5 @@
 export type PaymentMethod = "card" | "pix" | "manual";
-export type GatewayProvider = "infinitepay" | "mercadopago" | "manual";
+export type GatewayProvider = "picpay" | "mercadopago" | "manual";
 export type BillingCycle = "monthly" | "yearly" | "one_time";
 export type ComplianceStatus = "compliant" | "overdue" | "pending";
 export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";

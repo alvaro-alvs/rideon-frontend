@@ -132,7 +132,10 @@ export default function CustomerFinancialPage() {
     return () => clearInterval(timer);
   }, [pixData, cardLink, billing?.status, loadBilling]);
 
-  const handleCheckout = async (method: "card" | "pix") => {
+  const handleCheckout = async (
+    method: "card" | "pix",
+    opts?: { cardToken?: string; installments?: number },
+  ) => {
     setPayingMethod(method);
     setCheckoutError("");
     setCardLink("");
@@ -140,7 +143,11 @@ export default function CustomerFinancialPage() {
       const res = await fetch("/api/financial/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payment_method: method }),
+        body: JSON.stringify({
+          payment_method: method,
+          card_token: opts?.cardToken || "",
+          installments: opts?.installments || 1,
+        }),
       });
       const body = (await res.json().catch(() => null)) as
         | (CheckoutResponse & { error?: { message?: string }; message?: string })
@@ -152,11 +159,14 @@ export default function CustomerFinancialPage() {
         return;
       }
 
+      const paidNow = Boolean(body?.Paid || body?.paid);
       const checkoutUrl = body?.CheckoutURL || body?.checkout_url || "";
       const qrCode = body?.PixQRCode || body?.pix_qr_code || "";
       const copyPaste = body?.PixCopyPaste || body?.pix_copy_paste || "";
 
-      if (method === "card" && checkoutUrl) {
+      if (paidNow) {
+        setPaymentConfirmed(true);
+      } else if (method === "card" && checkoutUrl) {
         setCardLink(checkoutUrl);
         window.open(checkoutUrl, "_blank", "noopener,noreferrer");
       } else if (method === "pix" && (qrCode || copyPaste)) {
@@ -187,7 +197,7 @@ export default function CustomerFinancialPage() {
     ? Math.round(billing.amount_cents / 12)
     : 0;
   const cycleLabel = isYearly ? "Anual" : isOneTime ? "Cobrança única" : "Mensal";
-  const infinitePayReady = Boolean(billing?.gateways_configured?.infinitepay);
+  const picpayReady = Boolean(billing?.gateways_configured?.picpay);
   const mercadoPagoReady = Boolean(billing?.gateways_configured?.mercadopago);
   const canPayAmount = (billing?.amount_cents ?? 0) > 0;
 
@@ -339,7 +349,7 @@ export default function CustomerFinancialPage() {
                   <span className="text-[11px] text-muted-foreground">
                     Gateway:{" "}
                     {isCard
-                      ? "InfinitePay"
+                      ? "PicPay"
                       : billing.payment_method === "pix"
                         ? "Mercado Pago"
                         : "Gerente"}
@@ -352,17 +362,17 @@ export default function CustomerFinancialPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">
                     Pagamento seguro no crédito via{" "}
-                    <strong>InfinitePay</strong>.
+                    <strong>PicPay</strong> (no próprio site).
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={!infinitePayReady || !canPayAmount || payingMethod !== null}
+                      disabled={!picpayReady || !canPayAmount || payingMethod !== null}
                       onClick={() => setShowCardModal(true)}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CreditCard className="size-3.5" />
-                      {payingMethod === "card" ? "Gerando link..." : "Pagar com Cartão"}
+                      {payingMethod === "card" ? "Processando..." : "Pagar com Cartão"}
                     </button>
                   </div>
                 </div>
@@ -454,8 +464,11 @@ export default function CustomerFinancialPage() {
           planLabel={`${billing.plan_name} (${cycleLabel})`}
           submitting={payingMethod === "card"}
           onClose={() => setShowCardModal(false)}
-          onProceedToCheckout={async () => {
-            await handleCheckout("card");
+          onProceedToCheckout={async (cardToken) => {
+            await handleCheckout("card", {
+              cardToken,
+              installments: showMonthlyInstallment ? 12 : 1,
+            });
             setShowCardModal(false);
           }}
         />

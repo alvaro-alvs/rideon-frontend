@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Info,
   Lock,
-  MapPin,
   Palette,
   Phone,
   Plus,
@@ -407,7 +406,6 @@ export default function VehiclesPage() {
 
   // Regra de Negócio: Cliente comum atingiu a cota de veículos permitida pelo tenant/manager
   const hasReachedLimit = !isAdmin && motorcycles.length >= vehicleLimit;
-  const hasReachedSingleVehicleLimit = hasReachedLimit;
 
   // Filtragem e Paginação para Admin
   const filteredMotorcycles = motorcycles.filter((moto) => {
@@ -534,10 +532,10 @@ export default function VehiclesPage() {
                     <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
                       {motorcycles.length > 0
                         ? `${Math.round(
-                            (motorcycles.filter((m) => Boolean(m.device)).length /
-                              motorcycles.length) *
-                              100,
-                          )}% Vinculados`
+                          (motorcycles.filter((m) => Boolean(m.device)).length /
+                            motorcycles.length) *
+                          100,
+                        )}% Vinculados`
                         : "0%"}
                     </span>
                   </div>
@@ -693,7 +691,7 @@ export default function VehiclesPage() {
                             type="button"
                             onClick={() => setSelectedTelemetryMoto(moto)}
                             className="inline-flex items-center gap-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-all cursor-pointer"
-                            title="Abrir telemetria ao vivo"
+                            title="Abrir telemetria"
                           >
                             <Activity className="size-3.5" />
                             Telemetria
@@ -901,72 +899,6 @@ export default function VehiclesPage() {
                 </div>
               </div>
             )}
-          </section>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SEÇÃO 2: BANNER DE PROTEÇÃO ATIVA (LIMITE DE VEÍCULOS PARA CLIENTE)       */}
-        {/* ========================================================================= */}
-        {hasReachedSingleVehicleLimit && view !== "loading" && (
-          <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-r from-card via-card/90 to-emerald-950/20 p-6 shadow-xl backdrop-blur-xl sm:p-8">
-            <div className="pointer-events-none absolute -right-12 -top-12 size-48 rounded-full bg-emerald-500/10 blur-2xl" />
-
-            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="relative flex size-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner">
-                  <ShieldCheck className="size-7" />
-                  <span className="absolute -right-1 -top-1 flex size-3">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                      Proteção RideOn Ativa • Limite de {vehicleLimit} {vehicleLimit === 1 ? "Veículo" : "Veículos"} Atingido
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-black uppercase tracking-tight text-foreground sm:text-2xl">
-                    {motorcycles.length === 1 ? "Sua moto está monitorada e segura" : "Seus veículos estão monitorados e seguros"}
-                  </h3>
-                  <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                    {vehicleLimit === 1
-                      ? "Clientes possuem direito a 1 motocicleta conectada simultaneamente por padrão. Seu veículo já está vinculado à central de telemetria com rastreamento GPS e alerta antifurto."
-                      : `Sua conta possui direito a ${vehicleLimit} veículos cadastrados simultaneamente (${motorcycles.length} de ${vehicleLimit} em uso). Para cadastrar veículos adicionais, solicite o aumento do limite ao gestor da sua organização.`}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all duration-200 hover:bg-primary/90 hover:scale-[1.02]"
-                >
-                  <MapPin className="size-4" />
-                  <span>Acessar Painel de Telemetria</span>
-                  <ChevronRight className="size-4" />
-                </Link>
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForm(true)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary px-4 py-3 text-xs font-black uppercase tracking-wider text-foreground transition-all duration-200 hover:border-primary hover:text-primary cursor-pointer"
-                  >
-                    <Plus className="size-4" />
-                    <span>Cadastrar Outro Veículo</span>
-                  </button>
-                ) : (
-                  <div
-                    className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-bold uppercase tracking-wider text-amber-400"
-                    title={`Limite de ${vehicleLimit} veículo(s) atingido`}
-                  >
-                    <Lock className="size-4" />
-                    <span>Limite Atingido ({motorcycles.length}/{vehicleLimit})</span>
-                  </div>
-                )}
-              </div>
-            </div>
           </section>
         )}
 

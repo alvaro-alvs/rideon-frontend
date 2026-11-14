@@ -562,7 +562,7 @@ export default function AdminFinancialPage() {
                     onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                     className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
                   >
-                    <option value="card">Cartão (InfinitePay)</option>
+                    <option value="card">Cartão (PicPay)</option>
                     <option value="pix">PIX (Mercado Pago)</option>
                     <option value="manual">Manual / Dinheiro</option>
                   </select>

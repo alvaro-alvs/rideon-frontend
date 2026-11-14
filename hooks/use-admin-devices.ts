@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { notifyAuthChange } from "@/hooks/use-current-user";
 import type { AdminDevicesResponse, Device } from "@/lib/types/device";
 
-export type FilterStatus = "all" | "active" | "inactive" | "unlinked" | "j16" | "broker" | "pending_transfer";
+export type FilterStatus = "all" | "active" | "inactive" | "unlinked" | "broker" | "pending_transfer";
 
 export function useAdminDevices(pollIntervalSeconds: number = 30) {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -107,16 +107,10 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
   // Filtragem e busca
   const filteredDevices = useMemo(() => {
     return devices.filter((device) => {
-      const isJ16 =
-        !device.protocol ||
-        device.protocol.toUpperCase() === "GT06" ||
-        device.protocol.toUpperCase().includes("J16");
-
       // Filtro de status
       if (filterStatus === "active" && !device.last_position) return false;
       if (filterStatus === "inactive" && device.last_position) return false;
       if (filterStatus === "unlinked" && device.motorcycle) return false;
-      if (filterStatus === "j16" && !isJ16) return false;
       if (filterStatus === "broker" && !device.discovered_via_broker) return false;
       if (filterStatus === "pending_transfer" && Boolean(device.manager_id)) return false;
 
@@ -125,19 +119,19 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
       const q = searchQuery.toLowerCase();
 
       const matchesSerial = device.serial_number.toLowerCase().includes(q);
-      const matchesProtocol = device.protocol?.toLowerCase().includes(q);
       const matchesPlate = device.motorcycle?.license_plate.toLowerCase().includes(q);
       const matchesMotoModel = device.motorcycle
         ? `${device.motorcycle.brand} ${device.motorcycle.model}`.toLowerCase().includes(q)
         : false;
       const matchesRider = device.motorcycle?.rider?.name.toLowerCase().includes(q);
+      const matchesManager = device.manager_email?.toLowerCase().includes(q);
 
       return (
         matchesSerial ||
-        Boolean(matchesProtocol) ||
         Boolean(matchesPlate) ||
         Boolean(matchesMotoModel) ||
-        Boolean(matchesRider)
+        Boolean(matchesRider) ||
+        Boolean(matchesManager)
       );
     });
   }, [devices, filterStatus, searchQuery]);
@@ -147,11 +141,7 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
     const activeCount = devices.filter((d) => Boolean(d.last_position)).length;
     const inactiveCount = devices.filter((d) => !d.last_position && Boolean(d.motorcycle)).length;
     const unlinkedCount = devices.filter((d) => !d.motorcycle).length;
-    const j16Count = devices.filter((d) =>
-      !d.protocol ||
-      d.protocol.toUpperCase() === "GT06" ||
-      d.protocol.toUpperCase().includes("J16")
-    ).length;
+    const linkedCount = total - unlinkedCount;
     const brokerCount = devices.filter((d) => Boolean(d.discovered_via_broker)).length;
     const pendingTransferCount = devices.filter((d) => !d.manager_id).length;
 
@@ -160,7 +150,7 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
       activeCount,
       inactiveCount,
       unlinkedCount,
-      j16Count,
+      linkedCount,
       brokerCount,
       pendingTransferCount,
     };

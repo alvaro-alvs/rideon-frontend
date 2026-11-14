@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowRightLeft,
   Bike,
+  Building2,
   CheckCircle2,
   Copy,
   Cpu,
@@ -19,20 +20,24 @@ import {
   Radio,
   RefreshCw,
   Search,
-  ShieldAlert,
-  Sparkles,
+  ShieldCheck,
   Unlink,
+  User,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
+import { useTenant } from "@/app/components/tenant-provider";
 import { DeviceCard } from "@/app/admin/devices/components/device-card";
-import { canManageDeviceTransfers, isPlatformOrTenantAdmin } from "@/lib/auth";
+import {
+  canManageDeviceTransfers,
+  isMasterAdmin,
+  isPlatformOrTenantAdmin,
+} from "@/lib/auth";
 import { DeviceAuditModal } from "@/app/admin/devices/components/device-audit-modal";
 import { DeviceCreateModal } from "@/app/admin/devices/components/device-create-modal";
 import { DeviceLinkModal } from "@/app/admin/devices/components/device-link-modal";
 import { DeviceMapModal } from "@/app/admin/devices/components/device-map-modal";
 import { DeviceTransferModal } from "@/app/admin/devices/components/device-transfer-modal";
-import { J16SpecBanner } from "@/app/admin/devices/components/j16-spec-banner";
 import { useAdminDevices } from "@/hooks/use-admin-devices";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { Device } from "@/lib/types/device";
@@ -40,6 +45,7 @@ import type { Device } from "@/lib/types/device";
 export default function AdminDevicesPage() {
   const router = useRouter();
   const currentUser = useCurrentUser();
+  const { tenant } = useTenant();
 
   const {
     devices,
@@ -70,6 +76,9 @@ export default function AdminDevicesPage() {
   }>({ open: false, device: null });
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  const isMaster =
+    currentUser.status === "authenticated" &&
+    isMasterAdmin(currentUser.user.role);
   const canTransfer =
     currentUser.status === "authenticated" &&
     canManageDeviceTransfers(currentUser.user.role);
@@ -123,83 +132,73 @@ export default function AdminDevicesPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-7xl py-4 space-y-8">
+      <div className="mx-auto max-w-7xl py-4 space-y-6">
         {/* ========================================================================= */}
-        {/* HERO HEADER & STATS SUMMARY                                              */}
+        {/* UNIFIED HEADER & COMPACT METRICS                                          */}
         {/* ========================================================================= */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-          {/* Ambient Cyber Grid & Glow Accents */}
+        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
           <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
 
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
-                  <ShieldAlert className="size-3.5" />
-                  Painel Administrativo Restrito
+          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-primary border border-primary/20">
+                  <ShieldCheck className="size-3.5" />
+                  Controle Geral
                 </span>
-                <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary border border-primary/30">
-                  Admin
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
-                  <Sparkles className="size-2.5" />
-                  Base J16 4G Homologada
+                <span className="rounded-full bg-secondary/90 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-foreground border border-border/80">
+                  {isMaster
+                    ? "Admin Global"
+                    : `Gerente · ${tenant.branding?.brand_name || "Frota"}`}
                 </span>
               </div>
 
-              <h1 className="text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
-                Dispositivos & Telemetria
+              <h1 className="text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
+                Equipamentos & Telemetria
               </h1>
 
               <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                Gerenciamento de hardware, inventário de rastreadores GPS, telemetria em tempo real e modelo base J16 4G LTE.
+                {isMaster
+                  ? "Visão unificada dos rastreadores da plataforma, vínculos com motocicletas, telemetria e repasses."
+                  : "Visão unificada dos equipamentos da sua frota, vínculos com motocicletas e telemetria em tempo real."}
               </p>
             </div>
 
-            {/* Action Tools: New Device Button + Broker Audit + Auto-refresh */}
-            <div className="flex flex-wrap items-center gap-3">
+            {/* Action Tools */}
+            <div className="flex flex-wrap items-center gap-2.5">
               {canTransfer && (
                 <button
                   type="button"
                   onClick={() => setAuditModalState({ open: true, device: null })}
-                  className="flex items-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-400 transition-all hover:bg-emerald-500/20 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/20 cursor-pointer"
                 >
-                  <History className="size-4" />
-                  <span>Auditoria Broker</span>
+                  <History className="size-3.5" />
+                  <span>Auditoria</span>
                 </button>
               )}
 
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/30 transition-all hover:bg-primary/90 hover:scale-[1.02] cursor-pointer"
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2.5 text-xs font-bold text-muted-foreground backdrop-blur-md transition-colors hover:border-border hover:text-foreground cursor-pointer"
+                title={autoRefresh ? "Pausar atualização automática" : "Ativar atualização automática"}
               >
-                <Plus className="size-4 stroke-[3]" />
-                <span>Novo Dispositivo</span>
-              </button>
-
-              <div className="flex items-center gap-2 rounded-2xl border border-border/80 bg-background/60 px-3.5 py-2.5 text-xs text-muted-foreground backdrop-blur-md">
                 <span
                   className={`size-2 rounded-full ${
                     autoRefresh ? "bg-emerald-500 animate-pulse" : "bg-neutral-600"
                   }`}
                 />
-                <span className="hidden sm:inline">Auto-refresh</span>
-                <button
-                  type="button"
-                  onClick={() => setAutoRefresh(!autoRefresh)}
-                  className="text-[11px] font-bold uppercase text-primary hover:underline cursor-pointer"
-                >
-                  {autoRefresh ? "Pausar" : "Ativar"}
-                </button>
-              </div>
+                <span className="text-[11px] uppercase tracking-wider">
+                  {autoRefresh ? "Ao vivo" : "Pausado"}
+                </span>
+              </button>
 
               <button
                 type="button"
                 onClick={() => refetch()}
                 disabled={isRefetching || isLoading}
-                className="flex items-center gap-2 rounded-2xl border border-border/80 bg-background/60 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground backdrop-blur-md transition-colors hover:border-primary hover:bg-primary hover:text-white disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-background/60 px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground backdrop-blur-md transition-colors hover:border-primary hover:bg-primary hover:text-white disabled:opacity-50 cursor-pointer"
                 title="Atualizar lista"
               >
                 <RefreshCw
@@ -207,7 +206,113 @@ export default function AdminDevicesPage() {
                 />
                 <span className="hidden sm:inline">Atualizar</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 cursor-pointer"
+              >
+                <Plus className="size-4 stroke-[3]" />
+                <span>Novo Equipamento</span>
+              </button>
             </div>
+          </div>
+
+          {/* Unified Compact Metrics */}
+          <div className="relative z-10 mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => setFilterStatus("all")}
+              className={`flex items-center justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                filterStatus === "all"
+                  ? "border-primary/50 bg-background/80 shadow-sm"
+                  : "border-border/70 bg-background/50 hover:border-border"
+              }`}
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Total
+                </p>
+                <p className="mt-1 text-2xl font-black text-foreground">
+                  {isLoading ? "…" : stats.total}
+                </p>
+                <p className="text-[11px] text-muted-foreground">no inventário</p>
+              </div>
+              <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Cpu className="size-4" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterStatus("active")}
+              className={`flex items-center justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                filterStatus === "active"
+                  ? "border-emerald-500/60 bg-emerald-500/10 shadow-sm"
+                  : "border-emerald-500/25 bg-background/50 hover:border-emerald-500/45"
+              }`}
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                  Com Posição
+                </p>
+                <p className="mt-1 text-2xl font-black text-emerald-400">
+                  {isLoading ? "…" : stats.activeCount}
+                </p>
+                <p className="text-[11px] text-muted-foreground">transmitindo GPS</p>
+              </div>
+              <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+                <Activity className="size-4" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterStatus("inactive")}
+              className={`flex items-center justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                filterStatus === "inactive"
+                  ? "border-primary/50 bg-background/80 shadow-sm"
+                  : "border-border/70 bg-background/50 hover:border-border"
+              }`}
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Vinculados
+                </p>
+                <p className="mt-1 text-2xl font-black text-foreground">
+                  {isLoading ? "…" : stats.linkedCount}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {stats.inactiveCount} sem sinal
+                </p>
+              </div>
+              <div className="flex size-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                <Bike className="size-4" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterStatus("unlinked")}
+              className={`flex items-center justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                filterStatus === "unlinked"
+                  ? "border-amber-500/60 bg-amber-500/10 shadow-sm"
+                  : "border-border/70 bg-background/50 hover:border-amber-500/40"
+              }`}
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Em Estoque
+                </p>
+                <p className="mt-1 text-2xl font-black text-foreground">
+                  {isLoading ? "…" : stats.unlinkedCount}
+                </p>
+                <p className="text-[11px] text-muted-foreground">sem veículo</p>
+              </div>
+              <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                <Radio className="size-4" />
+              </div>
+            </button>
           </div>
         </header>
 
@@ -220,134 +325,28 @@ export default function AdminDevicesPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* METRICS SUMMARY CARDS                                                     */}
-        {/* ========================================================================= */}
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
-          {/* Total Dispositivos */}
-          <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-card/80 p-4.5 shadow-sm backdrop-blur-md">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Total Dispositivos
-              </span>
-              <div className="flex size-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Cpu className="size-4" />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl sm:text-3xl font-black text-foreground">
-              {isLoading ? "..." : stats.total}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Rastreadores no inventário
-            </p>
-          </div>
-
-          {/* Com Posição GPS */}
-          <div className="relative overflow-hidden flex flex-col justify-between rounded-2xl border border-emerald-500/30 bg-card/80 p-4.5 shadow-sm backdrop-blur-md">
-            <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                  GPS Ativo
-                </span>
-              </div>
-              <div className="flex size-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
-                <Activity className="size-4" />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl sm:text-3xl font-black text-emerald-400">
-              {isLoading ? "..." : stats.activeCount}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Transmitindo coordenadas
-            </p>
-          </div>
-
-          {/* Sem Posição / Standby */}
-          <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-card/80 p-4.5 shadow-sm backdrop-blur-md">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-neutral-500" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Sem Posição
-                </span>
-              </div>
-              <div className="flex size-8 items-center justify-center rounded-xl bg-secondary text-muted-foreground">
-                <Radio className="size-4" />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl sm:text-3xl font-black text-foreground">
-              {isLoading ? "..." : stats.inactiveCount}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Standby ou offline
-            </p>
-          </div>
-
-          {/* Motos Vinculadas */}
-          <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-card/80 p-4.5 shadow-sm backdrop-blur-md">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Motos Vinculadas
-              </span>
-              <div className="flex size-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-                <Bike className="size-4" />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl sm:text-3xl font-black text-foreground">
-              {isLoading ? "..." : stats.total - stats.unlinkedCount}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {stats.unlinkedCount} em estoque
-            </p>
-          </div>
-
-          {/* Base J16 Standard */}
-          <div className="relative overflow-hidden flex flex-col justify-between rounded-2xl border border-primary/40 bg-primary/5 p-4.5 shadow-sm backdrop-blur-md">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-widest text-primary">
-                Modelos J16 4G
-              </span>
-              <div className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                <Sparkles className="size-4" />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl sm:text-3xl font-black text-primary">
-              {isLoading ? "..." : stats.j16Count}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Homologado 4G LTE
-            </p>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* J16 HARDWARE SPECIFICATION & PINOUT SHOWCASE BANNER                       */}
-        {/* ========================================================================= */}
-        <J16SpecBanner />
-
-        {/* ========================================================================= */}
         {/* SEARCH & FILTER TOOLBAR                                                   */}
         {/* ========================================================================= */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-3xl border border-border/80 bg-card/90 p-4.5 shadow-md backdrop-blur-md">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-border/80 bg-card/85 p-3.5 shadow-md backdrop-blur-md">
           {/* Search Box */}
-          <div className="relative flex-1 max-w-lg">
+          <div className="relative flex-1 lg:max-w-md">
             <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por IMEI, Serial, Placa, Modelo ou Piloto..."
-              className="w-full rounded-2xl border border-border/80 bg-secondary/80 py-2.5 pl-10 pr-10 text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              placeholder={
+                isMaster
+                  ? "Buscar por IMEI, placa, modelo, piloto ou gerente..."
+                  : "Buscar por IMEI, placa, modelo ou piloto..."
+              }
+              className="w-full rounded-xl border border-border/80 bg-secondary/80 py-2 pl-10 pr-12 text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 Limpar
               </button>
@@ -387,21 +386,15 @@ export default function AdminDevicesPage() {
                 count={stats.unlinkedCount}
               />
 
-              <FilterTabButton
-                active={filterStatus === "j16"}
-                onClick={() => setFilterStatus("j16")}
-                label="J16 4G"
-                count={stats.j16Count}
-                dotColor="bg-primary"
-              />
-
-              <FilterTabButton
-                active={filterStatus === "broker"}
-                onClick={() => setFilterStatus("broker")}
-                label="Via Broker"
-                count={stats.brokerCount}
-                dotColor="bg-emerald-400"
-              />
+              {(stats.brokerCount > 0 || filterStatus === "broker") && (
+                <FilterTabButton
+                  active={filterStatus === "broker"}
+                  onClick={() => setFilterStatus("broker")}
+                  label="Via Broker"
+                  count={stats.brokerCount}
+                  dotColor="bg-sky-400"
+                />
+              )}
 
               {canTransfer && (
                 <FilterTabButton
@@ -409,7 +402,7 @@ export default function AdminDevicesPage() {
                   onClick={() => setFilterStatus("pending_transfer")}
                   label="Exclusivo Admin"
                   count={stats.pendingTransferCount}
-                  dotColor="bg-sky-400"
+                  dotColor="bg-violet-400"
                 />
               )}
             </div>
@@ -447,10 +440,10 @@ export default function AdminDevicesPage() {
         {/* ========================================================================= */}
         {/* DEVICES LIST SECTION (GRID OR TABLE VIEW)                                */}
         {/* ========================================================================= */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between text-xs text-muted-foreground px-2">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
             <span>
-              Exibindo <b>{filteredDevices.length}</b> de <b>{stats.total}</b> dispositivos
+              Exibindo <b>{filteredDevices.length}</b> de <b>{stats.total}</b> equipamentos
             </span>
             {lastUpdated && (
               <span className="text-[11px] font-mono">
@@ -463,37 +456,37 @@ export default function AdminDevicesPage() {
             <div className="rounded-3xl border border-border/80 bg-card/60 p-16 text-center backdrop-blur-md">
               <RefreshCw className="mx-auto size-10 animate-spin text-primary" />
               <p className="mt-4 text-sm font-black uppercase tracking-wider text-muted-foreground">
-                Carregando telemetria e inventário de dispositivos...
+                Carregando equipamentos e telemetria...
               </p>
             </div>
           ) : filteredDevices.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-border/80 bg-card/40 p-16 text-center backdrop-blur-md space-y-4">
-              <div className="mx-auto flex size-16 items-center justify-center rounded-3xl bg-secondary/80 text-muted-foreground">
-                <Cpu className="size-8 text-primary/60" />
+            <div className="rounded-3xl border border-dashed border-border/80 bg-card/40 p-14 text-center backdrop-blur-md space-y-4">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-secondary/80 text-muted-foreground">
+                <Cpu className="size-7 text-primary/60" />
               </div>
               <div>
-                <h3 className="text-lg font-black uppercase text-foreground">
-                  Nenhum dispositivo encontrado
+                <h3 className="text-base font-black uppercase text-foreground">
+                  Nenhum equipamento encontrado
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
                   {searchQuery || filterStatus !== "all"
                     ? "Tente ajustar seus termos de busca ou filtros selecionados."
-                    : "Comece cadastrando o primeiro rastreador J16 4G da frota."}
+                    : "Comece cadastrando o primeiro rastreador da frota."}
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all cursor-pointer"
               >
                 <Plus className="size-4 stroke-[3]" />
-                <span>Cadastrar Novo Rastreador</span>
+                <span>Cadastrar Equipamento</span>
               </button>
             </div>
           ) : viewMode === "grid" ? (
             /* GRID VIEW */
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 animate-in fade-in duration-300">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 animate-in fade-in duration-300">
               {filteredDevices.map((device) => (
                 <DeviceCard
                   key={device.id}
@@ -504,23 +497,23 @@ export default function AdminDevicesPage() {
                   onOpenTransfer={(d) => setSelectedDeviceForTransfer(d)}
                   onOpenAudit={(d) => setAuditModalState({ open: true, device: d })}
                   canManageTransfers={canTransfer}
+                  showManager={isMaster}
                 />
               ))}
             </div>
           ) : (
-            /* TABLE VIEW */
-            <div className="overflow-hidden rounded-3xl border border-border/80 bg-card/80 shadow-md backdrop-blur-md animate-in fade-in duration-300">
+            /* UNIFIED TABLE VIEW */
+            <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/85 shadow-md backdrop-blur-md animate-in fade-in duration-300">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-border/70 bg-secondary/70 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                     <tr>
-                      <th className="py-3.5 pl-6 pr-3">Status / LED</th>
-                      <th className="px-3 py-3.5">IMEI / Serial</th>
-                      <th className="px-3 py-3.5">Modelo</th>
-                      <th className="px-3 py-3.5">Motocicleta</th>
-                      <th className="px-3 py-3.5">Piloto</th>
-                      <th className="px-3 py-3.5">Última Posição</th>
-                      <th className="py-3.5 pl-3 pr-6 text-right">Ações</th>
+                      <th className="py-3 pl-5 pr-3">Status</th>
+                      <th className="px-3 py-3">IMEI / Serial</th>
+                      <th className="px-3 py-3">Veículo & Piloto</th>
+                      {isMaster && <th className="px-3 py-3">Gerente</th>}
+                      <th className="px-3 py-3">Telemetria</th>
+                      <th className="py-3 pl-3 pr-5 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
@@ -535,10 +528,10 @@ export default function AdminDevicesPage() {
                           className="hover:bg-secondary/40 transition-colors"
                         >
                           {/* Status */}
-                          <td className="py-4 pl-6 pr-3">
+                          <td className="py-3.5 pl-5 pr-3">
                             <div className="flex items-center gap-2">
                               <span
-                                className={`size-2.5 rounded-full ${
+                                className={`size-2 rounded-full ${
                                   hasPos
                                     ? "bg-emerald-500 animate-pulse"
                                     : "bg-neutral-600"
@@ -555,7 +548,7 @@ export default function AdminDevicesPage() {
                           </td>
 
                           {/* IMEI / Serial */}
-                          <td className="px-3 py-4">
+                          <td className="px-3 py-3.5">
                             <div className="flex items-center gap-2 font-mono">
                               <span className="font-bold text-foreground">
                                 {device.serial_number}
@@ -579,23 +572,24 @@ export default function AdminDevicesPage() {
                             </div>
                           </td>
 
-                          {/* Modelo / Firmware */}
-                          <td className="px-3 py-4">
-                            <span className="rounded-md bg-secondary/80 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-foreground border border-border/60">
-                              {device.firmware_version || "J16 4G"}
-                            </span>
-                          </td>
-
-                          {/* Motorcycle */}
-                          <td className="px-3 py-4">
+                          {/* Unified Vehicle & Rider */}
+                          <td className="px-3 py-3.5">
                             {moto ? (
-                              <div className="flex items-center gap-2">
-                                <span className="rounded bg-neutral-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-foreground border border-blue-500/50">
-                                  {moto.license_plate}
-                                </span>
-                                <span className="font-bold text-foreground truncate max-w-[150px]">
-                                  {moto.brand} {moto.model}
-                                </span>
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="rounded bg-neutral-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-foreground border border-blue-500/50">
+                                    {moto.license_plate}
+                                  </span>
+                                  <span className="font-bold text-foreground truncate max-w-[160px]">
+                                    {moto.brand} {moto.model}
+                                  </span>
+                                </div>
+                                {moto.rider?.name && (
+                                  <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <User className="size-3 text-emerald-400" />
+                                    <span>{moto.rider.name}</span>
+                                  </p>
+                                )}
                               </div>
                             ) : (
                               <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-400 border border-amber-500/20">
@@ -604,19 +598,26 @@ export default function AdminDevicesPage() {
                             )}
                           </td>
 
-                          {/* Rider */}
-                          <td className="px-3 py-4">
-                            {moto?.rider?.name ? (
-                              <span className="font-semibold text-foreground">
-                                {moto.rider.name}
-                              </span>
-                            ) : (
-                              <span className="text-neutral-500">—</span>
-                            )}
-                          </td>
+                          {/* Manager (Admin Global only) */}
+                          {isMaster && (
+                            <td className="px-3 py-3.5">
+                              {device.manager_email ? (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-foreground/90">
+                                  <Building2 className="size-3 text-violet-400 shrink-0" />
+                                  <span className="truncate max-w-[160px]">
+                                    {device.manager_email}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">
+                                  Admin Global
+                                </span>
+                              )}
+                            </td>
+                          )}
 
-                          {/* Last Position */}
-                          <td className="px-3 py-4">
+                          {/* Telemetry */}
+                          <td className="px-3 py-3.5">
                             {pos ? (
                               <div className="font-mono text-[11px] text-muted-foreground space-y-0.5">
                                 <div>
@@ -630,17 +631,14 @@ export default function AdminDevicesPage() {
                                   )}
                                 </div>
                                 {pos.timestamp && (
-                                  <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                    <span>
-                                      {new Date(pos.timestamp).toLocaleString("pt-BR", {
-                                        day: "2-digit",
-                                        month: "2-digit",
-                                        year: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        second: "2-digit",
-                                      })}
-                                    </span>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {new Date(pos.timestamp).toLocaleString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -652,16 +650,16 @@ export default function AdminDevicesPage() {
                           </td>
 
                           {/* Actions */}
-                          <td className="py-4 pl-3 pr-6 text-right">
+                          <td className="py-3.5 pl-3 pr-5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {moto && (
                                 <button
                                   type="button"
                                   onClick={() => void handleUnlink(device)}
-                                  className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
                                   title="Desvincular equipamento"
                                 >
-                                  <Unlink className="size-2.5" />
+                                  <Unlink className="size-3" />
                                   <span className="hidden xl:inline">Desvincular</span>
                                 </button>
                               )}
@@ -669,10 +667,10 @@ export default function AdminDevicesPage() {
                               <button
                                 type="button"
                                 onClick={() => setSelectedDeviceForLink(device)}
-                                className="inline-flex items-center gap-1 rounded-xl border border-border/80 bg-secondary px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
                                 title="Vincular ou gerenciar motocicleta"
                               >
-                                <Link2 className="size-3.5 text-primary" />
+                                <Link2 className="size-3 text-primary" />
                                 <span className="hidden lg:inline">
                                   {moto ? "Vínculo" : "Vincular"}
                                 </span>
@@ -682,10 +680,10 @@ export default function AdminDevicesPage() {
                                 <button
                                   type="button"
                                   onClick={() => setSelectedDeviceForTransfer(device)}
-                                  className="inline-flex items-center gap-1 rounded-xl border border-violet-500/40 bg-violet-500/10 px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
-                                  title="Transferir para Tenant Manager"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
+                                  title="Transferir para Gerente"
                                 >
-                                  <ArrowRightLeft className="size-3.5" />
+                                  <ArrowRightLeft className="size-3" />
                                   <span className="hidden lg:inline">Transferir</span>
                                 </button>
                               )}
@@ -693,7 +691,7 @@ export default function AdminDevicesPage() {
                               <button
                                 type="button"
                                 onClick={() => setAuditModalState({ open: true, device })}
-                                className="inline-flex items-center gap-1 rounded-xl border border-border/80 bg-secondary px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-secondary px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
                                 title="Auditoria do equipamento"
                               >
                                 <History className="size-3.5" />
@@ -702,7 +700,7 @@ export default function AdminDevicesPage() {
                               <button
                                 type="button"
                                 onClick={() => setSelectedDeviceForMap(device)}
-                                className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
                                   hasPos
                                     ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary hover:text-white"
                                     : "border-border bg-secondary text-muted-foreground hover:text-foreground"
@@ -789,9 +787,9 @@ function FilterTabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-2xl border px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+      className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
         active
-          ? "border-primary bg-primary text-white shadow-md shadow-primary/25"
+          ? "border-primary bg-primary text-white shadow-sm shadow-primary/25"
           : "border-border/80 bg-secondary/80 text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground"
       }`}
     >

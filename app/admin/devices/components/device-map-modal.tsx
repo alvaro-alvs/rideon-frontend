@@ -472,7 +472,7 @@ function DeviceMapModalContent({
                   <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                 </span>
                 <Wifi className="size-3 text-emerald-400" />
-                Posição Ativa (Ao Vivo)
+                Posição Ativa
               </span>
             ) : connectionStatus === "connecting" ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
@@ -709,12 +709,6 @@ function DeviceMapModalContent({
                   <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                     Última Atualização
                   </span>
-                  {position?.timestamp && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Ao Vivo
-                    </span>
-                  )}
                 </div>
                 <p
                   className={`mt-1 font-mono text-xs font-semibold text-foreground transition-colors duration-300 ${

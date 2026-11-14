@@ -402,7 +402,7 @@ export function VehicleMiniCard({
                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-primary/10 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-primary transition-all duration-200 hover:bg-primary hover:text-white hover:shadow-md hover:shadow-primary/25"
               >
                 <MapPin className="size-3.5" />
-                <span>Monitorar ao Vivo</span>
+                <span>Monitorar</span>
               </button>
             ) : (
               <Link
@@ -486,7 +486,7 @@ export function VehicleMiniCard({
                 Esta motocicleta está cadastrada no sistema, mas ainda <strong>não possui nenhum equipamento rastreador (IMEI) vinculado</strong>.
               </p>
               <p>
-                Assim que a equipe técnica ou o administrador realizar a instalação e associação do dispositivo, o status mudará automaticamente para <strong>Protegido 24h</strong> e o monitoramento ao vivo estará disponível.
+                Assim que a equipe técnica ou o administrador realizar a instalação e associação do dispositivo, o status mudará automaticamente para <strong>Protegido 24h</strong> e o monitoramento estará disponível.
               </p>
             </div>
 

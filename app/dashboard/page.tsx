@@ -195,7 +195,7 @@ export default function DashboardPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90"
               >
                 <Maximize2 className="size-3.5" />
-                <span>Rastreio ao Vivo</span>
+                <span>Rastreio</span>
               </button>
             )}
           </div>
@@ -411,7 +411,7 @@ export default function DashboardPage() {
                     <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500"></span>
                   </span>
                   <p className="text-xs font-bold uppercase tracking-[.1em] text-primary">
-                    {hasLiveCoords ? "Localização ao Vivo • GPS" : "Última Posição Registrada"}
+                    {hasLiveCoords ? "Localização • GPS" : "Última Posição Registrada"}
                   </p>
                 </div>
                 <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">

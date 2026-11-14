@@ -89,7 +89,7 @@ type CreditCard3DFormProps = {
   planLabel: string;
   submitting: boolean;
   onClose: () => void;
-  onProceedToCheckout: () => Promise<void>;
+  onProceedToCheckout: (cardToken: string) => Promise<void>;
 };
 
 export function CreditCard3DForm({
@@ -149,10 +149,16 @@ export function CreditCard3DForm({
       return;
     }
 
-    // Clear sensitive fields from memory immediately before redirecting to InfinitePay
+    // Clear sensitive fields from memory immediately before sending tokenized checkout
     setCardNumber("");
     setCvv("");
-    await onProceedToCheckout();
+    // PicPay Transparent SDK temporaryCardToken will be injected here when SDK key is configured
+    const ephemeralToken =
+      typeof window !== "undefined" &&
+      (window as unknown as { __picpayToken?: string }).__picpayToken
+        ? String((window as unknown as { __picpayToken?: string }).__picpayToken)
+        : "";
+    await onProceedToCheckout(ephemeralToken);
   };
 
   return (
@@ -331,8 +337,8 @@ export function CreditCard3DForm({
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <span>
               Criptografia TLS ponta a ponta. Número completo e CVV nunca são gravados nos nossos
-              servidores — a cobrança final é concluída no ambiente PCI-DSS da{" "}
-              <strong>InfinitePay</strong>.
+              servidores — a cobrança é tokenizada e processada no ambiente PCI-DSS do{" "}
+              <strong>PicPay</strong>.
             </span>
           </div>
 
@@ -354,7 +360,7 @@ export function CreditCard3DForm({
               className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:opacity-90 disabled:opacity-50"
             >
               <Lock className="size-3.5" />
-              {submitting ? "Conectando InfinitePay..." : `Pagar ${amountLabel}`}
+              {submitting ? "Processando no PicPay..." : `Pagar ${amountLabel}`}
             </button>
           </div>
         </form>
