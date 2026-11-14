@@ -710,7 +710,7 @@ export default function AdminVehiclesPage() {
                       type="text"
                       value={formRenavam}
                       onChange={(e) => setFormRenavam(e.target.value.replace(/\D/g, ""))}
-                      placeholder="01520757236"
+                      placeholder="11 dígitos"
                       maxLength={11}
                       className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
@@ -724,7 +724,7 @@ export default function AdminVehiclesPage() {
                       type="text"
                       value={formChassis}
                       onChange={(e) => setFormChassis(e.target.value.toUpperCase())}
-                      placeholder="9C2JB0100VR447095"
+                      placeholder="17 caracteres"
                       maxLength={17}
                       className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono uppercase text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />

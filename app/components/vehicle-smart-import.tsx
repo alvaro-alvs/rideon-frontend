@@ -30,12 +30,8 @@ interface VehicleSmartImportProps {
   defaultOpen?: boolean;
 }
 
-const WHATSAPP_EXAMPLE_PLACEHOLDER = `Cole aqui mensagens do WhatsApp (com ou sem data/remetente) ou texto livre. Ex:
-[09:32, 11/14/2026] +55 11 99255-5916: 01520757236
-[09:32, 11/14/2026] +55 11 99255-5916: URK 4G10
-[09:32, 11/14/2026] +55 11 99255-5916: Azul
-[09:33, 11/14/2026] +55 11 99255-5916: Honda pop 110i ES gasolina 2026
-[09:34, 11/14/2026] +55 11 99255-5916: 9C2JB0100VR447095*`;
+const WHATSAPP_PLACEHOLDER =
+  "Cole aqui as mensagens do WhatsApp ou texto com os dados do veículo...";
 
 export function VehicleSmartImport({
   onApply,
@@ -283,12 +279,12 @@ export function VehicleSmartImport({
                 rows={compact ? 4 : 5}
                 value={whatsappText}
                 onChange={(e) => handleWhatsappChange(e.target.value)}
-                placeholder={WHATSAPP_EXAMPLE_PLACEHOLDER}
+                placeholder={WHATSAPP_PLACEHOLDER}
                 className="w-full rounded-xl border border-border bg-background/80 p-3 text-xs font-mono text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] text-muted-foreground">
-                  Suporta exportação com data/hora, negrito, emojis, rótulos ou texto livre.
+                  Copie e cole mensagens do whatsapp com infomações do veículo aqui
                 </span>
                 <button
                   type="button"

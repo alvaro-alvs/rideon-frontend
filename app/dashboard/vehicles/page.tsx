@@ -1186,7 +1186,7 @@ export default function VehiclesPage() {
                         onChange={(e) => setFormRenavam(e.target.value.replace(/\D/g, ""))}
                         icon={Tag}
                         maxLength={11}
-                        placeholder="Ex: 01520757236"
+                        placeholder="11 dígitos"
                         required={false}
                       />
                       <FormField
@@ -1205,7 +1205,7 @@ export default function VehiclesPage() {
                         onChange={(e) => setFormChassis(e.target.value.toUpperCase())}
                         icon={ShieldCheck}
                         maxLength={17}
-                        placeholder="Ex: 9C2JB0100VR447095"
+                        placeholder="17 caracteres"
                         className="sm:col-span-2"
                         required={false}
                       />
