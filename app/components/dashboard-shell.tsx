@@ -6,6 +6,7 @@ import {
   Bike,
   Building2,
   Cpu,
+  CreditCard,
   History,
   LayoutDashboard,
   LogOut,
@@ -70,6 +71,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Global" },
       { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "Global" },
       { label: "Organizações", href: "/admin/tenants", icon: Building2, badge: "SaaS" },
+      { label: "Financeiro", href: "/admin/financial", icon: CreditCard, badge: "Global" },
       { label: "Configurações", href: "/dashboard/settings", icon: Settings },
     ];
   } else if (manager) {
@@ -79,6 +81,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Frota" },
       { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "IMEI" },
       { label: "Organizações", href: "/admin/tenants", icon: Building2, badge: "Marca" },
+      { label: "Financeiro", href: "/admin/financial", icon: CreditCard, badge: "Carteira" },
       { label: "Configurações", href: "/dashboard/settings", icon: Settings },
     ];
   } else {
@@ -87,6 +90,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
       { label: "Meus Veículos", href: "/dashboard/vehicles", icon: Bike },
       { label: "Histórico", href: "/dashboard/history", icon: History },
+      { label: "Financeiro", href: "/dashboard/financial", icon: CreditCard },
       { label: "Configurações", href: "/dashboard/settings", icon: Settings },
     ];
   }

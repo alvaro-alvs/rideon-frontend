@@ -9,6 +9,7 @@ import {
   Building2,
   ChevronDown,
   Cpu,
+  CreditCard,
   History,
   LayoutDashboard,
   LogOut,
@@ -315,6 +316,22 @@ export function UserDropdownMenu() {
                       Global
                     </span>
                   </Link>
+
+                  <Link
+                    href="/admin/financial"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <CreditCard className="size-3.5" />
+                      </div>
+                      <span>Financeiro</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Global
+                    </span>
+                  </Link>
                 </>
               ) : isMgr ? (
                 <>
@@ -381,6 +398,22 @@ export function UserDropdownMenu() {
                       Marca
                     </span>
                   </Link>
+
+                  <Link
+                    href="/admin/financial"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <CreditCard className="size-3.5" />
+                      </div>
+                      <span>Financeiro</span>
+                    </div>
+                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-bold">
+                      Carteira
+                    </span>
+                  </Link>
                 </>
               ) : (
                 <>
@@ -410,6 +443,19 @@ export function UserDropdownMenu() {
                         <History className="size-3.5" />
                       </div>
                       <span>Histórico de Trajetos</span>
+                    </div>
+                  </Link>
+
+                  <Link
+                    href="/dashboard/financial"
+                    onClick={() => setIsOpen(false)}
+                    className="group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-6 items-center justify-center rounded bg-secondary text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <CreditCard className="size-3.5" />
+                      </div>
+                      <span>Financeiro</span>
                     </div>
                   </Link>
                 </>
