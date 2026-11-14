@@ -31,6 +31,8 @@ import { DashboardShell } from "@/app/components/dashboard-shell";
 import { Button } from "@/app/components/ui/button";
 import { CalendarPicker } from "@/app/components/ui/calendar-picker";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
+import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isMasterAdmin, isManager } from "@/lib/auth";
 import { formatPhone } from "@/lib/phone";
@@ -95,6 +97,20 @@ export default function VehiclesPage() {
   const [formPlate, setFormPlate] = useState("");
   const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
   const [formColor, setFormColor] = useState("");
+  const [formRenavam, setFormRenavam] = useState("");
+  const [formChassis, setFormChassis] = useState("");
+  const [formFuelType, setFormFuelType] = useState("");
+
+  const handleSmartImportApply = (data: ParsedVehicleData) => {
+    if (data.brand) setFormBrand(data.brand);
+    if (data.model) setFormModel(data.model);
+    if (data.license_plate) setFormPlate(data.license_plate);
+    if (data.year) setFormYear(String(data.year));
+    if (data.color) setFormColor(data.color);
+    if (data.renavam) setFormRenavam(data.renavam);
+    if (data.chassis) setFormChassis(data.chassis);
+    if (data.fuel_type) setFormFuelType(data.fuel_type);
+  };
 
   const isMaster =
     currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role);
@@ -298,6 +314,9 @@ export default function VehiclesPage() {
             year,
             color,
             license_plate,
+            ...(formRenavam.trim() ? { renavam: formRenavam.trim() } : {}),
+            ...(formChassis.trim() ? { chassis: formChassis.trim().toUpperCase() } : {}),
+            ...(formFuelType.trim() ? { fuel_type: formFuelType.trim() } : {}),
           },
         }),
       });
@@ -336,6 +355,9 @@ export default function VehiclesPage() {
       setFormModel("");
       setFormPlate("");
       setFormColor("");
+      setFormRenavam("");
+      setFormChassis("");
+      setFormFuelType("");
       setFormDob("");
       setFormRiderName("");
       setFormRiderPhone("");
@@ -1096,6 +1118,9 @@ export default function VehiclesPage() {
                       </div>
                     </div>
 
+                    {/* Preenchimento Inteligente (CRLV-e / Foto / WhatsApp) */}
+                    <VehicleSmartImport onApply={handleSmartImportApply} />
+
                     {/* Quick Selectors de Marca e Cor */}
                     <div className="space-y-4 rounded-2xl border border-border/60 bg-secondary/40 p-4">
                       <BrandQuickSelect
@@ -1153,6 +1178,36 @@ export default function VehiclesPage() {
                         maxLength={8}
                         placeholder="Ex: BRA2E19 ou ABC1234"
                         className="sm:col-span-2"
+                      />
+                      <FormField
+                        label="RENAVAM (Opcional)"
+                        name="renavam"
+                        value={formRenavam}
+                        onChange={(e) => setFormRenavam(e.target.value.replace(/\D/g, ""))}
+                        icon={Tag}
+                        maxLength={11}
+                        placeholder="Ex: 01520757236"
+                        required={false}
+                      />
+                      <FormField
+                        label="Combustível (Opcional)"
+                        name="fuel_type"
+                        value={formFuelType}
+                        onChange={(e) => setFormFuelType(e.target.value)}
+                        icon={Info}
+                        placeholder="Ex: Gasolina, Flex, Elétrico"
+                        required={false}
+                      />
+                      <FormField
+                        label="Chassi / VIN (Opcional)"
+                        name="chassis"
+                        value={formChassis}
+                        onChange={(e) => setFormChassis(e.target.value.toUpperCase())}
+                        icon={ShieldCheck}
+                        maxLength={17}
+                        placeholder="Ex: 9C2JB0100VR447095"
+                        className="sm:col-span-2"
+                        required={false}
                       />
                     </div>
                   </section>

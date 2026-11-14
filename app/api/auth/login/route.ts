@@ -25,8 +25,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Dados invalidos." }, { status: 400 });
   }
 
+  const rawPayload = payload as Record<string, unknown>;
+  const identifier =
+    typeof rawPayload.identifier === "string" && rawPayload.identifier.trim().length > 0
+      ? rawPayload.identifier.trim()
+      : typeof rawPayload.email === "string"
+        ? rawPayload.email.trim()
+        : "";
+
+  const authBody: Record<string, unknown> = {
+    identifier,
+    password: rawPayload.password,
+  };
+  if (typeof rawPayload.type === "string" && rawPayload.type.length > 0) {
+    authBody.type = rawPayload.type;
+  }
+
   try {
-    const { response, data } = await callAuthApi("login", payload);
+    const { response, data } = await callAuthApi("login", authBody);
 
     if (!response.ok) {
       return NextResponse.json(

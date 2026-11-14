@@ -5,15 +5,17 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   AlertCircle,
   ArrowRight,
+  Bike,
   Check,
   CheckCircle2,
+  Cpu,
   Eye,
   EyeOff,
   Loader2,
   LockKeyhole,
   Mail,
 } from "lucide-react";
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { AuthLayout } from "@/app/components/auth-layout";
 import { Button } from "@/app/components/ui/button";
@@ -23,6 +25,7 @@ import {
   useCurrentUser,
 } from "@/hooks/use-current-user";
 import { isPlatformOrTenantAdmin } from "@/lib/auth";
+import { resolveLoginIdentifier } from "@/lib/login-identifier";
 
 export default function LoginPage() {
   return (
@@ -43,7 +46,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const currentUser = useCurrentUser();
 
-  const [email, setEmail] = useState("");
+  const [identifierInput, setIdentifierInput] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -52,6 +55,16 @@ function LoginForm() {
   const registered = searchParams.get("registered") === "1";
   const expired = searchParams.get("expired") === "1";
   const returnTo = searchParams.get("from") || "/dashboard";
+
+  const resolvedIdentifier = useMemo(
+    () => resolveLoginIdentifier(identifierInput, "auto"),
+    [identifierInput],
+  );
+
+  const handleIdentifierChange = (value: string) => {
+    const next = resolveLoginIdentifier(value, "auto");
+    setIdentifierInput(next.displayValue);
+  };
 
   const isAlreadyLoggedIn =
     !expired && (isClientSessionActive() || currentUser.status === "authenticated");
@@ -77,7 +90,10 @@ function LoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          identifier: resolvedIdentifier.apiValue,
+          password,
+        }),
       });
 
       const data = (await response.json()) as {
@@ -197,31 +213,76 @@ function LoginForm() {
           )}
         </AnimatePresence>
 
-        {/* Email Field */}
+        {/* Smart Identifier Field (E-mail, Placa ou IMEI) */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
           className="space-y-2"
         >
-          <label
-            htmlFor="login-email"
-            className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
-          >
-            E-mail
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label
+              htmlFor="login-identifier"
+              className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
+            >
+              E-mail, Placa do Veículo ou IMEI
+            </label>
+
+            {/* Live Detection / Format Badge */}
+            <AnimatePresence mode="wait">
+              {identifierInput.trim().length > 0 && resolvedIdentifier.detectedKind !== "unknown" && (
+                <motion.span
+                  key={`${resolvedIdentifier.detectedKind}-${resolvedIdentifier.plateStandard ?? ""}`}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.15 }}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide ${
+                    resolvedIdentifier.isComplete
+                      ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-400"
+                      : "border-white/10 bg-white/[0.04] text-muted-foreground"
+                  }`}
+                >
+                  {resolvedIdentifier.detectedKind === "email" && "E-mail"}
+                  {resolvedIdentifier.detectedKind === "plate" &&
+                    (resolvedIdentifier.plateStandard === "mercosul"
+                      ? "Placa Mercosul"
+                      : resolvedIdentifier.plateStandard === "antiga"
+                        ? "Placa Padrão"
+                        : "Placa")}
+                  {resolvedIdentifier.detectedKind === "imei" &&
+                    `IMEI • ${resolvedIdentifier.apiValue.length}/15`}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+
           <div className="group flex items-center gap-3 rounded-xl border border-white/[0.08] bg-secondary/70 px-3.5 transition-all duration-200 focus-within:border-primary/70 focus-within:bg-secondary focus-within:ring-2 focus-within:ring-primary/20 hover:border-white/15">
-            <Mail className="size-4 shrink-0 text-muted-foreground transition-colors duration-200 group-focus-within:text-primary" />
+            {resolvedIdentifier.detectedKind === "plate" ? (
+              <Bike className="size-4 shrink-0 text-muted-foreground transition-colors duration-200 group-focus-within:text-primary" />
+            ) : resolvedIdentifier.detectedKind === "imei" ? (
+              <Cpu className="size-4 shrink-0 text-muted-foreground transition-colors duration-200 group-focus-within:text-primary" />
+            ) : (
+              <Mail className="size-4 shrink-0 text-muted-foreground transition-colors duration-200 group-focus-within:text-primary" />
+            )}
             <input
-              id="login-email"
+              id="login-identifier"
               required
-              name="email"
-              autoComplete="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu.email@exemplo.com"
-              className="w-full min-w-0 bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+              name="identifier"
+              autoComplete={
+                resolvedIdentifier.detectedKind === "email" ? "email" : "username"
+              }
+              inputMode="text"
+              type="text"
+              value={identifierInput}
+              onChange={(e) => handleIdentifierChange(e.target.value)}
+              placeholder="seu@email.com, ABC-1234 / ABC1D23 ou IMEI"
+              className={`w-full min-w-0 bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 ${
+                resolvedIdentifier.detectedKind === "plate" ||
+                resolvedIdentifier.detectedKind === "imei"
+                  ? "font-mono tracking-wider"
+                  : ""
+              }`}
             />
           </div>
         </motion.div>

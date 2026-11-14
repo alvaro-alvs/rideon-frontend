@@ -25,6 +25,8 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
+import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useTenant } from "@/app/components/tenant-provider";
 import { isPlatformOrTenantAdmin, isMasterAdmin } from "@/lib/auth";
@@ -64,6 +66,20 @@ export default function AdminVehiclesPage() {
   const [formPlate, setFormPlate] = useState("");
   const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
   const [formColor, setFormColor] = useState("");
+  const [formRenavam, setFormRenavam] = useState("");
+  const [formChassis, setFormChassis] = useState("");
+  const [formFuelType, setFormFuelType] = useState("");
+
+  const handleSmartImportApply = (data: ParsedVehicleData) => {
+    if (data.brand) setFormBrand(data.brand);
+    if (data.model) setFormModel(data.model);
+    if (data.license_plate) setFormPlate(data.license_plate);
+    if (data.year) setFormYear(String(data.year));
+    if (data.color) setFormColor(data.color);
+    if (data.renavam) setFormRenavam(data.renavam);
+    if (data.chassis) setFormChassis(data.chassis);
+    if (data.fuel_type) setFormFuelType(data.fuel_type);
+  };
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -143,6 +159,9 @@ export default function AdminVehiclesPage() {
           license_plate: formPlate.trim().toUpperCase(),
           year: parseInt(formYear, 10),
           color: formColor.trim(),
+          ...(formRenavam.trim() ? { renavam: formRenavam.trim() } : {}),
+          ...(formChassis.trim() ? { chassis: formChassis.trim().toUpperCase() } : {}),
+          ...(formFuelType.trim() ? { fuel_type: formFuelType.trim() } : {}),
         }),
       });
 
@@ -158,6 +177,9 @@ export default function AdminVehiclesPage() {
       setFormModel("");
       setFormPlate("");
       setFormColor("");
+      setFormRenavam("");
+      setFormChassis("");
+      setFormFuelType("");
       void fetchData();
     } catch (err: unknown) {
       setFeedback({ type: "error", text: err instanceof Error ? err.message : "Erro desconhecido" });
@@ -562,7 +584,7 @@ export default function AdminVehiclesPage() {
         {/* Modal: Novo Veículo */}
         {isNewVehicleModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-lg rounded-3xl border border-border/80 bg-card p-6 shadow-2xl sm:p-8 animate-in zoom-in-95 duration-200">
+            <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/80 bg-card p-6 shadow-2xl sm:p-8 animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-border/80 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
@@ -582,6 +604,8 @@ export default function AdminVehiclesPage() {
               </div>
 
               <form onSubmit={handleCreateVehicle} className="mt-6 space-y-4">
+                <VehicleSmartImport compact onApply={handleSmartImportApply} />
+
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Cliente Proprietário *
@@ -672,6 +696,49 @@ export default function AdminVehiclesPage() {
                       value={formColor}
                       onChange={(e) => setFormColor(e.target.value)}
                       placeholder="Preta, Vermelha"
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      RENAVAM
+                    </label>
+                    <input
+                      type="text"
+                      value={formRenavam}
+                      onChange={(e) => setFormRenavam(e.target.value.replace(/\D/g, ""))}
+                      placeholder="01520757236"
+                      maxLength={11}
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Chassi / VIN
+                    </label>
+                    <input
+                      type="text"
+                      value={formChassis}
+                      onChange={(e) => setFormChassis(e.target.value.toUpperCase())}
+                      placeholder="9C2JB0100VR447095"
+                      maxLength={17}
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono uppercase text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Combustível
+                    </label>
+                    <input
+                      type="text"
+                      value={formFuelType}
+                      onChange={(e) => setFormFuelType(e.target.value)}
+                      placeholder="Gasolina, Flex"
                       className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>

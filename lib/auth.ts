@@ -136,7 +136,9 @@ export type MatchCorrespondence = {
 };
 
 type AuthPayload = {
-  email: string;
+  identifier?: string;
+  email?: string;
+  type?: "email" | "plate" | "imei" | string;
   password?: string;
   name?: string;
   user_id?: string;
@@ -176,11 +178,29 @@ export function getApiUrl() {
 export function isValidCredentials(payload: unknown): payload is AuthPayload {
   if (!payload || typeof payload !== "object") return false;
 
-  const { email, password } = payload as Record<string, unknown>;
+  const { identifier, email, type, password } = payload as Record<string, unknown>;
+  const rawId =
+    typeof identifier === "string" && identifier.trim().length > 0
+      ? identifier.trim()
+      : typeof email === "string"
+        ? email.trim()
+        : "";
+
+  if (rawId.length === 0 || rawId.length > 254) {
+    return false;
+  }
+
+  if (
+    type !== undefined &&
+    type !== "" &&
+    type !== "email" &&
+    type !== "plate" &&
+    type !== "imei"
+  ) {
+    return false;
+  }
+
   return (
-    typeof email === "string" &&
-    email.length > 0 &&
-    email.length <= 254 &&
     typeof password === "string" &&
     password.length >= 6 &&
     password.length <= 256
@@ -301,7 +321,7 @@ export async function callAuthenticatedApi(
 
 export function getPublicError(status: number) {
   if (status === 400 || status === 422) return "Confira os dados informados.";
-  if (status === 401) return "E-mail ou senha invalidos.";
+  if (status === 401) return "Identificação ou senha inválidos.";
   if (status === 409) return "Este e-mail ja esta cadastrado.";
   return "Nao foi possivel concluir a operacao. Tente novamente.";
 }
