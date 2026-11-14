@@ -119,3 +119,67 @@ COMBUSTÍVEL: ALCOOL/GASOLINA
   assert.equal(res.fields.color, "Branco");
   assert.equal(res.fields.fuel_type, "Flex");
 });
+
+test("parses real DETRAN-SP CRLV-e PDF stream order (labels first, values after)", () => {
+  const realPdfStreamText = `
+Valide este QRCode com app Vio
+REPÚBLICA FEDERATIVA DO BRASIL
+MINISTÉRIO DOS TRANSPORTES
+SECRETARIA NACIONAL DE TRÂNSITO - SENATRAN
+CÓDIGO RENAVAM
+DETRAN CERTIFICADO DE REGISTRO E LICENCIAMENTO DE VEÍCULO - DIGITAL
+ANO FABRICAÇÃO
+ASSINADO DIGITALMENTE PELO DETRAN
+CATEGORIA CAPACIDADE
+POTÊNCIA/CILINDRADA PESO BRUTO TOTAL
+CMT EIXOS LOTAÇÃO
+ANO MODELO
+PLACA EXERCÍCIO
+MOTOR
+CARROCERIA
+OBSERVAÇÕES DO VEÍCULO INFORMAÇÕES DO SEGURO DPVAT
+NOME
+LOCAL DATA
+CPF / CNPJ
+NÚMERO DO CRV
+MARCA / MODELO / VERSÃO
+PLACA ANTERIOR / UF CHASSI
+COR PREDOMINANTE DEPARTAMENTO NACIONAL DE PELO SEGURADO (R$)
+ESPÉCIE / TIPO
+COMBUSTÍVEL VALOR TOTAL A SER PAGO
+CÓDIGO DE SEGURANÇA DO CLA CAT
+01520757236
+URK4G10 2026
+2026 2027
+264866358807
+44611896800 ***
+HONDA/POP 110I ES
+PASSAGEIRO MOTOCICLETA
+*******/** 9C2JB0100VR447095
+AZUL GASOLINA
+PARTICULAR
+*.*
+0CV/109 0.24
+JB01E0V447163 *.* * 02P
+NÃO APLICAVEL
+ANA K A S NASCIMENTO
+515.752.848-55
+SAO PAULO SP 06/10/2026
+INSTITUIÇÃO FINANCEIRA CNPJ 59285411000113
+ALIENAÇÃO FIDUCIÁRIA
+Documento emitido por DETRAN SP (5E0A29BA7E3DCC3DF0E6E467ADF00FC4) em 06/10/2026 às 09:54:27.
+  `;
+
+  const res = parseVehicleText(realPdfStreamText);
+  assert.equal(res.sourceType, "crlv");
+  assert.equal(res.fields.renavam, "01520757236");
+  assert.equal(res.renavamValid, true);
+  assert.equal(res.fields.license_plate, "URK4G10");
+  assert.equal(res.plateFormat, "mercosul");
+  assert.equal(res.fields.year, 2027);
+  assert.equal(res.fields.brand, "Honda");
+  assert.equal(res.fields.model, "Pop 110i ES");
+  assert.equal(res.fields.chassis, "9C2JB0100VR447095");
+  assert.equal(res.fields.color, "Azul");
+  assert.equal(res.fields.fuel_type, "Gasolina");
+});

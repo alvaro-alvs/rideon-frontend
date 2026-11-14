@@ -153,6 +153,13 @@ const CRLV_MARKERS = [
   "CHASSI",
 ];
 
+const CRLV_HEADER_LINE_RE =
+  /^(?:valide\s+este\s+qrcode|rep[uú]blica\s+federativa|minist[eé]rio|secretaria\s+nacional|detran|certificado\s+de\s+registro|c[oó]digo\s+renavam|placa(?:\s+anterior|\s+exerc[ií]cio)?|exerc[ií]cio|ano\s+(?:fabrica[cç][aã]o|modelo)|n[uú]mero\s+do\s+crv|c[oó]digo\s+de\s+seguran[cç]a|cat(?:\.|egoria)?|marca\s*\/?\s*modelo|esp[eé]cie\s*\/?\s*tipo|chassi|cor\s+predominante|combust[ií]vel|assinado\s+digitalmente|capacidade|pot[eê]ncia|peso\s+bruto|motor|cmt|eixos|lota[cç][aã]o|carroceria|nome|cpf\s*\/?\s*cnpj|local|data|dados\s+do\s+seguro|repasse\s+obrigat[oó]rio|cat\.\s*tarif|data\s+de\s+quita[cç][aã]o|pagamento|cota\s+[uú]nica|custo\s+do|custo\s+efetivo|valor\s+do\s+iof|valor\s+total|observa[cç][oõ]es\s+do\s+ve[ií]culo|informa[cç][oõ]es\s+do\s+seguro|mensagens\s+senatran|voc[eê]\s+sabia|na\s+carteira\s+digital|leia\s+o\s+qr|qrcode|documento\s+emitido\s+por|institui[cç][aã]o\s+financeira|aliena[cç][aã]o\s+fiduci[aá]ria)/i;
+
+function isCrlvHeaderLine(line: string): boolean {
+  return CRLV_HEADER_LINE_RE.test(stripDiacritics(line.trim()));
+}
+
 function stripDiacritics(str: string): string {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -332,7 +339,7 @@ function extractBrandAndModelFromPhrase(phrase: string): {
     if (brandMatch) {
       result.brand = brandMatch.brand;
       working = right;
-    } else if (left.length > 1 && left.length <= 20) {
+    } else if (left.length > 1 && left.length <= 20 && !/^\d+$/.test(left)) {
       result.brand = formatModelName(left);
       working = right;
     }
@@ -403,10 +410,13 @@ function parseLabeledValue(lines: string[], labelPatterns: RegExp[]): string | u
       const m = normalizedLine.match(re);
       if (m) {
         const inlineVal = (m[1] ?? "").trim();
-        if (inlineVal) return inlineVal;
-        // Check next line if value is on the following line (common in CRLV-e PDFs)
+        if (inlineVal && !isCrlvHeaderLine(inlineVal)) return inlineVal;
+        // Check next line only if it is a real value (not another CRLV template header)
         if (i + 1 < lines.length) {
-          return lines[i + 1].trim();
+          const nextVal = lines[i + 1].trim();
+          if (nextVal && !isCrlvHeaderLine(nextVal)) {
+            return nextVal;
+          }
         }
       }
     }
@@ -487,14 +497,32 @@ export function parseVehicleText(input: string): VehicleParseResult {
     /^cor(?:\s+predominante)?\s*[:\-–]?\s*(.*)$/i,
   ]);
   if (labeledColor) {
-    fields.color = normalizeColor(labeledColor) ?? formatModelName(labeledColor);
+    const normColor = normalizeColor(labeledColor);
+    if (normColor) {
+      fields.color = normColor;
+    } else if (
+      sourceType !== "crlv" &&
+      labeledColor.split(/\s+/).length <= 2 &&
+      !/[()$0-9]/.test(labeledColor)
+    ) {
+      fields.color = formatModelName(labeledColor);
+    }
   }
 
   const labeledFuel = parseLabeledValue(tokens, [
     /^combust[ií]vel\s*[:\-–]?\s*(.*)$/i,
   ]);
   if (labeledFuel) {
-    fields.fuel_type = normalizeFuelType(labeledFuel) ?? formatModelName(labeledFuel);
+    const normFuel = normalizeFuelType(labeledFuel);
+    if (normFuel) {
+      fields.fuel_type = normFuel;
+    } else if (
+      sourceType !== "crlv" &&
+      labeledFuel.split(/\s+/).length <= 2 &&
+      !/[()$0-9]/.test(labeledFuel)
+    ) {
+      fields.fuel_type = formatModelName(labeledFuel);
+    }
   }
 
   const labeledYearMod =
@@ -539,10 +567,16 @@ export function parseVehicleText(input: string): VehicleParseResult {
 
   // 2. Pattern-based extraction across all lines (for unlabeled WhatsApp messages & fallback)
   const consumedLines = new Set<number>();
+  const renavamCandidates: string[] = [];
+  const currentMaxYear = new Date().getFullYear() + 2;
 
   for (let i = 0; i < tokens.length; i++) {
     const line = tokens[i];
     const trimmed = line.trim();
+    if (!trimmed || isCrlvHeaderLine(trimmed)) continue;
+
+    // Skip CPF / CNPJ / formatted date lines so they never pollute RENAVAM or year
+    const isCpfOrCnpj = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b|\bCNPJ\s+\d{14}\b/i.test(trimmed);
 
     // Check standalone or inline Chassis (17-char VIN, optional trailing *)
     if (!fields.chassis) {
@@ -559,14 +593,18 @@ export function parseVehicleText(input: string): VehicleParseResult {
       }
     }
 
-    // Check standalone or inline RENAVAM (9-11 digits)
-    if (!fields.renavam) {
+    // Collect RENAVAM candidates (9-11 digits, excluding CPF/CNPJ)
+    if (!fields.renavam && !isCpfOrCnpj) {
       const digitsOnly = trimmed.replace(/[\s.-]/g, "");
       if (/^\d{9,11}$/.test(digitsOnly)) {
-        fields.renavam = digitsOnly;
-        renavamValid = isValidRenavam(digitsOnly);
+        renavamCandidates.push(digitsOnly);
         consumedLines.add(i);
         continue;
+      }
+      // Also handle "44611896800 ***" style lines as lower-priority candidate
+      const leadDigits = trimmed.match(/^(\d{9,11})\b/);
+      if (leadDigits) {
+        renavamCandidates.push(leadDigits[1]);
       }
     }
 
@@ -586,11 +624,24 @@ export function parseVehicleText(input: string): VehicleParseResult {
       }
     }
 
-    // Check standalone Color line
-    if (!fields.color) {
-      const normColor = normalizeColor(trimmed);
-      if (normColor && trimmed.split(/\s+/).length <= 2) {
-        fields.color = normColor;
+    // Check CRLV two-year line: "2026 2027" (Ano Fabricação + Ano Modelo) -> prefer Ano Modelo
+    const twoYearsMatch = trimmed.match(/^(19[6-9]\d|20[0-3]\d)\s+(19[6-9]\d|20[0-3]\d)$/);
+    if (twoYearsMatch) {
+      const y2 = Number(twoYearsMatch[2]);
+      if (y2 >= 1960 && y2 <= currentMaxYear) {
+        fields.year = y2;
+        consumedLines.add(i);
+        continue;
+      }
+    }
+
+    // Check standalone Color (or "COLOR FUEL" like "AZUL GASOLINA")
+    if (trimmed.split(/\s+/).length <= 3) {
+      const normColor = !fields.color ? normalizeColor(trimmed) : undefined;
+      const normFuel = !fields.fuel_type ? normalizeFuelType(trimmed) : undefined;
+      if (normColor || normFuel) {
+        if (normColor) fields.color = normColor;
+        if (normFuel) fields.fuel_type = normFuel;
         consumedLines.add(i);
         continue;
       }
@@ -599,7 +650,7 @@ export function parseVehicleText(input: string): VehicleParseResult {
     // Check standalone Year line
     if (!fields.year && /^\d{4}$/.test(trimmed)) {
       const y = Number(trimmed);
-      if (y >= 1960 && y <= new Date().getFullYear() + 2) {
+      if (y >= 1960 && y <= currentMaxYear) {
         fields.year = y;
         consumedLines.add(i);
         continue;
@@ -607,10 +658,18 @@ export function parseVehicleText(input: string): VehicleParseResult {
     }
   }
 
+  if (!fields.renavam && renavamCandidates.length > 0) {
+    const validCandidate = renavamCandidates.find((c) => isValidRenavam(c));
+    const chosen = validCandidate ?? renavamCandidates[0];
+    fields.renavam = chosen;
+    renavamValid = isValidRenavam(chosen);
+  }
+
   // 3. Freeform phrase scan for Brand / Model / Fuel / Year / Color on remaining lines
   for (let i = 0; i < tokens.length; i++) {
     if (consumedLines.has(i)) continue;
     let line = tokens[i];
+    if (isCrlvHeaderLine(line)) continue;
 
     // Strip already-extracted plate/chassis/renavam/label words from freeform line
     if (fields.license_plate) {
@@ -624,10 +683,10 @@ export function parseVehicleText(input: string): VehicleParseResult {
       line = line.replace(new RegExp(`\\b(?:renavam)?\\s*[:\\-–]?\\s*${fields.renavam}`, "gi"), " ");
     }
     line = line.replace(/\s+/g, " ").trim();
-    if (!line) continue;
+    if (!line || isCrlvHeaderLine(line)) continue;
 
-    // Skip lines that are clearly CRLV headers/noise
-    if (/^(?:marca\s*\/?\s*modelo|codigo\s+renavam|placa|chassi|cor\s+predominante|combustivel|ano\s+fab|exercicio|via\s+digital)/i.test(stripDiacritics(line))) {
+    // Skip date/CPF/CNPJ lines in freeform scan so dates like 06/10/2026 don't override model year
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(line) || /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(line)) {
       continue;
     }
 
@@ -638,7 +697,7 @@ export function parseVehicleText(input: string): VehicleParseResult {
       if (parsed.fuel_type && !fields.fuel_type) fields.fuel_type = parsed.fuel_type;
       if (parsed.year && !fields.year) fields.year = parsed.year;
       if (parsed.color && !fields.color) fields.color = parsed.color;
-    } else {
+    } else if (sourceType !== "crlv") {
       if (parsed.fuel_type && !fields.fuel_type) fields.fuel_type = parsed.fuel_type;
       if (parsed.year && !fields.year) fields.year = parsed.year;
       if (parsed.color && !fields.color) fields.color = parsed.color;

@@ -25,6 +25,7 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { OwnerSelect } from "@/app/components/owner-select";
 import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
 import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -610,19 +611,13 @@ export default function AdminVehiclesPage() {
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Cliente Proprietário *
                   </label>
-                  <select
+                  <OwnerSelect
                     required
+                    options={customers}
                     value={formRiderId}
-                    onChange={(e) => setFormRiderId(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="">Selecione um cliente...</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} — {c.email}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setFormRiderId}
+                    placeholder="Selecione um cliente..."
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
