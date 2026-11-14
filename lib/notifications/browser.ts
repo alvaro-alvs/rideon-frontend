@@ -12,7 +12,70 @@ export interface BrowserNotificationOptions {
   tag?: string;
   data?: unknown;
   link?: string;
+  requireInteraction?: boolean;
   onClick?: () => void;
+}
+
+export type AppNotificationConsent = "granted" | "denied" | "unset";
+
+const APP_CONSENT_KEY = "rideon_app_notifications_consent";
+
+/**
+ * Returns whether the user has explicitly granted or declined notifications inside the RideOn app.
+ */
+export function getAppNotificationConsent(): AppNotificationConsent {
+  if (typeof window === "undefined") return "unset";
+  try {
+    const val = localStorage.getItem(APP_CONSENT_KEY);
+    if (val === "granted" || val === "denied") return val;
+    return "unset";
+  } catch {
+    return "unset";
+  }
+}
+
+/**
+ * Persists the user's in-app notification consent choice and notifies listeners.
+ */
+export function setAppNotificationConsent(consent: AppNotificationConsent): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (consent === "unset") {
+      localStorage.removeItem(APP_CONSENT_KEY);
+    } else {
+      localStorage.setItem(APP_CONSENT_KEY, consent);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  notifyPermissionChanged();
+}
+
+export interface BrowserNotificationDiagnostics {
+  supported: boolean;
+  isSecureContext: boolean;
+  permission: NotificationPermission | "unsupported";
+  appConsent: AppNotificationConsent;
+}
+
+/**
+ * Returns diagnostic info about browser & in-app notification state.
+ */
+export function getBrowserNotificationDiagnostics(): BrowserNotificationDiagnostics {
+  if (typeof window === "undefined") {
+    return {
+      supported: false,
+      isSecureContext: false,
+      permission: "unsupported",
+      appConsent: "unset",
+    };
+  }
+  return {
+    supported: isBrowserNotificationSupported(),
+    isSecureContext: Boolean(window.isSecureContext),
+    permission: getBrowserNotificationPermission(),
+    appConsent: getAppNotificationConsent(),
+  };
 }
 
 /**
@@ -178,6 +241,24 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
 }
 
 /**
+ * Records explicit in-app user permission first, then immediately requests
+ * native browser notification permission within the same user gesture.
+ */
+export async function enableNotificationsWithAppConsent(): Promise<{
+  appConsent: AppNotificationConsent;
+  browserPermission: NotificationPermission | "unsupported";
+}> {
+  setAppNotificationConsent("granted");
+
+  if (!isBrowserNotificationSupported()) {
+    return { appConsent: "granted", browserPermission: "unsupported" };
+  }
+
+  const browserPermission = await requestBrowserNotificationPermission();
+  return { appConsent: "granted", browserPermission };
+}
+
+/**
  * Sends a native system notification through the browser.
  */
 export async function sendBrowserNotification(
@@ -196,6 +277,7 @@ export async function sendBrowserNotification(
     badge: options.badge || defaultBadge,
     tag: options.tag || `rideon-${Date.now()}`,
     data: options.data,
+    requireInteraction: options.requireInteraction ?? false,
     // Modern sound is handled by Web Audio synth, so we mute native browser beep
     silent: true,
   };

@@ -25,14 +25,35 @@ import {
   isSoundEnabled,
   playNotificationSound,
   setSoundEnabled,
+  testNotificationSound,
+  type NotificationSoundVariant,
 } from "@/lib/notifications/sound";
 import {
+  enableNotificationsWithAppConsent,
   getBrowserNotificationPermission,
   isBrowserNotificationGranted,
-  requestBrowserNotificationPermission,
   sendBrowserNotification,
   subscribeToNotificationPermission,
 } from "@/lib/notifications/browser";
+
+function getSoundVariant(type: NotificationItem["type"]): NotificationSoundVariant {
+  if (type === "alert") return "urgent";
+  if (type === "ignition") return "ignition";
+  return "default";
+}
+
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+
+function formatBrowserNotificationBody(item: NotificationItem): string {
+  if (item.vehicleModel || item.vehiclePlate) {
+    const vehicleLabel = [item.vehicleModel, item.vehiclePlate].filter(Boolean).join(" • ");
+    return item.message ? `${vehicleLabel} — ${item.message}` : vehicleLabel;
+  }
+  if (item.imei && item.message && !item.message.includes(item.imei)) {
+    return `${item.message} (IMEI: ${item.imei})`;
+  }
+  return item.message;
+}
 
 export type NotificationItem = {
   id: string;
@@ -44,6 +65,9 @@ export type NotificationItem = {
   link?: string;
   rawType?: string;
   createdAt: string;
+  vehicleModel?: string;
+  vehiclePlate?: string;
+  imei?: string;
 };
 
 interface BackendAlert {
@@ -53,6 +77,8 @@ interface BackendAlert {
   rider_id?: string;
   device_id?: string;
   imei?: string;
+  vehicle_model?: string;
+  vehicle_plate?: string;
   type: string;
   severity: string;
   status: string;
@@ -269,16 +295,18 @@ export function NotificationPopover() {
     setSoundActive(next);
     setSoundEnabled(next);
     if (next) {
-      playNotificationSound();
+      testNotificationSound("default");
     }
   };
 
   const handleRequestBrowserPermission = async () => {
     initAudioOnUserGesture();
-    const perm = await requestBrowserNotificationPermission();
+    setSoundEnabled(true);
+    setSoundActive(true);
+    const { browserPermission: perm } = await enableNotificationsWithAppConsent();
     setBrowserPermission(perm);
+    testNotificationSound("default");
     if (perm === "granted") {
-      playNotificationSound();
       await sendBrowserNotification("RideOn • Alertas em Tempo Real", {
         body: "Notificações do navegador ativadas com sucesso.",
       });
@@ -364,9 +392,15 @@ export function NotificationPopover() {
             timestamp: formatRelativeTime(d.created_at),
             type: resolveAlertCategory(d.type),
             unread: !d.read && d.status !== "acknowledged" && d.status !== "resolved",
-            link: d.motorcycle_id ? `/dashboard?vehicle=${d.motorcycle_id}` : undefined,
+            link:
+              d.motorcycle_id && d.motorcycle_id !== ZERO_UUID
+                ? `/dashboard?vehicle=${d.motorcycle_id}`
+                : undefined,
             rawType: d.type,
             createdAt: d.created_at,
+            vehicleModel: d.vehicle_model?.trim() || undefined,
+            vehiclePlate: d.vehicle_plate?.trim() || undefined,
+            imei: d.imei?.trim() || undefined,
           }));
 
           // Check if any fresh alerts arrived via polling fallback
@@ -376,10 +410,11 @@ export function NotificationPopover() {
                 // If created in the last 2 minutes, trigger sound & desktop notification
                 const ageMs = Date.now() - new Date(item.createdAt).getTime();
                 if (ageMs < 120000) {
-                  playNotificationSound();
+                  playNotificationSound(getSoundVariant(item.type));
                   sendBrowserNotification(item.title, {
-                    body: item.message,
+                    body: formatBrowserNotificationBody(item),
                     link: item.link,
+                    requireInteraction: item.type === "alert",
                   });
                 }
               }
@@ -460,6 +495,9 @@ export function NotificationPopover() {
                 status: data.status || "pending",
                 message: data.message || "Novo alerta detectado",
                 motorcycle_id: data.motorcycle_id || data.MotorcycleID,
+                imei: data.imei || data.IMEI,
+                vehicle_model: data.vehicle_model || data.VehicleModel,
+                vehicle_plate: data.vehicle_plate || data.VehiclePlate,
                 read: false,
                 created_at: data.created_at || new Date().toISOString(),
               };
@@ -476,21 +514,28 @@ export function NotificationPopover() {
                 timestamp: "Agora",
                 type: resolveAlertCategory(newAlert.type),
                 unread: true,
-                link: newAlert.motorcycle_id ? `/dashboard?vehicle=${newAlert.motorcycle_id}` : undefined,
+                link:
+                  newAlert.motorcycle_id && newAlert.motorcycle_id !== ZERO_UUID
+                    ? `/dashboard?vehicle=${newAlert.motorcycle_id}`
+                    : undefined,
                 rawType: newAlert.type,
                 createdAt: newAlert.created_at,
+                vehicleModel: newAlert.vehicle_model?.trim() || undefined,
+                vehiclePlate: newAlert.vehicle_plate?.trim() || undefined,
+                imei: newAlert.imei?.trim() || undefined,
               };
 
               // Mark as known to prevent duplicate polling chimes
               knownAlertIdsRef.current.add(newItem.id);
 
               // Play modern satisfying audio chime
-              playNotificationSound();
+              playNotificationSound(getSoundVariant(newItem.type));
 
               // Send cross-browser native system notification
               sendBrowserNotification(newItem.title, {
-                body: newItem.message,
+                body: formatBrowserNotificationBody(newItem),
                 link: newItem.link,
+                requireInteraction: newItem.type === "alert",
               });
 
               setNotifications((prev) => [newItem, ...prev.filter((item) => item.id !== newItem.id)]);
@@ -748,7 +793,7 @@ export function NotificationPopover() {
               </div>
             </div>
 
-            {/* Browser Notifications Activation Banner: Oculto se já estiver ativo ou não suportado */}
+            {/* Browser Notifications Activation Banner */}
             {browserPermission === "default" && !isBrowserNotificationGranted() && (
               <div className="flex items-center justify-between border-b border-primary/20 bg-primary/10 px-4 py-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0 pr-2">
@@ -764,6 +809,31 @@ export function NotificationPopover() {
                 >
                   Ativar
                 </button>
+              </div>
+            )}
+
+            {browserPermission === "denied" && (
+              <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ShieldAlert className="size-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[11px] font-medium text-amber-200/90 leading-snug">
+                    Pop-ups bloqueados pelo navegador. Libere no ícone da barra de endereço (sons ativos).
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestBrowserPermission}
+                  className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300 hover:bg-amber-500/25 transition-all shrink-0"
+                >
+                  Verificar
+                </button>
+              </div>
+            )}
+
+            {browserPermission === "unsupported" && (
+              <div className="flex items-center gap-2 border-b border-border/70 bg-secondary/40 px-4 py-2 text-[11px] text-muted-foreground">
+                <Volume2 className="size-3.5 text-primary shrink-0" />
+                <span>Notificações do navegador indisponíveis aqui (requer HTTPS). Sons ativos no app.</span>
               </div>
             )}
 
@@ -889,6 +959,20 @@ export function NotificationPopover() {
                           {n.timestamp}
                         </span>
                       </div>
+                      {(n.vehicleModel || n.vehiclePlate) && (
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          {n.vehicleModel && (
+                            <span className="text-[11px] font-semibold text-foreground/90 truncate max-w-[200px]">
+                              {n.vehicleModel}
+                            </span>
+                          )}
+                          {n.vehiclePlate && (
+                            <span className="rounded border border-border/70 bg-secondary/70 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-muted-foreground">
+                              {n.vehiclePlate}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
                         {n.message}
                       </p>

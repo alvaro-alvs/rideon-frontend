@@ -20,6 +20,7 @@ import { RideOnLogo } from "@/app/components/rideon-logo";
 import { useTenant } from "@/app/components/tenant-provider";
 import { UserHeader } from "@/app/components/user-header";
 import { NotificationPermissionToast } from "@/app/components/notifications/notification-permission-toast";
+import { setupGlobalAudioUnlock } from "@/lib/notifications/sound";
 import { notifyAuthChange, useCurrentUser } from "@/hooks/use-current-user";
 
 import { isMasterAdmin, isManager } from "@/lib/auth";
@@ -38,6 +39,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const currentUser = useCurrentUser();
   const { tenant } = useTenant();
+
+  useEffect(() => {
+    return setupGlobalAudioUnlock();
+  }, []);
 
   // Redireciona imediatamente caso a sessão tenha expirado ou sido encerrada
   useEffect(() => {

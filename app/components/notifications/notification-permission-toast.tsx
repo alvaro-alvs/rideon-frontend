@@ -2,50 +2,73 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { BellRing, Check, ShieldAlert, Sparkles, Volume2, X } from "lucide-react";
+import { AlertTriangle, BellRing, Check, RefreshCw, ShieldAlert, Sparkles, Volume2, X } from "lucide-react";
 import {
   dismissNotificationPrompt,
+  enableNotificationsWithAppConsent,
+  getAppNotificationConsent,
+  getBrowserNotificationDiagnostics,
   getBrowserNotificationPermission,
   isBrowserNotificationGranted,
-  isBrowserNotificationSupported,
   isNotificationPromptDismissed,
-  requestBrowserNotificationPermission,
   sendBrowserNotification,
   subscribeToNotificationPermission,
 } from "@/lib/notifications/browser";
-import { initAudioOnUserGesture, playNotificationSound } from "@/lib/notifications/sound";
+import { initAudioOnUserGesture, setSoundEnabled, testNotificationSound } from "@/lib/notifications/sound";
+
+type ToastStatus = "prompt" | "success" | "blocked";
 
 export function NotificationPermissionToast() {
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [status, setStatus] = useState<ToastStatus>("prompt");
+  const [isSecureContext, setIsSecureContext] = useState(true);
 
   useEffect(() => {
+    const syncState = () => {
+      const diag = getBrowserNotificationDiagnostics();
+      setIsSecureContext(diag.isSecureContext);
+
+      if (diag.permission === "granted" || isBrowserNotificationGranted()) {
+        setIsVisible(false);
+      }
+    };
+
+    syncState();
+
     // Keep synchronized with permission state across window focus and other components
     const unsubscribe = subscribeToNotificationPermission((perm) => {
-      if (perm === "granted" || perm === "denied" || isBrowserNotificationGranted()) {
+      if (perm === "granted" || isBrowserNotificationGranted()) {
         setIsVisible(false);
       }
     });
 
-    if (!isBrowserNotificationSupported() || isBrowserNotificationGranted()) {
+    if (isBrowserNotificationGranted() || isNotificationPromptDismissed()) {
       return unsubscribe;
     }
 
     const permission = getBrowserNotificationPermission();
-    if (permission !== "default") {
-      return unsubscribe;
-    }
+    const appConsent = getAppNotificationConsent();
 
-    if (isNotificationPromptDismissed()) {
+    // Show if browser permission is default, OR if browser blocked by default and user hasn't decided in-app yet
+    const shouldPrompt =
+      permission === "default" || (permission === "denied" && appConsent === "unset");
+
+    if (!shouldPrompt) {
       return unsubscribe;
     }
 
     // Small delay so it appears smoothly after page load
     const timer = setTimeout(() => {
-      // Re-verify strictly right before displaying
-      const current = getBrowserNotificationPermission();
-      if (current === "default" && !isBrowserNotificationGranted() && !isNotificationPromptDismissed()) {
+      const currentPerm = getBrowserNotificationPermission();
+      const currentConsent = getAppNotificationConsent();
+      const canShow =
+        !isBrowserNotificationGranted() &&
+        !isNotificationPromptDismissed() &&
+        (currentPerm === "default" || (currentPerm === "denied" && currentConsent === "unset"));
+
+      if (canShow) {
+        setStatus("prompt");
         setIsVisible(true);
       }
     }, 2400);
@@ -59,14 +82,17 @@ export function NotificationPermissionToast() {
   const handleEnable = async () => {
     setIsSubmitting(true);
     initAudioOnUserGesture();
+    setSoundEnabled(true);
 
     try {
-      const permission = await requestBrowserNotificationPermission();
+      // 1. Record in-app user permission first, then request browser permission
+      const { browserPermission } = await enableNotificationsWithAppConsent();
 
-      if (permission === "granted") {
-        setIsSuccess(true);
-        // Play modern notification chime
-        playNotificationSound();
+      // Always play reinforced confirmation chime so audio is verified
+      testNotificationSound("default");
+
+      if (browserPermission === "granted") {
+        setStatus("success");
 
         // Send confirmation welcome notification
         await sendBrowserNotification("RideOn • Notificações Ativadas", {
@@ -77,12 +103,12 @@ export function NotificationPermissionToast() {
           setIsVisible(false);
         }, 2200);
       } else {
-        // User denied or dismissed
-        dismissNotificationPrompt(7);
-        setIsVisible(false);
+        // Browser blocked notifications by default or user denied browser prompt:
+        // Keep audio alerts active and explain how to unblock in browser settings
+        setStatus("blocked");
       }
     } catch {
-      setIsVisible(false);
+      setStatus("blocked");
     } finally {
       setIsSubmitting(false);
     }
@@ -125,8 +151,10 @@ export function NotificationPermissionToast() {
                 <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
                 <span className="relative inline-flex size-3 rounded-full bg-primary" />
               </span>
-              {isSuccess ? (
+              {status === "success" ? (
                 <Check className="size-5 text-emerald-400" />
+              ) : status === "blocked" ? (
+                <AlertTriangle className="size-5 text-amber-400" />
               ) : (
                 <BellRing className="size-5 text-primary animate-pulse" />
               )}
@@ -144,18 +172,24 @@ export function NotificationPermissionToast() {
               </div>
 
               <h4 className="mt-1 text-sm font-bold text-white tracking-wide">
-                {isSuccess
+                {status === "success"
                   ? "Notificações Ativadas com Sucesso!"
-                  : "Ativar notificações no navegador?"}
+                  : status === "blocked"
+                    ? "Sons ativos • Navegador bloqueou pop-ups"
+                    : "Ativar alertas e notificações?"}
               </h4>
 
               <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-                {isSuccess
+                {status === "success"
                   ? "Você agora receberá alertas sonoros e visuais em tempo real."
-                  : "Receba avisos instantâneos de ignição, movimentação suspeita e segurança da sua moto, mesmo em segundo plano."}
+                  : status === "blocked"
+                    ? isSecureContext
+                      ? "Seu navegador está bloqueando notificações por padrão. Os alertas sonoros no app já estão ativos; para liberar pop-ups, clique no ícone de cadeado/configurações na barra de endereço e permita Notificações."
+                      : "Os alertas sonoros no app já estão ativos. Notificações nativas do navegador exigem acesso via HTTPS ou localhost."
+                    : "Autorize na aplicação para ativar os alertas sonoros reforçados e solicitar a permissão de notificações do navegador."}
               </p>
 
-              {!isSuccess && (
+              {status === "prompt" && (
                 <div className="mt-3.5 flex items-center gap-2">
                   <button
                     type="button"
@@ -173,6 +207,30 @@ export function NotificationPermissionToast() {
                     className="rounded-xl px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
                   >
                     Agora não
+                  </button>
+                </div>
+              )}
+
+              {status === "blocked" && (
+                <div className="mt-3.5 flex items-center gap-2">
+                  {isSecureContext && (
+                    <button
+                      type="button"
+                      onClick={handleEnable}
+                      disabled={isSubmitting}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-300 hover:bg-amber-500/25 transition-all disabled:opacity-50"
+                    >
+                      <RefreshCw className="size-3" />
+                      <span>Tentar novamente</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleDismiss}
+                    className="rounded-xl px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
+                  >
+                    Entendi
                   </button>
                 </div>
               )}

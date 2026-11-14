@@ -290,10 +290,6 @@ export default function AdminCustomersPage() {
         setFormError("Como Master Admin, é obrigatório selecionar a Empresa/Tenant do cliente.");
         return;
       }
-      if (!formManagerId) {
-        setFormError("Como Master Admin, é obrigatório selecionar o Gerente Responsável pelo cliente.");
-        return;
-      }
     }
 
     setCreating(true);
@@ -783,16 +779,20 @@ export default function AdminCustomersPage() {
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                         <ShieldCheck className="size-3.5 text-primary" />
-                        Gerente Responsável *
+                        Gerente Responsável
                       </label>
                       <select
-                        required
                         value={formManagerId}
                         onChange={(e) => setFormManagerId(e.target.value)}
                         disabled={!formTenantId}
                         className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
                       >
-                        <option value="">Selecione o Gerente</option>
+                        <option value="">Sem gerente vinculado</option>
+                        {currentUser.user.id && (
+                          <option value={currentUser.user.id}>
+                            Admin Raiz ({currentUser.user.email}) — Assinante Direto
+                          </option>
+                        )}
                         {managers
                           .filter((m) => m.tenant_id === formTenantId)
                           .map((m) => (

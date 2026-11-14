@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --background: #0b0b0b;
   --foreground: #f3f1ee;
   --card: #141414;
@@ -170,4 +171,31 @@ input {
 .animate-map-alert-pulse {
   animation: map-alert-pulse 0.75s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   will-change: opacity;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.calendar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.calendar-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.calendar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.calendar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+}
+.calendar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 37, 27, 0.55);
 }

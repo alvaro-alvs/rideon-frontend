@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   BadgeAlert,
   Bell,
+  BellRing,
   Bike,
   Building2,
   CheckCircle2,
@@ -42,6 +43,8 @@ import {
   Terminal,
   User,
   Users,
+  Volume2,
+  VolumeX,
   Zap,
 } from "lucide-react";
 
@@ -51,6 +54,18 @@ import { notifyAuthChange, useCurrentUser } from "@/hooks/use-current-user";
 import { isMasterAdmin, isManager, isPlatformOrTenantAdmin, type UserRole } from "@/lib/auth";
 import { cleanPhone, formatPhone, validatePhone } from "@/lib/phone";
 import { cleanDigits, formatCNPJ, validateTaxID } from "@/lib/cnpj";
+import {
+  enableNotificationsWithAppConsent,
+  getBrowserNotificationDiagnostics,
+  sendBrowserNotification,
+  subscribeToNotificationPermission,
+} from "@/lib/notifications/browser";
+import {
+  initAudioOnUserGesture,
+  isSoundEnabled,
+  setSoundEnabled,
+  testNotificationSound,
+} from "@/lib/notifications/sound";
 
 type TabId = "profile" | "security" | "iot" | "preferences";
 
@@ -103,6 +118,19 @@ export default function SettingsPage() {
   const [maxSpeedKmH, setMaxSpeedKmH] = useState(110);
   const [speedUnit, setSpeedUnit] = useState<"kmh" | "mph">("kmh");
   const [prefSavedMessage, setPrefSavedMessage] = useState<string | null>(null);
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(() => isSoundEnabled());
+  const [browserPerm, setBrowserPerm] = useState<NotificationPermission | "unsupported">(() =>
+    getBrowserNotificationDiagnostics().permission,
+  );
+  const [browserSecureCtx] = useState(() =>
+    typeof window === "undefined" ? true : Boolean(window.isSecureContext),
+  );
+
+  useEffect(() => {
+    return subscribeToNotificationPermission((perm) => {
+      setBrowserPerm(perm);
+    });
+  }, []);
 
   // Load preferences from localStorage on mount
   useEffect(() => {
@@ -1083,6 +1111,122 @@ export default function SettingsPage() {
               </h3>
 
               <div className="space-y-4">
+                {/* Notificações do Navegador (após permissão na aplicação) */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <BellRing className="size-4 text-primary shrink-0" />
+                      <p className="text-sm font-bold uppercase tracking-wide text-foreground">
+                        Notificações do Navegador
+                      </p>
+                      <span
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          browserPerm === "granted"
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : browserPerm === "denied"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "bg-zinc-500/20 text-zinc-300"
+                        }`}
+                      >
+                        {browserPerm === "granted"
+                          ? "Ativas"
+                          : browserPerm === "denied"
+                            ? "Bloqueadas pelo Navegador"
+                            : browserPerm === "unsupported"
+                              ? "Indisponível"
+                              : "Aguardando Permissão"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {browserPerm === "granted"
+                        ? "Alertas nativos do navegador e avisos em segundo plano estão habilitados."
+                        : browserPerm === "denied"
+                          ? browserSecureCtx
+                            ? "O navegador bloqueou as notificações por padrão. Clique no ícone de cadeado/configurações na barra de endereço para permitir Notificações e depois clique em Verificar."
+                            : "Notificações nativas exigem conexão segura (HTTPS ou localhost). Os alertas sonoros no app continuam ativos."
+                          : "Autorize na aplicação para ativar os sons e disparar o pedido de permissão do navegador."}
+                    </p>
+                  </div>
+
+                  {browserPerm !== "granted" && browserPerm !== "unsupported" && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        initAudioOnUserGesture();
+                        setSoundEnabled(true);
+                        setSoundAlertsEnabled(true);
+                        const { browserPermission } = await enableNotificationsWithAppConsent();
+                        setBrowserPerm(browserPermission);
+                        testNotificationSound("default");
+                        if (browserPermission === "granted") {
+                          await sendBrowserNotification("RideOn • Notificações Ativadas", {
+                            body: "Alertas do navegador e sons reforçados configurados com sucesso.",
+                          });
+                        }
+                      }}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
+                    >
+                      <Sparkles className="size-3.5" />
+                      <span>{browserPerm === "denied" ? "Verificar Permissão" : "Permitir Notificações"}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Sons de Alerta Reforçados */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-border/70 bg-secondary/30 p-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {soundAlertsEnabled ? (
+                        <Volume2 className="size-4 text-primary shrink-0" />
+                      ) : (
+                        <VolumeX className="size-4 text-muted-foreground shrink-0" />
+                      )}
+                      <p className="text-sm font-bold uppercase tracking-wide text-foreground">
+                        Alertas Sonoros no Aplicativo
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Reproduz avisos sonoros distintos para ignição, telemetria e alertas críticos, mesmo se pop-ups estiverem bloqueados.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSoundEnabled(true);
+                        setSoundAlertsEnabled(true);
+                        testNotificationSound("urgent");
+                      }}
+                      className="rounded-xl border border-border bg-background/60 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-foreground hover:bg-secondary transition-colors"
+                    >
+                      Testar Som
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        initAudioOnUserGesture();
+                        const next = !soundAlertsEnabled;
+                        setSoundAlertsEnabled(next);
+                        setSoundEnabled(next);
+                        if (next) {
+                          testNotificationSound("default");
+                        }
+                      }}
+                      aria-label="Alternar alertas sonoros"
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        soundAlertsEnabled ? "bg-primary" : "bg-zinc-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          soundAlertsEnabled ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
                 {/* Opção para Admins: Notificações de Todos os Veículos (Desabilitada por padrão) */}
                 {isPlatformOrTenantAdmin(profileData?.user?.role || "rider") && (
                   <div className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/5 p-4">

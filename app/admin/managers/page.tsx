@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2,
@@ -15,22 +16,39 @@ import {
   Bike,
   ExternalLink,
   SlidersHorizontal,
+  Plus,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  KeyRound,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isMasterAdmin } from "@/lib/auth";
 import type { Manager } from "@/lib/types/manager";
+import type { TenantItem } from "@/lib/types/tenant";
 
 export default function AdminManagersPage() {
   const router = useRouter();
   const currentUser = useCurrentUser();
 
   const [managers, setManagers] = useState<Manager[]>([]);
+  const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [refreshing, setRefreshing] = useState(false);
+
+  // Create Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [formEmail, setFormEmail] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [formTenantId, setFormTenantId] = useState("");
+  const [formRole, setFormRole] = useState<"manager" | "tenant_admin" | "tenant_owner">("manager");
+  const [formError, setFormError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Protect route - only Master Admin (platform_admin or admin)
   useEffect(() => {
@@ -72,8 +90,80 @@ export default function AdminManagersPage() {
   useEffect(() => {
     if (currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role)) {
       void fetchManagers();
+      fetch("/api/admin/tenants")
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data: TenantItem[]) => {
+          if (Array.isArray(data)) setTenants(data);
+        })
+        .catch(() => {});
     }
   }, [currentUser]);
+
+  const handleOpenModal = () => {
+    setFormError("");
+    if (!formTenantId && tenants.length > 0) {
+      setFormTenantId(tenants[0].id);
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setFormError("");
+    setFormEmail("");
+    setFormPassword("");
+    setFormRole("manager");
+  };
+
+  const handleCreateManager = async (e: FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!formEmail.trim()) {
+      setFormError("O e-mail do gerente é obrigatório.");
+      return;
+    }
+    if (!formTenantId) {
+      setFormError("Selecione a empresa/tenant à qual o gerente pertence.");
+      return;
+    }
+    if (formPassword && formPassword.length < 6) {
+      setFormError("A senha deve ter no mínimo 6 caracteres.");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const payload: Record<string, string> = {
+        email: formEmail.trim(),
+        tenant_id: formTenantId,
+        role: formRole,
+      };
+      if (formPassword.trim()) {
+        payload.password = formPassword.trim();
+      }
+
+      const res = await fetch("/api/admin/managers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.message || "Falha ao cadastrar gerente.");
+      }
+
+      setManagers((prev) => [data as Manager, ...prev]);
+      setSuccessMessage(`Gerente "${data.email}" cadastrado com sucesso!`);
+      setTimeout(() => setSuccessMessage(""), 5000);
+      handleCloseModal();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Erro desconhecido ao cadastrar gerente.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const filteredManagers = useMemo(() => {
     return managers.filter((m) => {
@@ -145,6 +235,13 @@ export default function AdminManagersPage() {
                 <RefreshCw className={`size-4 ${refreshing ? "animate-spin text-primary" : ""}`} />
                 Atualizar
               </button>
+              <button
+                onClick={handleOpenModal}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-black uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+              >
+                <Plus className="size-4" />
+                Novo Gerente
+              </button>
             </div>
           </div>
 
@@ -201,6 +298,12 @@ export default function AdminManagersPage() {
         </header>
 
         {/* Filters and Search Bar */}
+        {successMessage && (
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-semibold text-emerald-400">
+            <CheckCircle2 className="size-4 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+        )}
         <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/60 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -365,6 +468,133 @@ export default function AdminManagersPage() {
           </div>
         )}
       </div>
+
+      {/* Create Manager Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/70 pb-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">
+                  Painel Master Admin
+                </p>
+                <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
+                  Cadastrar Novo Gerente
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="rounded-xl border border-border p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateManager} className="mt-5 space-y-4">
+              {formError && (
+                <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-xs font-semibold text-red-400">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Empresa / Tenant *
+                </label>
+                <div className="relative">
+                  <Building2 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <select
+                    value={formTenantId}
+                    onChange={(e) => setFormTenantId(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-4 text-xs font-medium text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">Selecione uma empresa...</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.trade_name || t.legal_name} ({t.slug})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  E-mail de Acesso *
+                </label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    required
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="gerente@empresa.com"
+                    className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Perfil / Função *
+                </label>
+                <div className="relative">
+                  <ShieldCheck className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <select
+                    value={formRole}
+                    onChange={(e) =>
+                      setFormRole(e.target.value as "manager" | "tenant_admin" | "tenant_owner")
+                    }
+                    className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-4 text-xs font-medium text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="manager">Gerente (Carteira Própria)</option>
+                    <option value="tenant_admin">Administrador do Tenant</option>
+                    <option value="tenant_owner">Proprietário do Tenant</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Senha Inicial (opcional)
+                </label>
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <input
+                    type="password"
+                    minLength={6}
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres (deixe vazio para gerar)"
+                    className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 border-t border-border/70 pt-4">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {creating ? "Cadastrando..." : "Cadastrar Gerente"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }

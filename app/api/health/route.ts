@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getApiUrl } from "@/lib/auth";
 
 export async function GET() {
-  const startTime = Date.now();
+  const startTime = performance.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4000);
 
@@ -14,7 +14,7 @@ export async function GET() {
     });
 
     clearTimeout(timeout);
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
 
     if (res.ok) {
       const data = (await res.json().catch(() => null)) as { service?: string; status?: string } | null;
@@ -22,6 +22,7 @@ export async function GET() {
         status: data?.status === "ok" ? "online" : "online",
         service: data?.service ?? "rideon-api",
         latencyMs,
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -34,7 +35,7 @@ export async function GET() {
     return NextResponse.json(
       {
         status: "offline",
-        latencyMs: Date.now() - startTime,
+        latencyMs: Math.max(1, Math.round(performance.now() - startTime)),
         error: error instanceof Error ? error.message : "Connection failed",
       },
       { status: 503 },
