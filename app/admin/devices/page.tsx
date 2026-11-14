@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertCircle,
+  ArrowRightLeft,
   Bike,
   CheckCircle2,
   Copy,
   Cpu,
   Eye,
+  History,
   LayoutGrid,
   Link2,
   List,
@@ -24,10 +26,12 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { DeviceCard } from "@/app/admin/devices/components/device-card";
-import { isPlatformOrTenantAdmin } from "@/lib/auth";
+import { canManageDeviceTransfers, isPlatformOrTenantAdmin } from "@/lib/auth";
+import { DeviceAuditModal } from "@/app/admin/devices/components/device-audit-modal";
 import { DeviceCreateModal } from "@/app/admin/devices/components/device-create-modal";
 import { DeviceLinkModal } from "@/app/admin/devices/components/device-link-modal";
 import { DeviceMapModal } from "@/app/admin/devices/components/device-map-modal";
+import { DeviceTransferModal } from "@/app/admin/devices/components/device-transfer-modal";
 import { J16SpecBanner } from "@/app/admin/devices/components/j16-spec-banner";
 import { useAdminDevices } from "@/hooks/use-admin-devices";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -58,7 +62,17 @@ export default function AdminDevicesPage() {
     useState<Device | null>(null);
   const [selectedDeviceForLink, setSelectedDeviceForLink] =
     useState<Device | null>(null);
+  const [selectedDeviceForTransfer, setSelectedDeviceForTransfer] =
+    useState<Device | null>(null);
+  const [auditModalState, setAuditModalState] = useState<{
+    open: boolean;
+    device: Device | null;
+  }>({ open: false, device: null });
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const canTransfer =
+    currentUser.status === "authenticated" &&
+    canManageDeviceTransfers(currentUser.user.role);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -143,8 +157,19 @@ export default function AdminDevicesPage() {
               </p>
             </div>
 
-            {/* Action Tools: New Device Button + Auto-refresh */}
+            {/* Action Tools: New Device Button + Broker Audit + Auto-refresh */}
             <div className="flex flex-wrap items-center gap-3">
+              {canTransfer && (
+                <button
+                  type="button"
+                  onClick={() => setAuditModalState({ open: true, device: null })}
+                  className="flex items-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-400 transition-all hover:bg-emerald-500/20 cursor-pointer"
+                >
+                  <History className="size-4" />
+                  <span>Auditoria Broker</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(true)}
@@ -369,6 +394,24 @@ export default function AdminDevicesPage() {
                 count={stats.j16Count}
                 dotColor="bg-primary"
               />
+
+              <FilterTabButton
+                active={filterStatus === "broker"}
+                onClick={() => setFilterStatus("broker")}
+                label="Via Broker"
+                count={stats.brokerCount}
+                dotColor="bg-emerald-400"
+              />
+
+              {canTransfer && (
+                <FilterTabButton
+                  active={filterStatus === "pending_transfer"}
+                  onClick={() => setFilterStatus("pending_transfer")}
+                  label="Exclusivo Admin"
+                  count={stats.pendingTransferCount}
+                  dotColor="bg-sky-400"
+                />
+              )}
             </div>
 
             {/* View Mode Toggle (Grid vs Table) */}
@@ -458,6 +501,9 @@ export default function AdminDevicesPage() {
                   onOpenMap={(d) => setSelectedDeviceForMap(d)}
                   onOpenLink={(d) => setSelectedDeviceForLink(d)}
                   onUnlink={(d) => void handleUnlink(d)}
+                  onOpenTransfer={(d) => setSelectedDeviceForTransfer(d)}
+                  onOpenAudit={(d) => setAuditModalState({ open: true, device: d })}
+                  canManageTransfers={canTransfer}
                 />
               ))}
             </div>
@@ -632,6 +678,27 @@ export default function AdminDevicesPage() {
                                 </span>
                               </button>
 
+                              {canTransfer && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDeviceForTransfer(device)}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-violet-500/40 bg-violet-500/10 px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
+                                  title="Transferir para Tenant Manager"
+                                >
+                                  <ArrowRightLeft className="size-3.5" />
+                                  <span className="hidden lg:inline">Transferir</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => setAuditModalState({ open: true, device })}
+                                className="inline-flex items-center gap-1 rounded-xl border border-border/80 bg-secondary px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
+                                title="Auditoria do equipamento"
+                              >
+                                <History className="size-3.5" />
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => setSelectedDeviceForMap(device)}
@@ -686,6 +753,20 @@ export default function AdminDevicesPage() {
             : null
         }
         onClose={() => setSelectedDeviceForMap(null)}
+      />
+
+      <DeviceTransferModal
+        device={selectedDeviceForTransfer}
+        onClose={() => setSelectedDeviceForTransfer(null)}
+        onTransferred={() => {
+          void refetch();
+        }}
+      />
+
+      <DeviceAuditModal
+        isOpen={auditModalState.open}
+        device={auditModalState.device}
+        onClose={() => setAuditModalState({ open: false, device: null })}
       />
     </DashboardShell>
   );

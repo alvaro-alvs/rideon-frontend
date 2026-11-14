@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { notifyAuthChange } from "@/hooks/use-current-user";
 import type { AdminDevicesResponse, Device } from "@/lib/types/device";
 
-export type FilterStatus = "all" | "active" | "inactive" | "unlinked" | "j16";
+export type FilterStatus = "all" | "active" | "inactive" | "unlinked" | "j16" | "broker" | "pending_transfer";
 
 export function useAdminDevices(pollIntervalSeconds: number = 30) {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -117,6 +117,8 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
       if (filterStatus === "inactive" && device.last_position) return false;
       if (filterStatus === "unlinked" && device.motorcycle) return false;
       if (filterStatus === "j16" && !isJ16) return false;
+      if (filterStatus === "broker" && !device.discovered_via_broker) return false;
+      if (filterStatus === "pending_transfer" && Boolean(device.manager_id)) return false;
 
       // Busca textual
       if (!searchQuery.trim()) return true;
@@ -150,6 +152,8 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
       d.protocol.toUpperCase() === "GT06" ||
       d.protocol.toUpperCase().includes("J16")
     ).length;
+    const brokerCount = devices.filter((d) => Boolean(d.discovered_via_broker)).length;
+    const pendingTransferCount = devices.filter((d) => !d.manager_id).length;
 
     return {
       total,
@@ -157,6 +161,8 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
       inactiveCount,
       unlinkedCount,
       j16Count,
+      brokerCount,
+      pendingTransferCount,
     };
   }, [devices]);
 

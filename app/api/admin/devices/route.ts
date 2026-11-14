@@ -195,10 +195,15 @@ export async function GET(request: NextRequest) {
 
         return {
           id: rawDev.id,
+          tenant_id: rawDev.tenant_id ?? null,
+          manager_id: rawDev.manager_id ?? null,
+          manager_email: rawDev.manager_email,
           serial_number: rawDev.serial_number,
           protocol: rawDev.protocol,
           firmware_version: rawDev.firmware_version,
           status: rawDev.status || "active",
+          discovered_via_broker: Boolean(rawDev.discovered_via_broker),
+          last_source_ip: rawDev.last_source_ip,
           last_seen_at: rawDev.last_seen_at ?? last_position?.timestamp ?? null,
           last_position,
           motorcycle,
@@ -217,6 +222,8 @@ export async function GET(request: NextRequest) {
       (d) => !d.last_position && Boolean(d.motorcycle),
     ).length;
     const unlinkedCount = devices.filter((d) => !d.motorcycle).length;
+    const brokerCount = devices.filter((d) => Boolean(d.discovered_via_broker)).length;
+    const pendingTransferCount = devices.filter((d) => !d.manager_id).length;
 
     const successRes = NextResponse.json({
       devices,
@@ -224,6 +231,8 @@ export async function GET(request: NextRequest) {
       active_count: activeCount,
       inactive_count: inactiveCount,
       unlinked_count: unlinkedCount,
+      broker_count: brokerCount,
+      pending_transfer_count: pendingTransferCount,
     });
     if (session.refreshed && session.newAccessToken) {
       applyAuthCookies(successRes, {

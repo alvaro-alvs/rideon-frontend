@@ -69,6 +69,15 @@ export function isManager(role: UserRole | string | undefined): boolean {
   );
 }
 
+export function canManageDeviceTransfers(role: UserRole | string | undefined): boolean {
+  return (
+    role === "admin" ||
+    role === "platform_admin" ||
+    role === "tenant_owner" ||
+    role === "tenant_admin"
+  );
+}
+
 export function isCustomer(role: UserRole | string | undefined): boolean {
   return !isPlatformOrTenantAdmin(role);
 }

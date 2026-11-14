@@ -4,11 +4,16 @@
  */
 export type RawDevice = {
   id: string;
+  tenant_id?: string | null;
+  manager_id?: string | null;
+  manager_email?: string;
   motorcycle_id?: string | null;
   serial_number: string;
   protocol?: string;
   firmware_version?: string;
   status: "active" | "inactive" | "standby" | "provisioned" | string;
+  discovered_via_broker?: boolean;
+  last_source_ip?: string;
   last_seen_at?: string | null;
   has_position?: boolean;
   last_position?: DeviceLastPosition | null;
@@ -55,10 +60,15 @@ export type AssociatedMotorcycle = {
  */
 export type Device = {
   id: string;           // device id
+  tenant_id?: string | null;
+  manager_id?: string | null;
+  manager_email?: string;
   serial_number: string;
   protocol?: string;
   firmware_version?: string;
   status: "active" | "inactive" | "standby" | "provisioned" | string;
+  discovered_via_broker?: boolean;
+  last_source_ip?: string;
   last_seen_at?: string | null;
   last_position?: DeviceLastPosition | null;
   motorcycle?: AssociatedMotorcycle | null;
@@ -71,6 +81,41 @@ export type AdminDevicesResponse = {
   active_count: number;
   inactive_count: number;
   unlinked_count: number;
+  broker_count?: number;
+  pending_transfer_count?: number;
+};
+
+export type DeviceAudit = {
+  id: string;
+  device_id: string;
+  serial_number: string;
+  tenant_id?: string | null;
+  manager_id?: string | null;
+  event_type:
+    | "broker_discovered"
+    | "broker_login"
+    | "broker_offline"
+    | "broker_telemetry"
+    | "transferred_to_manager"
+    | "registered"
+    | "updated"
+    | string;
+  protocol?: string;
+  source_ip?: string;
+  status?: string;
+  actor_id?: string | null;
+  actor_email?: string;
+  actor_role?: string;
+  details?: string;
+  metadata?: Record<string, string>;
+  created_at: string;
+};
+
+export type DeviceAuditListResponse = {
+  data: DeviceAudit[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type CreateDevicePayload = {

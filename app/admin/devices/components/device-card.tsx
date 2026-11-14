@@ -3,14 +3,17 @@
 import { useState } from "react";
 import {
   Activity,
+  ArrowRightLeft,
   Bike,
   CheckCircle2,
   Clock,
   Copy,
   Cpu,
   Eye,
+  History,
   Link2,
   MapPin,
+  Radio,
   Unlink,
   User,
 } from "lucide-react";
@@ -22,9 +25,20 @@ interface DeviceCardProps {
   onOpenMap: (device: Device) => void;
   onOpenLink?: (device: Device) => void;
   onUnlink?: (device: Device) => void;
+  onOpenTransfer?: (device: Device) => void;
+  onOpenAudit?: (device: Device) => void;
+  canManageTransfers?: boolean;
 }
 
-export function DeviceCard({ device, onOpenMap, onOpenLink, onUnlink }: DeviceCardProps) {
+export function DeviceCard({
+  device,
+  onOpenMap,
+  onOpenLink,
+  onUnlink,
+  onOpenTransfer,
+  onOpenAudit,
+  canManageTransfers = false,
+}: DeviceCardProps) {
   const [copied, setCopied] = useState(false);
 
   const hasLastPosition = Boolean(device.last_position);
@@ -74,7 +88,7 @@ export function DeviceCard({ device, onOpenMap, onOpenLink, onUnlink }: DeviceCa
             </div>
 
             <div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-black uppercase tracking-wider text-foreground">
                   {isJ16 ? "J16 4G Tracker" : "Rastreador GPS"}
                 </span>
@@ -83,9 +97,16 @@ export function DeviceCard({ device, onOpenMap, onOpenLink, onUnlink }: DeviceCa
                     J16
                   </span>
                 )}
+                {device.discovered_via_broker && (
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.2 text-[9px] font-black uppercase text-emerald-400 border border-emerald-500/30">
+                    <Radio className="size-2.5" />
+                    Via Broker
+                  </span>
+                )}
               </div>
               <p className="text-[10px] text-muted-foreground font-mono">
                 {device.firmware_version || "J16-FW-2.4"}
+                {device.last_source_ip ? ` · IP ${device.last_source_ip}` : ""}
               </p>
             </div>
           </div>
@@ -315,9 +336,44 @@ export function DeviceCard({ device, onOpenMap, onOpenLink, onUnlink }: DeviceCa
               Visto {formatRelativeTime(device.last_seen_at || position?.timestamp || "")}
             </span>
           )}
+          {canManageTransfers && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold border ${
+                device.manager_id
+                  ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                  : "border-sky-500/30 bg-sky-500/10 text-sky-300"
+              }`}
+              title={device.manager_email || "Visível apenas para Tenant Admin"}
+            >
+              {device.manager_id
+                ? `Gerente: ${device.manager_email || "Atribuído"}`
+                : "Exclusivo Admin"}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {onOpenAudit && (
+            <button
+              type="button"
+              onClick={() => onOpenAudit(device)}
+              className="flex items-center gap-1 rounded-xl border border-border/80 bg-secondary px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-all cursor-pointer"
+              title="Auditoria de comunicações via broker"
+            >
+              <History className="size-3.5" />
+            </button>
+          )}
+          {canManageTransfers && onOpenTransfer && (
+            <button
+              type="button"
+              onClick={() => onOpenTransfer(device)}
+              className="flex items-center gap-1 rounded-xl border border-violet-500/40 bg-violet-500/10 px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20 transition-all cursor-pointer"
+              title="Transferir para Tenant Manager"
+            >
+              <ArrowRightLeft className="size-3.5" />
+              <span className="hidden sm:inline">Transferir</span>
+            </button>
+          )}
           {onOpenLink && (
             <button
               type="button"
