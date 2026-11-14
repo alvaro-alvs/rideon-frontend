@@ -364,9 +364,8 @@ export function NotificationPopover() {
         }
       }
 
-      return `${protocol}//${currentHost}:8080/ws?token=${encodeURIComponent(token)}${
-        enableAllVehicles ? "&all_vehicles=true" : ""
-      }`;
+      return `${protocol}//${currentHost}:8080/ws?token=${encodeURIComponent(token)}${enableAllVehicles ? "&all_vehicles=true" : ""
+        }`;
     },
     [],
   );
@@ -709,11 +708,10 @@ export function NotificationPopover() {
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label="Abrir notificações"
         aria-expanded={isOpen}
-        className={`relative flex size-10 items-center justify-center rounded-lg border transition-all duration-200 ${
-          isOpen
+        className={`relative flex size-10 items-center justify-center rounded-lg border transition-all duration-200 ${isOpen
             ? "border-primary/60 bg-primary/10 text-primary shadow-lg shadow-primary/10"
             : "border-border/70 bg-card/60 text-muted-foreground hover:border-border hover:bg-secondary/70 hover:text-foreground"
-        }`}
+          }`}
       >
         <Bell className="size-4.5" />
         {unreadCount > 0 && (
@@ -762,11 +760,10 @@ export function NotificationPopover() {
                   onClick={toggleSound}
                   title={soundActive ? "Som ativo (clique para mutar)" : "Som mudo (clique para ativar)"}
                   aria-label={soundActive ? "Desativar sons" : "Ativar sons"}
-                  className={`rounded p-1 transition-colors ${
-                    soundActive
+                  className={`rounded p-1 transition-colors ${soundActive
                       ? "text-primary hover:bg-primary/10"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {soundActive ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
                 </button>
@@ -860,14 +857,12 @@ export function NotificationPopover() {
                   role="switch"
                   aria-checked={allVehicles}
                   aria-label="Habilitar notificações de todos os veículos"
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    allVehicles ? "bg-primary" : "bg-zinc-700"
-                  }`}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${allVehicles ? "bg-primary" : "bg-zinc-700"
+                    }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block size-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      allVehicles ? "translate-x-4" : "translate-x-0"
-                    }`}
+                    className={`pointer-events-none inline-block size-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${allVehicles ? "translate-x-4" : "translate-x-0"
+                      }`}
                   />
                 </button>
               </div>
@@ -878,44 +873,40 @@ export function NotificationPopover() {
               <button
                 type="button"
                 onClick={() => setTab("all")}
-                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${
-                  tab === "all"
+                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${tab === "all"
                     ? "bg-primary text-white"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 Todas ({notifications.length})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("ignition")}
-                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${
-                  tab === "ignition"
+                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${tab === "ignition"
                     ? "bg-primary text-white"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 Ignição ({notifications.filter((n) => n.type === "ignition").length})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("alert")}
-                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${
-                  tab === "alert"
+                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${tab === "alert"
                     ? "bg-primary text-white"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 Alertas ({notifications.filter((n) => n.type === "alert").length})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("telemetry")}
-                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${
-                  tab === "telemetry"
+                className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${tab === "telemetry"
                     ? "bg-primary text-white"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 Telemetria ({notifications.filter((n) => n.type === "telemetry").length})
               </button>
@@ -940,11 +931,10 @@ export function NotificationPopover() {
                   <div
                     key={n.id}
                     onClick={() => markAsRead(n.id)}
-                    className={`group relative flex items-start gap-3 p-3.5 transition-colors cursor-pointer ${
-                      n.unread
+                    className={`group relative flex items-start gap-3 p-3.5 transition-colors cursor-pointer ${n.unread
                         ? "bg-primary/5 hover:bg-primary/10"
                         : "hover:bg-secondary/40"
-                    }`}
+                      }`}
                   >
                     <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary border border-border/80">
                       {getIcon(n.type, n.rawType)}
