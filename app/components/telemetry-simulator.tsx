@@ -343,12 +343,20 @@ export function TelemetrySimulator() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-1.5">
-                    <span className="flex items-center gap-1.5 text-[0.62rem] font-extrabold uppercase tracking-[0.12em] text-red-400">
-                      <span className="size-1.5 rounded-full bg-red-500 animate-ping" />
-                      Alerta • Cerca Violada
+                    <span className="flex min-w-0 items-center gap-1.5 text-[0.62rem] font-extrabold uppercase leading-tight tracking-[0.12em] text-red-400">
+                      <span className="size-1.5 shrink-0 rounded-full bg-red-500 animate-ping" />
+                      <span>Alerta • Cerca Violada</span>
                     </span>
-                    <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] font-bold text-red-300">
-                      {currentVehicle.plate}
+                    <span
+                      className="inline-flex shrink-0 items-stretch overflow-hidden rounded-[3px] border border-neutral-400/70 bg-white shadow-sm whitespace-nowrap"
+                      title={`Placa: ${currentVehicle.plate}`}
+                    >
+                      <span className="flex items-center bg-blue-700 px-1 py-0.5 text-[0.45rem] font-black leading-none tracking-wider text-white">
+                        BR
+                      </span>
+                      <span className="flex items-center bg-white px-1.5 py-0.5 font-mono text-[0.55rem] font-black leading-none tracking-tight text-neutral-950">
+                        {currentVehicle.plate}
+                      </span>
                     </span>
                   </div>
 

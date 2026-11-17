@@ -1,8 +1,15 @@
 export type PaymentMethod = "card" | "pix" | "manual";
-export type GatewayProvider = "picpay" | "mercadopago" | "manual";
+export type GatewayProvider = "abacatepay" | "manual";
 export type BillingCycle = "monthly" | "yearly" | "one_time";
 export type ComplianceStatus = "compliant" | "overdue" | "pending";
 export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
+
+export type TransparentSDKConfig = {
+  provider: GatewayProvider;
+  enabled: boolean;
+  environment: string;
+  public_key?: string;
+};
 
 export type CustomerBillingSummary = {
   rider_id: string;
@@ -19,6 +26,7 @@ export type CustomerBillingSummary = {
   allow_installments?: boolean;
   installments?: number;
   payment_method: PaymentMethod;
+  allowed_payment_methods?: PaymentMethod[];
   gateway: GatewayProvider;
   last_paid_at?: string;
   last_paid_amount_cents?: number;
@@ -47,6 +55,7 @@ export type InvoiceItem = {
   paid_at?: string;
   status: InvoiceStatus;
   payment_method: PaymentMethod;
+  allowed_payment_methods?: PaymentMethod[];
   gateway_provider: GatewayProvider;
   gateway_external_id?: string;
   checkout_url?: string;
@@ -66,6 +75,7 @@ export type CustomerCurrentBillingResponse = {
   allow_installments?: boolean;
   installments?: number;
   payment_method: PaymentMethod;
+  allowed_payment_methods?: PaymentMethod[];
   gateway: GatewayProvider;
   card_brand?: string;
   card_last4?: string;
@@ -76,5 +86,6 @@ export type CustomerCurrentBillingResponse = {
   current_invoice?: InvoiceItem;
   history: InvoiceItem[];
   gateways_configured: Record<string, boolean>;
+  card_sdk?: TransparentSDKConfig;
 };
 

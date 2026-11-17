@@ -45,6 +45,33 @@ export async function POST(request: Request) {
     const { response, data } = await callAuthApi("login", authBody);
 
     if (!response.ok) {
+      const code = extractErrorCode(data);
+      if (code === "ACCOUNT_PENDING_APPROVAL") {
+        const errObj =
+          data && typeof data === "object" && data.error && typeof data.error === "object"
+            ? (data.error as Record<string, unknown>)
+            : null;
+        const rawContact = errObj?.manager_contact ?? data?.manager_contact;
+        const managerContact =
+          rawContact &&
+          typeof rawContact === "object" &&
+          Object.values(rawContact as Record<string, unknown>).some(
+            (v) => typeof v === "string" && v.trim().length > 0,
+          )
+            ? rawContact
+            : null;
+
+        return NextResponse.json(
+          {
+            message:
+              (errObj?.message as string) ||
+              "Sua conta aguarda aprovação do seu gestor ou do administrador master.",
+            code,
+            ...(managerContact ? { manager_contact: managerContact } : {}),
+          },
+          { status: 403 },
+        );
+      }
       return NextResponse.json(
         { message: getPublicError(response.status) },
         { status: response.status >= 500 ? 502 : response.status },

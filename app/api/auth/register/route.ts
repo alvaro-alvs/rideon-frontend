@@ -31,6 +31,18 @@ export async function POST(request: Request) {
     if (!response.ok) {
       if (response.status === 409 && data && typeof data === "object") {
         const errObj = (data as Record<string, unknown>).error as Record<string, unknown> | undefined;
+        if (errObj?.code === "ACCOUNT_PENDING_APPROVAL") {
+          return NextResponse.json(
+            {
+              registered: false,
+              pendingApproval: true,
+              message:
+                (errObj.message as string) ||
+                "Este e-mail já possui uma solicitação de cadastro aguardando aprovação.",
+            },
+            { status: 409 },
+          );
+        }
         if (errObj && (errObj.matches || errObj.code === "USER_ALREADY_EXISTS")) {
           return NextResponse.json(
             {
@@ -55,6 +67,16 @@ export async function POST(request: Request) {
         { message: "Resposta invalida da API de autenticacao." },
         { status: 502 },
       );
+    }
+
+    if ((data as Record<string, unknown>)?.status === "pending") {
+      return NextResponse.json({
+        registered: true,
+        pendingApproval: true,
+        authenticated: false,
+        autoLoggedIn: false,
+        message: "Cadastro enviado! Sua conta aguarda aprovação do seu gestor ou do administrador master.",
+      });
     }
 
     // Auto-login immediately upon registration

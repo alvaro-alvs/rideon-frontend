@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Lock, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ExternalLink, Lock, ShieldCheck, Sparkles, X } from "lucide-react";
+
+import type { TransparentSDKConfig } from "@/lib/types/financial";
 
 type CardBrandInfo = {
   name: string;
@@ -84,29 +86,120 @@ function isExpiryValid(expiry: string): boolean {
   return expDate >= now;
 }
 
+function formatCpfCnpj(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1-$2");
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
+function formatPhoneBr(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+type AbacatePaySDKInstance = {
+  tokenize: (payload: Record<string, unknown>) => Promise<{ token?: string; cardToken?: string }>;
+};
+
+type AbacatePayGlobal = {
+  create: (cfg: { publicKey: string; amount: number }) => AbacatePaySDKInstance;
+};
+
+async function loadAbacatePayScript(): Promise<AbacatePayGlobal | null> {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { AbacatePay?: AbacatePayGlobal };
+  if (w.AbacatePay) return w.AbacatePay;
+
+  await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://abacatepay.com/abacatepay.js"]',
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Falha ao carregar AbacatePay SDK")), {
+        once: true,
+      });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://abacatepay.com/abacatepay.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Falha ao carregar AbacatePay SDK"));
+    document.head.appendChild(script);
+  });
+
+  return (window as unknown as { AbacatePay?: AbacatePayGlobal }).AbacatePay ?? null;
+}
+
+export type CardCheckoutPayload = {
+  cardToken: string;
+  customerDocument: string;
+  customerPhone: string;
+  cardBrand: string;
+  cardLast4: string;
+};
+
 type CreditCard3DFormProps = {
+  amountCents: number;
   amountLabel: string;
   planLabel: string;
+  sdkConfig?: TransparentSDKConfig;
+  defaultEmail?: string;
+  defaultPhone?: string;
   submitting: boolean;
   onClose: () => void;
-  onProceedToCheckout: (cardToken: string) => Promise<void>;
+  onProceedToCheckout: (payload: CardCheckoutPayload) => Promise<void>;
+  onFallbackHostedCheckout: () => Promise<void>;
 };
 
 export function CreditCard3DForm({
+  amountCents,
   amountLabel,
   planLabel,
+  sdkConfig,
+  defaultEmail = "",
+  defaultPhone = "",
   submitting,
   onClose,
   onProceedToCheckout,
+  onFallbackHostedCheckout,
 }: CreditCard3DFormProps) {
   // Ephemeral state — NEVER persisted or sent to our backend (PCI-DSS safe)
   const [cardNumber, setCardNumber] = useState("");
   const [holderName, setHolderName] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvv, setCvv] = useState("");
+  const [customerDocument, setCustomerDocument] = useState("");
+  const [customerPhone, setCustomerPhone] = useState(() =>
+    defaultPhone ? formatPhoneBr(defaultPhone) : "",
+  );
   const [isFlipped, setIsFlipped] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [tokenizing, setTokenizing] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (sdkConfig?.enabled && sdkConfig.public_key) {
+      loadAbacatePayScript().catch(() => {
+        // Handled on submit with hosted checkout fallback
+      });
+    }
+  }, [sdkConfig?.enabled, sdkConfig?.public_key]);
 
   const digits = cardNumber.replace(/\D/g, "");
   const brand = useMemo(() => detectCardBrand(digits), [digits]);
@@ -149,16 +242,62 @@ export function CreditCard3DForm({
       return;
     }
 
+    const docDigits = customerDocument.replace(/\D/g, "");
+    if (docDigits.length !== 11 && docDigits.length !== 14) {
+      setError("Informe um CPF ou CNPJ válido do titular.");
+      return;
+    }
+
+    const phoneDigits = customerPhone.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
+      setError("Informe um celular válido com DDD.");
+      return;
+    }
+
+    const last4 = digits.slice(-4);
+    const brandName = brand.badge === "CARD" ? "" : brand.badge;
+    const [expMonth, expYearShort] = expiry.split("/");
+
+    let ephemeralToken = "";
+    if (sdkConfig?.enabled && sdkConfig.public_key) {
+      setTokenizing(true);
+      try {
+        const sdk = await loadAbacatePayScript();
+        if (sdk?.create) {
+          const instance = sdk.create({
+            publicKey: sdkConfig.public_key,
+            amount: amountCents,
+          });
+          const result = await instance.tokenize({
+            name: holderName.trim(),
+            email: defaultEmail || undefined,
+            taxId: docDigits,
+            number: digits,
+            expMonth,
+            expYear: `20${expYearShort}`,
+            cvv,
+          });
+          ephemeralToken = result?.token || result?.cardToken || "";
+        }
+      } catch {
+        // Fallback to hosted checkout below if SDK tokenization is unavailable
+        ephemeralToken = "";
+      } finally {
+        setTokenizing(false);
+      }
+    }
+
     // Clear sensitive fields from memory immediately before sending tokenized checkout
     setCardNumber("");
     setCvv("");
-    // PicPay Transparent SDK temporaryCardToken will be injected here when SDK key is configured
-    const ephemeralToken =
-      typeof window !== "undefined" &&
-      (window as unknown as { __picpayToken?: string }).__picpayToken
-        ? String((window as unknown as { __picpayToken?: string }).__picpayToken)
-        : "";
-    await onProceedToCheckout(ephemeralToken);
+
+    await onProceedToCheckout({
+      cardToken: ephemeralToken,
+      customerDocument: docDigits,
+      customerPhone: phoneDigits,
+      cardBrand: brandName,
+      cardLast4: last4,
+    });
   };
 
   return (
@@ -332,13 +471,42 @@ export function CreditCard3DForm({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block font-semibold text-muted-foreground">
+                CPF ou CNPJ do Titular
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="000.000.000-00"
+                value={customerDocument}
+                onChange={(e) => setCustomerDocument(formatCpfCnpj(e.target.value))}
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono text-foreground focus:border-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block font-semibold text-muted-foreground">
+                Celular com DDD
+              </label>
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="(11) 99999-9999"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(formatPhoneBr(e.target.value))}
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono text-foreground focus:border-primary focus:outline-none"
+              />
+            </div>
+          </div>
+
           {/* Security Guarantee */}
           <div className="flex items-start gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[11px] text-emerald-300">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <span>
               Criptografia TLS ponta a ponta. Número completo e CVV nunca são gravados nos nossos
-              servidores — a cobrança é tokenizada e processada no ambiente PCI-DSS do{" "}
-              <strong>PicPay</strong>.
+              servidores — a cobrança é tokenizada e processada no ambiente seguro da{" "}
+              <strong>AbacatePay</strong>.
             </span>
           </div>
 
@@ -346,22 +514,38 @@ export function CreditCard3DForm({
             <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-rose-400">{error}</p>
           )}
 
-          <div className="mt-1 flex justify-end gap-2">
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-xl border border-border px-4 py-2.5 font-semibold text-muted-foreground hover:text-foreground"
+              disabled={submitting || tokenizing}
+              onClick={() => {
+                setCardNumber("");
+                setCvv("");
+                void onFallbackHostedCheckout();
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50 cursor-pointer"
             >
-              Cancelar
+              <ExternalLink className="size-3" />
+              Checkout AbacatePay (Cartão / Wallet)
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:opacity-90 disabled:opacity-50"
-            >
-              <Lock className="size-3.5" />
-              {submitting ? "Processando no PicPay..." : `Pagar ${amountLabel}`}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-border px-4 py-2.5 font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || tokenizing}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
+              >
+                <Lock className="size-3.5" />
+                {tokenizing || submitting ? "Processando na AbacatePay..." : `Pagar ${amountLabel}`}
+              </button>
+            </div>
           </div>
         </form>
       </div>

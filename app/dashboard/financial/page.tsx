@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Calendar,
@@ -16,9 +16,13 @@ import {
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
-import { CreditCard3DForm } from "@/app/dashboard/financial/components/credit-card-3d-form";
+import {
+  CreditCard3DForm,
+  type CardCheckoutPayload,
+} from "@/app/dashboard/financial/components/credit-card-3d-form";
 import type {
   CustomerCurrentBillingResponse,
+  InvoiceItem,
   InvoiceStatus,
 } from "@/lib/types/financial";
 
@@ -52,6 +56,11 @@ function formatDate(iso?: string) {
   return d.toLocaleDateString("pt-BR");
 }
 
+function normalizeQrDataUrl(raw?: string) {
+  if (!raw) return "";
+  return raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+}
+
 function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   if (status === "paid") {
     return (
@@ -79,19 +88,27 @@ function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
 
 export default function CustomerFinancialPage() {
   const [billing, setBilling] = useState<CustomerCurrentBillingResponse | null>(null);
+  const [profileContact, setProfileContact] = useState<{ email: string; phone: string }>({
+    email: "",
+    phone: "",
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [payingMethod, setPayingMethod] = useState<"card" | "pix" | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
-  const [cardLink, setCardLink] = useState("");
-  const [pixData, setPixData] = useState<{ qrCode: string; copyPaste: string } | null>(null);
+  const [cardLinkByInvoice, setCardLinkByInvoice] = useState<Record<string, string>>({});
+  const [pixByInvoice, setPixByInvoice] = useState<
+    Record<string, { qrCode: string; copyPaste: string; expiresAt?: number }>
+  >({});
+  const [pixNowTs, setPixNowTs] = useState<number>(() => Date.now());
   const [copied, setCopied] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
   const [useInstallments, setUseInstallments] = useState(true);
 
-  const loadBilling = useCallback(async (isRefresh = false) => {
+  const loadBilling = useCallback(async (isRefresh = false): Promise<CustomerCurrentBillingResponse | null> => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError("");
@@ -100,11 +117,13 @@ export default function CustomerFinancialPage() {
       const body = await res.json().catch(() => null);
       if (!res.ok) {
         setError(body?.error?.message || body?.message || "Erro ao carregar fatura.");
-        return;
+        return null;
       }
       setBilling(body);
+      return body as CustomerCurrentBillingResponse;
     } catch {
       setError("Erro de conexão ao carregar dados financeiros.");
+      return null;
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -112,40 +131,168 @@ export default function CustomerFinancialPage() {
   }, []);
 
   useEffect(() => {
-    loadBilling();
-  }, [loadBilling]);
+    let active = true;
+    fetch("/api/financial/current", { cache: "no-store" })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!active) return;
+        if (!res.ok) {
+          setError(body?.error?.message || body?.message || "Erro ao carregar fatura.");
+          return;
+        }
+        setBilling(body);
+      })
+      .catch(() => {
+        if (active) setError("Erro de conexão ao carregar dados financeiros.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-  // Poll every 5s while waiting for PIX or InfinitePay card payment confirmation
-  useEffect(() => {
-    const waitingPayment = Boolean(pixData || cardLink);
-    if (!waitingPayment) return;
-    if (billing?.status === "paid") {
-      setPixData(null);
-      setCardLink("");
-      setPaymentConfirmed(true);
-      return;
+    fetch("/api/profile", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data) {
+          setProfileContact({
+            email: data?.user?.email || "",
+            phone: data?.rider?.phone || "",
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const openInvoices = useMemo(
+    () =>
+      (billing?.history ?? []).filter(
+        (inv) => inv.status === "pending" || inv.status === "overdue",
+      ),
+    [billing],
+  );
+
+  const activeInvoice: InvoiceItem | undefined = useMemo(() => {
+    if (selectedInvoiceId) {
+      const matched = billing?.history?.find((inv) => inv.id === selectedInvoiceId);
+      if (matched) return matched;
     }
+    if (
+      billing?.current_invoice &&
+      (billing.current_invoice.status === "pending" ||
+        billing.current_invoice.status === "overdue")
+    ) {
+      return billing.current_invoice;
+    }
+    return openInvoices[0] ?? billing?.current_invoice;
+  }, [selectedInvoiceId, billing, openInvoices]);
+
+  const invoiceKey = activeInvoice?.id || "default";
+  const activeStatus: InvoiceStatus = activeInvoice?.status ?? billing?.status ?? "pending";
+  const isPaid = activeStatus === "paid";
+  const activePlanName = activeInvoice?.plan_name ?? billing?.plan_name ?? "Plano Padrão";
+  const activeBillingCycle = activeInvoice?.billing_cycle ?? billing?.billing_cycle ?? "monthly";
+  const activeAmountCents = activeInvoice?.amount_cents ?? billing?.amount_cents ?? 0;
+  const activeAllowInstallments =
+    activeInvoice?.allow_installments ?? billing?.allow_installments ?? false;
+  const activeInstallments = activeInvoice?.installments ?? billing?.installments ?? 1;
+  const activePaymentMethod = activeInvoice?.payment_method ?? billing?.payment_method ?? "card";
+  const activeGateway = activeInvoice?.gateway_provider ?? billing?.gateway ?? "abacatepay";
+  const activeDueDate = activeInvoice?.due_date ?? billing?.due_date;
+  const activeCardBrand = activeInvoice?.card_brand ?? billing?.card_brand;
+  const activeCardLast4 = activeInvoice?.card_last4 ?? billing?.card_last4;
+
+  const localPix = pixByInvoice[invoiceKey];
+  const activePixQr = localPix?.qrCode || (!isPaid ? activeInvoice?.pix_qr_code : "") || "";
+  const activePixCode =
+    localPix?.copyPaste || (!isPaid ? activeInvoice?.pix_copy_paste : "") || "";
+  const activeCardLink =
+    cardLinkByInvoice[invoiceKey] || (!isPaid ? activeInvoice?.checkout_url : "") || "";
+
+  // Poll every 5s and recheck on window focus while waiting for AbacatePay PIX or Card confirmation
+  useEffect(() => {
+    const waitingPayment = !isPaid && Boolean(activePixCode || activePixQr || activeCardLink);
+    if (!waitingPayment) return;
+
+    const checkAndSync = async () => {
+      const prevInvoiceId = activeInvoice?.id;
+      const fresh = await loadBilling(true);
+      if (!fresh) return;
+      const targetNowPaid = prevInvoiceId
+        ? fresh.history?.some((inv) => inv.id === prevInvoiceId && inv.status === "paid")
+        : fresh.status === "paid";
+      if (targetNowPaid) {
+        setPixByInvoice((prev) => {
+          const next = { ...prev };
+          delete next[invoiceKey];
+          return next;
+        });
+        setCardLinkByInvoice((prev) => {
+          const next = { ...prev };
+          delete next[invoiceKey];
+          return next;
+        });
+        setPaymentConfirmed(true);
+      }
+    };
 
     const timer = setInterval(() => {
-      loadBilling(true);
+      void checkAndSync();
     }, 5000);
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void checkAndSync();
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
+  }, [isPaid, activePixCode, activePixQr, activeCardLink, activeInvoice?.id, invoiceKey, loadBilling]);
+
+  // Countdown for PIX expiration (AbacatePay PIX expires in 60 min)
+  const expiresAt = localPix?.expiresAt;
+  const shouldTickPix = Boolean(expiresAt && (activePixCode || activePixQr) && !isPaid);
+
+  useEffect(() => {
+    if (!shouldTickPix) return;
+    const timer = setInterval(() => {
+      setPixNowTs(Date.now());
+    }, 1000);
     return () => clearInterval(timer);
-  }, [pixData, cardLink, billing?.status, loadBilling]);
+  }, [shouldTickPix]);
+
+  const pixRemainingSec =
+    shouldTickPix && expiresAt
+      ? Math.max(0, Math.floor((expiresAt - pixNowTs) / 1000))
+      : null;
 
   const handleCheckout = async (
     method: "card" | "pix",
-    opts?: { cardToken?: string; installments?: number },
+    opts?: { card?: CardCheckoutPayload; installments?: number },
   ) => {
     setPayingMethod(method);
     setCheckoutError("");
-    setCardLink("");
+    const targetKey = invoiceKey;
     try {
       const res = await fetch("/api/financial/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          invoice_id: activeInvoice?.id || undefined,
           payment_method: method,
-          card_token: opts?.cardToken || "",
+          card_token: opts?.card?.cardToken || "",
+          customer_document: opts?.card?.customerDocument || "",
+          customer_phone: opts?.card?.customerPhone || "",
+          card_brand: opts?.card?.cardBrand || "",
+          card_last4: opts?.card?.cardLast4 || "",
           installments: opts?.installments || 1,
         }),
       });
@@ -167,10 +314,19 @@ export default function CustomerFinancialPage() {
       if (paidNow) {
         setPaymentConfirmed(true);
       } else if (method === "card" && checkoutUrl) {
-        setCardLink(checkoutUrl);
+        setCardLinkByInvoice((prev) => ({ ...prev, [targetKey]: checkoutUrl }));
         window.open(checkoutUrl, "_blank", "noopener,noreferrer");
       } else if (method === "pix" && (qrCode || copyPaste)) {
-        setPixData({ qrCode, copyPaste });
+        const nowTs = Date.now();
+        setPixNowTs(nowTs);
+        setPixByInvoice((prev) => ({
+          ...prev,
+          [targetKey]: {
+            qrCode,
+            copyPaste,
+            expiresAt: nowTs + 3600 * 1000,
+          },
+        }));
       }
       await loadBilling(true);
     } catch {
@@ -181,25 +337,54 @@ export default function CustomerFinancialPage() {
   };
 
   const handleCopyPix = async () => {
-    if (!pixData?.copyPaste) return;
-    await navigator.clipboard.writeText(pixData.copyPaste);
+    if (!activePixCode) return;
+    await navigator.clipboard.writeText(activePixCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isCard = billing?.payment_method === "card";
-  const isYearly = billing?.billing_cycle === "yearly";
-  const isOneTime = billing?.billing_cycle === "one_time";
-  const canInstallment12x = isYearly && Boolean(billing?.allow_installments);
+  const isCard = activePaymentMethod === "card";
+  const isYearly = activeBillingCycle === "yearly";
+  const isOneTime = activeBillingCycle === "one_time";
+  const canInstallment12x = isYearly && Boolean(activeAllowInstallments);
   const showMonthlyInstallment =
-    isYearly && ((canInstallment12x && useInstallments) || billing?.installments === 12);
-  const monthlyCents = billing?.amount_cents
-    ? Math.round(billing.amount_cents / 12)
-    : 0;
+    isYearly && ((canInstallment12x && useInstallments) || activeInstallments === 12);
+  const monthlyCents = activeAmountCents ? Math.round(activeAmountCents / 12) : 0;
   const cycleLabel = isYearly ? "Anual" : isOneTime ? "Cobrança única" : "Mensal";
-  const picpayReady = Boolean(billing?.gateways_configured?.picpay);
-  const mercadoPagoReady = Boolean(billing?.gateways_configured?.mercadopago);
-  const canPayAmount = (billing?.amount_cents ?? 0) > 0;
+
+  const allowedMethods = useMemo(() => {
+    if (activeInvoice?.allowed_payment_methods?.length) {
+      return activeInvoice.allowed_payment_methods;
+    }
+    if (billing?.allowed_payment_methods?.length) {
+      return billing.allowed_payment_methods;
+    }
+    if (activePaymentMethod === "manual") return ["manual"];
+    return ["pix", "card"];
+  }, [activeInvoice?.allowed_payment_methods, billing?.allowed_payment_methods, activePaymentMethod]);
+
+  const abacateConfigured = Boolean(billing?.gateways_configured?.abacatepay);
+  const pixReady =
+    allowedMethods.includes("pix") &&
+    (billing?.gateways_configured?.pix ?? abacateConfigured);
+  const cardReady =
+    allowedMethods.includes("card") &&
+    (billing?.gateways_configured?.card ?? abacateConfigured);
+  const manualOnly = allowedMethods.length === 1 && allowedMethods[0] === "manual";
+  const canPayAmount = activeAmountCents > 0;
+  const transparentCardEnabled = Boolean(
+    billing?.card_sdk?.enabled && billing?.card_sdk?.public_key,
+  );
+
+  const handleCardButtonClick = () => {
+    if (transparentCardEnabled) {
+      setShowCardModal(true);
+      return;
+    }
+    void handleCheckout("card", {
+      installments: showMonthlyInstallment ? 12 : 1,
+    });
+  };
 
   return (
     <DashboardShell>
@@ -219,14 +404,14 @@ export default function CustomerFinancialPage() {
             <button
               type="button"
               onClick={() => setPaymentConfirmed(false)}
-              className="text-emerald-300/80 hover:text-emerald-200"
+              className="text-emerald-300/80 hover:text-emerald-200 cursor-pointer"
             >
               <X className="size-3.5" />
             </button>
           </div>
         )}
 
-        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        {/* Unified Single Card */}
         <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
           {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -236,7 +421,7 @@ export default function CustomerFinancialPage() {
                 Financeiro
               </h1>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Dados da sua fatura atual, forma de pagamento e vencimento.
+                Dados da sua fatura atual, pagamento via PIX ou Cartão (AbacatePay) e vencimento.
               </p>
             </div>
             <button
@@ -260,19 +445,19 @@ export default function CustomerFinancialPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Fatura Atual
+                    {openInvoices.length > 1 ? "Fatura Selecionada" : "Fatura Atual"}
                   </span>
                   <h2 className="mt-0.5 font-display text-xl font-bold text-foreground">
-                    {billing.plan_name}{" "}
+                    {activePlanName}{" "}
                     <span className="font-sans text-xs font-medium text-muted-foreground">
                       • {cycleLabel}
                     </span>
                   </h2>
                 </div>
-                <InvoiceStatusBadge status={billing.status} />
+                <InvoiceStatusBadge status={activeStatus} />
               </div>
 
-              {/* Unified Metrics (Clean, borderless on card surface) */}
+              {/* Unified Metrics */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
                 <div className="py-1">
                   <span className="text-xs font-medium text-muted-foreground">
@@ -285,34 +470,36 @@ export default function CustomerFinancialPage() {
                         <span className="font-sans text-xs font-medium text-muted-foreground">/mês</span>
                       </p>
                       <span className="block text-xs text-muted-foreground">
-                        Total anual: {formatCurrencyCents(billing.amount_cents)}
+                        Total anual: {formatCurrencyCents(activeAmountCents)}
                       </span>
                     </>
                   ) : (
                     <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">
-                      {formatCurrencyCents(billing.amount_cents)}
+                      {formatCurrencyCents(activeAmountCents)}
                     </p>
                   )}
 
-                  {canInstallment12x && (
+                  {!isPaid && canInstallment12x && (
                     <div className="mt-2.5 inline-flex rounded-lg bg-background p-0.5 text-[11px]">
                       <button
                         type="button"
                         onClick={() => setUseInstallments(true)}
-                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${useInstallments
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                          }`}
+                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${
+                          useInstallments
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
                       >
                         12x no cartão
                       </button>
                       <button
                         type="button"
                         onClick={() => setUseInstallments(false)}
-                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${!useInstallments
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                          }`}
+                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${
+                          !useInstallments
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
                       >
                         À vista
                       </button>
@@ -326,7 +513,7 @@ export default function CustomerFinancialPage() {
                   </span>
                   <p className="mt-1.5 flex items-center gap-2 font-display text-lg font-bold text-foreground">
                     <Calendar className="size-4 text-primary" />
-                    {formatDate(billing.due_date)}
+                    {formatDate(activeDueDate)}
                   </p>
                   {isCard && isYearly && (
                     <span className="mt-0.5 block text-xs text-muted-foreground">
@@ -339,69 +526,174 @@ export default function CustomerFinancialPage() {
                   <span className="text-xs font-medium text-muted-foreground">Forma de Pagamento</span>
                   <p className="mt-1.5 text-sm font-semibold text-foreground">
                     {isCard
-                      ? `Cartão${billing.card_brand ? ` (${billing.card_brand})` : ""}${billing.card_last4 ? ` •••• ${billing.card_last4}` : ""
-                      }`
-                      : billing.payment_method === "pix"
+                      ? `Cartão${activeCardBrand ? ` (${activeCardBrand})` : ""}${
+                          activeCardLast4 ? ` •••• ${activeCardLast4}` : ""
+                        }`
+                      : activePaymentMethod === "pix"
                         ? "PIX"
                         : "Manual"}
                   </p>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     Gateway:{" "}
-                    {isCard
-                      ? "PicPay"
-                      : billing.payment_method === "pix"
-                        ? "Mercado Pago"
-                        : "Gerente"}
+                    {activeGateway === "manual" ? "Gerente" : "AbacatePay"}
                   </span>
                 </div>
               </div>
 
-              {/* Payment Gateway Actions Bar */}
-              <div className="flex flex-col gap-3 rounded-xl bg-background/40 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    Pagamento seguro no crédito via{" "}
-                    <strong className="text-foreground">PicPay</strong> (no próprio site).
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={!picpayReady || !canPayAmount || payingMethod !== null}
-                      onClick={() => setShowCardModal(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-                    >
-                      <CreditCard className="size-3.5" />
-                      {payingMethod === "card" ? "Processando..." : "Pagar com Cartão"}
-                    </button>
-                  </div>
+              {/* Payment Gateway Actions & Internal PIX QR Code */}
+              {isPaid ? (
+                <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-xs text-emerald-300">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  <span>Esta fatura está quitada. Obrigado por manter sua assinatura em dia!</span>
                 </div>
+              ) : (
+                <div className="flex flex-col gap-4 rounded-xl bg-background/40 p-4">
+                  {manualOnly ? (
+                    <p className="text-xs text-muted-foreground">
+                      Esta cobrança está configurada para acerto manual. Caso já tenha pago,
+                      solicite a baixa ao seu gerente.
+                    </p>
+                  ) : !canPayAmount ? (
+                    <p className="text-xs text-muted-foreground">
+                      Aguardando definição do valor da cobrança pelo gerente.
+                    </p>
+                  ) : !pixReady && !cardReady ? (
+                    <p className="text-xs text-muted-foreground">
+                      O gateway de pagamento online (AbacatePay) ainda não está configurado neste
+                      ambiente. Entre em contato com o suporte ou seu gerente.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          Escolha pagar via <strong className="text-foreground">PIX</strong> (QR Code
+                          instantâneo aqui na tela) ou{" "}
+                          <strong className="text-foreground">Cartão</strong> pela{" "}
+                          <strong className="text-foreground">AbacatePay</strong>.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {pixReady && (
+                            <button
+                              type="button"
+                              disabled={payingMethod !== null}
+                              onClick={() => void handleCheckout("pix")}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                            >
+                              <QrCode className="size-3.5" />
+                              {payingMethod === "pix"
+                                ? "Gerando QR Code..."
+                                : activePixCode || activePixQr
+                                  ? "Gerar novo QR Code PIX"
+                                  : "Gerar QR Code PIX"}
+                            </button>
+                          )}
+                          {cardReady && (
+                            <button
+                              type="button"
+                              disabled={payingMethod !== null}
+                              onClick={handleCardButtonClick}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                            >
+                              <CreditCard className="size-3.5" />
+                              {payingMethod === "card"
+                                ? "Iniciando checkout..."
+                                : "Pagar com Cartão"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                {!canPayAmount && (
-                  <p className="text-xs text-muted-foreground">
-                    Aguardando definição do valor da cobrança pelo gerente.
-                  </p>
-                )}
+                      {/* Internal PIX QR Code Box */}
+                      {(activePixQr || activePixCode) && (
+                        <div className="rounded-xl border border-emerald-500/30 bg-card/80 p-4 sm:p-5">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                              <QrCode className="size-4" />
+                              <span>PIX Instantâneo — QR Code Interno (AbacatePay)</span>
+                            </div>
+                            {pixRemainingSec !== null && (
+                              <span className="font-mono text-[11px] text-muted-foreground">
+                                {pixRemainingSec > 0
+                                  ? `Expira em ${Math.floor(pixRemainingSec / 60)}m ${String(
+                                      pixRemainingSec % 60,
+                                    ).padStart(2, "0")}s`
+                                  : "Código expirado — gere um novo acima"}
+                              </span>
+                            )}
+                          </div>
 
-                {checkoutError && (
-                  <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
-                    {checkoutError}
-                  </p>
-                )}
+                          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                            {activePixQr && (
+                              <div className="shrink-0 rounded-xl bg-white p-3 shadow-sm">
+                                <img
+                                  src={normalizeQrDataUrl(activePixQr)}
+                                  alt="QR Code PIX"
+                                  className="size-44 object-contain"
+                                />
+                              </div>
+                            )}
 
-                {cardLink && (
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
-                    <span>Link de pagamento InfinitePay gerado!</span>
-                    <a
-                      href={cardLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-semibold underline"
-                    >
-                      Abrir checkout <ExternalLink className="size-3" />
-                    </a>
-                  </div>
-                )}
-              </div>
+                            <div className="flex w-full flex-1 flex-col gap-2.5">
+                              {activePixCode && (
+                                <>
+                                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    PIX Copia e Cola
+                                  </label>
+                                  <textarea
+                                    readOnly
+                                    rows={3}
+                                    value={activePixCode}
+                                    className="w-full rounded-xl border border-border bg-background p-2.5 font-mono text-[11px] text-foreground focus:outline-none"
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleCopyPix}
+                                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 cursor-pointer"
+                                    >
+                                      {copied ? (
+                                        <Check className="size-3.5" />
+                                      ) : (
+                                        <Copy className="size-3.5" />
+                                      )}
+                                      {copied ? "Código copiado!" : "Copiar código PIX"}
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <RefreshCw className="size-3 animate-spin" />
+                                Aguardando confirmação automática após o pagamento no seu banco...
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AbacatePay Card Hosted Checkout Link */}
+                      {activeCardLink && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-300">
+                          <span>Checkout seguro AbacatePay gerado!</span>
+                          <a
+                            href={activeCardLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-semibold underline"
+                          >
+                            Abrir checkout AbacatePay <ExternalLink className="size-3" />
+                          </a>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {checkoutError && (
+                    <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+                      {checkoutError}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Compact History */}
               <div>
@@ -414,24 +706,46 @@ export default function CustomerFinancialPage() {
                   </p>
                 ) : (
                   <div className="space-y-1 text-xs">
-                    {billing.history.slice(0, 5).map((inv) => {
+                    {billing.history.slice(0, 8).map((inv) => {
                       const isInvInstallment =
                         inv.billing_cycle === "yearly" &&
                         (Boolean(inv.allow_installments) || inv.installments === 12);
                       const installmentCents = isInvInstallment
                         ? Math.round(inv.amount_cents / 12)
                         : inv.amount_cents;
+                      const isSelectable =
+                        inv.status === "pending" || inv.status === "overdue";
+                      const isSelected = activeInvoice?.id === inv.id;
 
                       return (
-                        <div
+                        <button
                           key={inv.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 transition-colors hover:bg-background/40"
+                          type="button"
+                          disabled={!isSelectable}
+                          onClick={() => {
+                            if (isSelectable) {
+                              setSelectedInvoiceId(inv.id);
+                              setCheckoutError("");
+                            }
+                          }}
+                          className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                            isSelected
+                              ? "border border-primary/40 bg-primary/10"
+                              : isSelectable
+                                ? "hover:bg-background/50 cursor-pointer"
+                                : "hover:bg-background/30 cursor-default"
+                          }`}
                         >
                           <div>
                             <span className="font-semibold text-foreground">{inv.plan_name}</span>
                             <span className="ml-2 text-muted-foreground">
                               • Venc. {formatDate(inv.due_date)}
                             </span>
+                            {isSelected && isSelectable && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase text-primary">
+                                • Selecionada
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="font-mono font-semibold tabular-nums text-foreground">
@@ -441,7 +755,7 @@ export default function CustomerFinancialPage() {
                             </span>
                             <InvoiceStatusBadge status={inv.status} />
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -452,78 +766,35 @@ export default function CustomerFinancialPage() {
         </div>
       </div>
 
-      {/* 3D Credit Card Modal */}
+      {/* 3D Credit Card Modal (used when AbacatePay transparent card SDK is configured) */}
       {showCardModal && billing && (
         <CreditCard3DForm
+          amountCents={activeAmountCents}
           amountLabel={
             showMonthlyInstallment
               ? `12x de ${formatCurrencyCents(monthlyCents)}`
-              : formatCurrencyCents(billing.amount_cents)
+              : formatCurrencyCents(activeAmountCents)
           }
-          planLabel={`${billing.plan_name} (${cycleLabel})`}
+          planLabel={`${activePlanName} (${cycleLabel})`}
+          sdkConfig={billing.card_sdk}
+          defaultEmail={profileContact.email}
+          defaultPhone={profileContact.phone}
           submitting={payingMethod === "card"}
           onClose={() => setShowCardModal(false)}
-          onProceedToCheckout={async (cardToken) => {
+          onProceedToCheckout={async (card) => {
             await handleCheckout("card", {
-              cardToken,
+              card,
               installments: showMonthlyInstallment ? 12 : 1,
             });
             setShowCardModal(false);
           }}
+          onFallbackHostedCheckout={async () => {
+            setShowCardModal(false);
+            await handleCheckout("card", {
+              installments: showMonthlyInstallment ? 12 : 1,
+            });
+          }}
         />
-      )}
-
-      {/* PIX Modal */}
-      {pixData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
-                <QrCode className="size-4 text-primary" />
-                Pagamento via PIX
-              </h2>
-              <button
-                type="button"
-                onClick={() => setPixData(null)}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            {pixData.qrCode && (
-              <div className="mb-4 flex justify-center rounded-xl bg-white p-3">
-                <img
-                  src={`data:image/png;base64,${pixData.qrCode}`}
-                  alt="QR Code PIX"
-                  className="size-48 object-contain"
-                />
-              </div>
-            )}
-
-            {pixData.copyPaste && (
-              <div className="flex flex-col gap-2">
-                <label className="text-[11px] font-semibold text-muted-foreground">
-                  PIX Copia e Cola
-                </label>
-                <textarea
-                  readOnly
-                  rows={3}
-                  value={pixData.copyPaste}
-                  className="w-full rounded-xl border border-border bg-background p-2.5 font-mono text-[11px] text-foreground focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleCopyPix}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90"
-                >
-                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                  {copied ? "Copiado!" : "Copiar código PIX"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
       )}
     </DashboardShell>
   );

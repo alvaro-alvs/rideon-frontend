@@ -20,6 +20,8 @@ import {
   AlertCircle,
   Building2,
   ShieldCheck,
+  Clock,
+  Check,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
@@ -41,8 +43,9 @@ export default function AdminCustomersPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [vehicleFilter, setVehicleFilter] = useState<"all" | "has_vehicles" | "no_vehicles">("all");
+  const [vehicleFilter, setVehicleFilter] = useState<"all" | "pending" | "has_vehicles" | "no_vehicles">("all");
   const [tenantFilter, setTenantFilter] = useState<string>("all");
+  const [reviewingCustomerId, setReviewingCustomerId] = useState<string | null>(null);
 
   // Create Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -342,6 +345,36 @@ export default function AdminCustomersPage() {
     }
   };
 
+  const isCustomerPending = (c: Customer) => c.status === "pending" || c.user_status === "pending";
+  const isCustomerInactive = (c: Customer) => c.status === "inactive" || c.user_status === "inactive";
+
+  const handleReviewCustomer = async (cust: Customer, action: "approve" | "reject") => {
+    setReviewingCustomerId(cust.id);
+    try {
+      const res = await fetch(`/api/admin/customers/${cust.id}/${action}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: action === "approve" ? JSON.stringify({}) : undefined,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error?.message || "Falha ao atualizar status da conta.");
+      }
+
+      setCustomers((prev) => prev.map((c) => (c.id === cust.id ? { ...c, ...data } : c)));
+      setSuccessMessage(
+        action === "approve"
+          ? `Conta de "${cust.name}" aprovada com sucesso!`
+          : `Solicitação de "${cust.name}" recusada.`,
+      );
+      setTimeout(() => setSuccessMessage(""), 5000);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Erro ao revisar solicitação.");
+    } finally {
+      setReviewingCustomerId(null);
+    }
+  };
+
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {
       const q = searchQuery.toLowerCase();
@@ -354,6 +387,7 @@ export default function AdminCustomersPage() {
 
       const matchesVehicle =
         vehicleFilter === "all" ||
+        (vehicleFilter === "pending" && isCustomerPending(c)) ||
         (vehicleFilter === "has_vehicles" && c.motorcycle_count > 0) ||
         (vehicleFilter === "no_vehicles" && c.motorcycle_count === 0);
 
@@ -369,7 +403,8 @@ export default function AdminCustomersPage() {
     const totalCustomers = customers.length;
     const totalVehicles = customers.reduce((acc, c) => acc + (c.motorcycle_count || 0), 0);
     const customersWithVehicles = customers.filter((c) => c.motorcycle_count > 0).length;
-    return { totalCustomers, totalVehicles, customersWithVehicles };
+    const pendingCustomers = customers.filter((c) => isCustomerPending(c)).length;
+    return { totalCustomers, totalVehicles, customersWithVehicles, pendingCustomers };
   }, [customers]);
 
   return (
@@ -507,6 +542,18 @@ export default function AdminCustomersPage() {
                   Todos
                 </button>
                 <button
+                  onClick={() => setVehicleFilter("pending")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                    vehicleFilter === "pending"
+                      ? "bg-amber-500 text-zinc-950 shadow-sm"
+                      : stats.pendingCustomers > 0
+                        ? "text-amber-400 hover:text-amber-300"
+                        : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Pendentes ({stats.pendingCustomers})
+                </button>
+                <button
                   onClick={() => setVehicleFilter("has_vehicles")}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                     vehicleFilter === "has_vehicles"
@@ -572,6 +619,17 @@ export default function AdminCustomersPage() {
                             <p className="font-display text-sm font-bold text-foreground">
                               {cust.name}
                             </p>
+                            {isCustomerPending(cust) && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                                <Clock className="size-3" />
+                                Aguardando Aprovação
+                              </span>
+                            )}
+                            {isCustomerInactive(cust) && (
+                              <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">
+                                Inativo / Recusado
+                              </span>
+                            )}
                             <span
                               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                                 cust.motorcycle_count > 0
@@ -646,6 +704,30 @@ export default function AdminCustomersPage() {
                           >
                             <UserPlus className="size-3 text-primary shrink-0" />
                             <span>{cust.manager_id ? "Trocar Gestor" : "Vincular Gestor"}</span>
+                          </button>
+                        )}
+
+                        {(isCustomerPending(cust) || isCustomerInactive(cust)) && (
+                          <button
+                            type="button"
+                            disabled={reviewingCustomerId === cust.id}
+                            onClick={() => void handleReviewCustomer(cust, "approve")}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <Check className="size-3 shrink-0" />
+                            <span>{isCustomerPending(cust) ? "Aprovar" : "Reativar"}</span>
+                          </button>
+                        )}
+
+                        {isCustomerPending(cust) && (
+                          <button
+                            type="button"
+                            disabled={reviewingCustomerId === cust.id}
+                            onClick={() => void handleReviewCustomer(cust, "reject")}
+                            className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 px-2.5 py-1 text-[11px] font-bold text-rose-400 hover:bg-rose-500/25 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <X className="size-3 shrink-0" />
+                            <span>Recusar</span>
                           </button>
                         )}
                       </div>
