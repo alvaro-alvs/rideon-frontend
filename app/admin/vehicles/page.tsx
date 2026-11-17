@@ -286,10 +286,11 @@ export default function AdminVehiclesPage() {
         {/* Feedback Alert */}
         {feedback && (
           <div
-            className={`flex items-center gap-3 rounded-xl border p-4 text-xs font-semibold animate-in fade-in duration-200 ${feedback.type === "success"
+            className={`flex items-center gap-3 rounded-xl border p-4 text-xs font-semibold animate-in fade-in duration-200 ${
+              feedback.type === "success"
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                 : "border-red-500/30 bg-red-500/10 text-red-400"
-              }`}
+            }`}
           >
             {feedback.type === "success" ? (
               <CheckCircle2 className="size-5 shrink-0" />
@@ -412,28 +413,31 @@ export default function AdminVehiclesPage() {
               <div className="flex items-center gap-1 rounded-xl bg-background/50 p-1 text-xs">
                 <button
                   onClick={() => setTrackerFilter("all")}
-                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${trackerFilter === "all"
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
+                    trackerFilter === "all"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  }`}
                 >
                   Todos
                 </button>
                 <button
                   onClick={() => setTrackerFilter("linked")}
-                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${trackerFilter === "linked"
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
+                    trackerFilter === "linked"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  }`}
                 >
                   Com IMEI
                 </button>
                 <button
                   onClick={() => setTrackerFilter("unlinked")}
-                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${trackerFilter === "unlinked"
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
+                    trackerFilter === "unlinked"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  }`}
                 >
                   Sem IMEI
                 </button>
@@ -478,10 +482,11 @@ export default function AdminVehiclesPage() {
                             {v.brand} {v.model}
                           </h3>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${v.status === "active"
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              v.status === "active"
                                 ? "bg-emerald-500/15 text-emerald-400"
                                 : "bg-secondary text-muted-foreground"
-                              }`}
+                            }`}
                           >
                             {v.status === "active" ? "Ativo" : v.status}
                           </span>
