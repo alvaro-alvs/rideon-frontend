@@ -203,29 +203,7 @@ export default function CustomerFinancialPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-4 md:p-6">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground">
-              <CreditCard className="size-5 text-primary" />
-              Financeiro
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Dados da sua fatura atual, forma de pagamento e vencimento.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => loadBilling(true)}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Atualizar
-          </button>
-        </div>
-
+      <div className="w-full space-y-4">
         {error && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-300">
             {error}
@@ -248,22 +226,45 @@ export default function CustomerFinancialPage() {
           </div>
         )}
 
-        {loading ? (
-          <div className="rounded-2xl border border-border/70 bg-card p-8 text-center text-xs text-muted-foreground">
-            Carregando dados da fatura...
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                <CreditCard className="size-5 text-primary" />
+                Financeiro
+              </h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Dados da sua fatura atual, forma de pagamento e vencimento.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadBilling(true)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
           </div>
-        ) : billing ? (
-          <>
-            {/* Fatura Atual Card */}
-            <div className="rounded-2xl border border-border/70 bg-card p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/50 pb-4">
+
+          {loading ? (
+            <div className="p-10 text-center text-sm text-muted-foreground">
+              Carregando dados da fatura...
+            </div>
+          ) : billing ? (
+            <>
+              {/* Fatura Atual Header */}
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Fatura Atual
                   </span>
-                  <h2 className="mt-0.5 text-lg font-bold text-foreground">
+                  <h2 className="mt-0.5 font-display text-xl font-bold text-foreground">
                     {billing.plan_name}{" "}
-                    <span className="text-xs font-medium text-muted-foreground">
+                    <span className="font-sans text-xs font-medium text-muted-foreground">
                       • {cycleLabel}
                     </span>
                   </h2>
@@ -271,48 +272,47 @@ export default function CustomerFinancialPage() {
                 <InvoiceStatusBadge status={billing.status} />
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <span className="text-[11px] text-muted-foreground">
+              {/* Unified Metrics (Clean, borderless on card surface) */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <div className="py-1">
+                  <span className="text-xs font-medium text-muted-foreground">
                     {showMonthlyInstallment ? "Valor mensal (12x)" : "Valor"}
                   </span>
                   {showMonthlyInstallment ? (
                     <>
-                      <p className="mt-0.5 text-xl font-bold text-foreground">
+                      <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">
                         {formatCurrencyCents(monthlyCents)}
-                        <span className="text-xs font-medium text-muted-foreground">/mês</span>
+                        <span className="font-sans text-xs font-medium text-muted-foreground">/mês</span>
                       </p>
-                      <span className="block text-[10px] text-muted-foreground/80">
+                      <span className="block text-xs text-muted-foreground">
                         Total anual: {formatCurrencyCents(billing.amount_cents)}
                       </span>
                     </>
                   ) : (
-                    <p className="mt-0.5 text-xl font-bold text-foreground">
+                    <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">
                       {formatCurrencyCents(billing.amount_cents)}
                     </p>
                   )}
 
                   {canInstallment12x && (
-                    <div className="mt-2 inline-flex rounded-lg border border-border bg-background p-0.5 text-[10px]">
+                    <div className="mt-2.5 inline-flex rounded-lg bg-background p-0.5 text-[11px]">
                       <button
                         type="button"
                         onClick={() => setUseInstallments(true)}
-                        className={`rounded-md px-2 py-0.5 font-semibold transition ${
-                          useInstallments
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${useInstallments
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                          }`}
                       >
                         12x no cartão
                       </button>
                       <button
                         type="button"
                         onClick={() => setUseInstallments(false)}
-                        className={`rounded-md px-2 py-0.5 font-semibold transition ${
-                          !useInstallments
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${!useInstallments
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                          }`}
                       >
                         À vista
                       </button>
@@ -320,33 +320,32 @@ export default function CustomerFinancialPage() {
                   )}
                 </div>
 
-                <div>
-                  <span className="text-[11px] text-muted-foreground">
+                <div className="py-1">
+                  <span className="text-xs font-medium text-muted-foreground">
                     {isCard && !isOneTime ? "Próximo Vencimento (Cartão)" : "Vencimento"}
                   </span>
-                  <p className="mt-0.5 flex items-center gap-1.5 text-base font-bold text-foreground">
+                  <p className="mt-1.5 flex items-center gap-2 font-display text-lg font-bold text-foreground">
                     <Calendar className="size-4 text-primary" />
                     {formatDate(billing.due_date)}
                   </p>
                   {isCard && isYearly && (
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
                       Renovação anual prevista para o próximo ano
                     </span>
                   )}
                 </div>
 
-                <div>
-                  <span className="text-[11px] text-muted-foreground">Forma de Pagamento</span>
-                  <p className="mt-0.5 text-sm font-semibold text-foreground">
+                <div className="py-1">
+                  <span className="text-xs font-medium text-muted-foreground">Forma de Pagamento</span>
+                  <p className="mt-1.5 text-sm font-semibold text-foreground">
                     {isCard
-                      ? `Cartão${billing.card_brand ? ` (${billing.card_brand})` : ""}${
-                          billing.card_last4 ? ` •••• ${billing.card_last4}` : ""
-                        }`
+                      ? `Cartão${billing.card_brand ? ` (${billing.card_brand})` : ""}${billing.card_last4 ? ` •••• ${billing.card_last4}` : ""
+                      }`
                       : billing.payment_method === "pix"
                         ? "PIX"
                         : "Manual"}
                   </p>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
                     Gateway:{" "}
                     {isCard
                       ? "PicPay"
@@ -357,19 +356,19 @@ export default function CustomerFinancialPage() {
                 </div>
               </div>
 
-              {/* Payment Gateway Actions */}
-              <div className="mt-5 flex flex-col gap-3 rounded-xl border border-border/70 bg-secondary/20 p-3.5">
+              {/* Payment Gateway Actions Bar */}
+              <div className="flex flex-col gap-3 rounded-xl bg-background/40 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">
                     Pagamento seguro no crédito via{" "}
-                    <strong>PicPay</strong> (no próprio site).
+                    <strong className="text-foreground">PicPay</strong> (no próprio site).
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={!picpayReady || !canPayAmount || payingMethod !== null}
                       onClick={() => setShowCardModal(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                     >
                       <CreditCard className="size-3.5" />
                       {payingMethod === "card" ? "Processando..." : "Pagar com Cartão"}
@@ -378,7 +377,7 @@ export default function CustomerFinancialPage() {
                 </div>
 
                 {!canPayAmount && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Aguardando definição do valor da cobrança pelo gerente.
                   </p>
                 )}
@@ -403,54 +402,54 @@ export default function CustomerFinancialPage() {
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Compact History */}
-            <div className="rounded-2xl border border-border/70 bg-card p-5">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Histórico de Mensalidades
-              </h3>
-              {billing.history.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Nenhum pagamento registrado até o momento.
-                </p>
-              ) : (
-                <div className="divide-y divide-border/50 text-xs">
-                  {billing.history.slice(0, 5).map((inv) => {
-                    const isInvInstallment =
-                      inv.billing_cycle === "yearly" &&
-                      (Boolean(inv.allow_installments) || inv.installments === 12);
-                    const installmentCents = isInvInstallment
-                      ? Math.round(inv.amount_cents / 12)
-                      : inv.amount_cents;
+              {/* Compact History */}
+              <div>
+                <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  Histórico de Mensalidades
+                </h3>
+                {billing.history.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum pagamento registrado até o momento.
+                  </p>
+                ) : (
+                  <div className="space-y-1 text-xs">
+                    {billing.history.slice(0, 5).map((inv) => {
+                      const isInvInstallment =
+                        inv.billing_cycle === "yearly" &&
+                        (Boolean(inv.allow_installments) || inv.installments === 12);
+                      const installmentCents = isInvInstallment
+                        ? Math.round(inv.amount_cents / 12)
+                        : inv.amount_cents;
 
-                    return (
-                      <div
-                        key={inv.id}
-                        className="flex flex-wrap items-center justify-between gap-2 py-2.5"
-                      >
-                        <div>
-                          <span className="font-semibold text-foreground">{inv.plan_name}</span>
-                          <span className="ml-2 text-muted-foreground">
-                            • Venc. {formatDate(inv.due_date)}
-                          </span>
+                      return (
+                        <div
+                          key={inv.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 transition-colors hover:bg-background/40"
+                        >
+                          <div>
+                            <span className="font-semibold text-foreground">{inv.plan_name}</span>
+                            <span className="ml-2 text-muted-foreground">
+                              • Venc. {formatDate(inv.due_date)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-semibold tabular-nums text-foreground">
+                              {isInvInstallment
+                                ? `${formatCurrencyCents(installmentCents)}/mês`
+                                : formatCurrencyCents(inv.amount_cents)}
+                            </span>
+                            <InvoiceStatusBadge status={inv.status} />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold text-foreground">
-                            {isInvInstallment
-                              ? `${formatCurrencyCents(installmentCents)}/mês`
-                              : formatCurrencyCents(inv.amount_cents)}
-                          </span>
-                          <InvoiceStatusBadge status={inv.status} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </>
-        ) : null}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {/* 3D Credit Card Modal */}

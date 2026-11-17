@@ -240,7 +240,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       {/* Main Content Area with Modern User Header */}
       <div className="min-h-screen lg:ml-64 flex flex-col">
         <UserHeader onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 p-3 sm:p-4">{children}</main>
       </div>
 
       {/* Cross-Browser Native Notification Toast */}

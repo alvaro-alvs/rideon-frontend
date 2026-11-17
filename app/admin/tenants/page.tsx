@@ -410,46 +410,11 @@ export default function OrganizationsAdminPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-7xl space-y-6 py-4">
-        {/* Header Hero Conciso */}
-        <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-xl backdrop-blur-xl sm:p-8">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
-
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Building2 className="size-4" />
-                </span>
-                <p className="text-xs font-bold uppercase tracking-widest text-primary">
-                  Gestão White-Label &amp; Multi-Tenant B2B
-                </p>
-              </div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
-                Organizações &amp; White-Label
-              </h1>
-              <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm">
-                Gerencie todos os parceiros do ecossistema, personalize identidades visuais em modais dedicados, regule limites de cotas e domínios CNAME.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 active:scale-95"
-              >
-                <Plus className="size-4 stroke-[3]" />
-                <span>Nova Organização</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
+      <div className="w-full space-y-4">
         {/* Feedback Alert */}
         {feedback && (
           <div
-            className={`flex items-center gap-3 rounded-2xl border p-4 text-sm font-semibold transition-all ${
+            className={`flex items-center gap-3 rounded-xl border p-4 text-xs font-semibold transition-all ${
               feedback.type === "success"
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                 : "border-destructive/30 bg-destructive/10 text-destructive"
@@ -464,222 +429,208 @@ export default function OrganizationsAdminPage() {
           </div>
         )}
 
-        {/* Barra de Busca e Filtro */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por nome, razão social, slug ou CNPJ..."
-              className="w-full rounded-2xl border border-border bg-card/60 pl-10 pr-4 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
-          </div>
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Building2 className="size-4 text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                  Gestão White-Label &amp; Multi-Tenant B2B
+                </p>
+              </div>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                Organizações &amp; White-Label
+              </h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Gerencie todos os parceiros do ecossistema, personalize identidades visuais em modais dedicados, regule limites de cotas e domínios CNAME.
+              </p>
+            </div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-            <span>Total de Organizações:</span>
-            <span className="font-bold text-foreground">{tenants.length}</span>
-          </div>
-        </div>
-
-        {/* Grade de Organizações (Visual Conciso e Elegante) */}
-        {loading ? (
-          <div className="flex h-64 items-center justify-center rounded-3xl border border-border bg-card">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <Loader2 className="size-8 animate-spin text-primary" />
-              <p className="text-xs font-semibold uppercase tracking-wider">Carregando organizações...</p>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95 cursor-pointer"
+              >
+                <Plus className="size-4" />
+                <span>Nova Organização</span>
+              </button>
             </div>
           </div>
-        ) : filteredTenants.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-border bg-card/40 p-8 text-center">
-            <Building2 className="size-12 text-muted-foreground/50" />
-            <h3 className="text-sm font-bold uppercase text-foreground">Nenhuma organização encontrada</h3>
-            <p className="max-w-md text-xs text-muted-foreground">
-              {searchQuery
-                ? "Nenhum parceiro corresponde à sua pesquisa. Tente outro termo."
-                : "Cadastre sua primeira organização white-label no botão acima para começar."}
-            </p>
+
+          {/* Barra de Busca e Filtro */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nome, razão social, slug ou CNPJ..."
+                className="w-full rounded-xl bg-background/60 pl-10 pr-4 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+              <span>Total de Organizações:</span>
+              <span className="font-bold text-foreground">{tenants.length}</span>
+            </div>
           </div>
-        ) : (
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {filteredTenants.map((t) => {
-              const stats = statsMap[t.id];
-              const deviceCount = stats?.device_count || 0;
-              const limit = t.settings?.device_limit || 50;
-              const usagePercent = limit > 0 ? Math.round((deviceCount / limit) * 100) : 0;
-              const primaryColorValue = t.branding?.primary_color || "#EF251B";
-              const currentLogo = t.branding?.logo_url;
 
-              return (
-                <div
-                  key={t.id}
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-b from-card to-card/75 p-6 shadow-xl transition-all duration-300 hover:border-primary/50 hover:shadow-primary/5"
-                >
-                  <div className="space-y-4">
-                    {/* Header do Card com Identidade da Organização */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 shadow-inner"
-                          style={{ backgroundColor: `${primaryColorValue}15` }}
-                        >
-                          {currentLogo && currentLogo !== "/logo.svg" && currentLogo !== "/logomark.svg" ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={currentLogo}
-                              alt={t.trade_name}
-                              className="size-8 object-contain"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = "none";
-                              }}
-                            />
-                          ) : t.slug === "rideon" || (t.trade_name && t.trade_name.toLowerCase() === "rideon") ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src="/logomark-icon.svg"
-                              alt={t.trade_name}
-                              className="size-7 object-contain"
-                            />
-                          ) : (
-                            <span
-                              className="text-base font-black uppercase text-foreground"
-                              style={{ color: primaryColorValue }}
-                            >
-                              {(t.trade_name || t.slug).charAt(0)}
-                            </span>
-                          )}
-                        </div>
+          {/* Lista Unificada de Organizações */}
+          {loading ? (
+            <div className="flex h-56 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <Loader2 className="size-8 animate-spin text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-wider">Carregando organizações...</p>
+              </div>
+            </div>
+          ) : filteredTenants.length === 0 ? (
+            <div className="flex h-56 flex-col items-center justify-center gap-3 text-center">
+              <Building2 className="size-12 text-muted-foreground/50" />
+              <h3 className="font-display text-base font-bold text-foreground">Nenhuma organização encontrada</h3>
+              <p className="max-w-md text-xs text-muted-foreground">
+                {searchQuery
+                  ? "Nenhum parceiro corresponde à sua pesquisa. Tente outro termo."
+                  : "Cadastre sua primeira organização white-label no botão acima para começar."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {filteredTenants.map((t) => {
+                const stats = statsMap[t.id];
+                const deviceCount = stats?.device_count || 0;
+                const limit = t.settings?.device_limit || 50;
+                const usagePercent = limit > 0 ? Math.round((deviceCount / limit) * 100) : 0;
+                const primaryColorValue = t.branding?.primary_color || "#EF251B";
+                const currentLogo = t.branding?.logo_url;
 
-                        <div className="min-w-0">
-                          <h3 className="truncate text-sm font-black uppercase tracking-tight text-foreground">
+                return (
+                  <div
+                    key={t.id}
+                    className="flex flex-col gap-4 rounded-xl px-4 py-3.5 transition-colors hover:bg-background/40 lg:flex-row lg:items-center lg:justify-between"
+                  >
+                    {/* Identity & Domain */}
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div
+                        className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl"
+                        style={{ backgroundColor: `${primaryColorValue}18` }}
+                      >
+                        {currentLogo && currentLogo !== "/logo.svg" && currentLogo !== "/logomark.svg" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={currentLogo}
+                            alt={t.trade_name}
+                            className="size-7 object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        ) : t.slug === "rideon" || (t.trade_name && t.trade_name.toLowerCase() === "rideon") ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src="/logomark-icon.svg"
+                            alt={t.trade_name}
+                            className="size-7 object-contain"
+                          />
+                        ) : (
+                          <span
+                            className="font-display text-base font-bold uppercase text-foreground"
+                            style={{ color: primaryColorValue }}
+                          >
+                            {(t.trade_name || t.slug).charAt(0)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-display text-sm font-bold text-foreground">
                             {t.trade_name || t.legal_name}
                           </h3>
-                          <p className="truncate text-[11px] text-muted-foreground font-mono">
-                            {t.legal_name}
-                          </p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              t.status === "active"
+                                ? "bg-emerald-500/15 text-emerald-400"
+                                : "bg-secondary text-muted-foreground"
+                            }`}
+                          >
+                            {t.status === "active" ? "Ativo" : t.status}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="truncate max-w-[200px]">{t.legal_name}</span>
+                          <span className="font-mono text-[11px]">{formatCNPJ(t.tax_id) || t.tax_id || "--"}</span>
+                          <span className="font-mono text-[11px] text-primary">{t.slug}.rideon.app</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quotas & Actions */}
+                    <div className="flex flex-wrap items-center gap-5">
+                      <div className="w-36 space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Gauge className="size-3 text-primary" />
+                            Cota
+                          </span>
+                          <span className="font-mono font-semibold text-foreground">
+                            {deviceCount}/{limit}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              usagePercent >= 90
+                                ? "bg-destructive"
+                                : usagePercent >= 70
+                                ? "bg-amber-500"
+                                : "bg-emerald-500"
+                            }`}
+                            style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                          />
                         </div>
                       </div>
 
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                          t.status === "active"
-                            ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                            : "border border-border bg-secondary text-muted-foreground"
-                        }`}
-                      >
-                        {t.status === "active" ? "Ativo" : t.status}
-                      </span>
-                    </div>
-
-                    {/* CNPJ & Subdomínio */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-xl border border-border/60 bg-secondary/40 p-2.5">
-                        <span className="block text-[10px] font-bold uppercase text-muted-foreground">CNPJ / Tax ID</span>
-                        <span className="font-mono text-[11px] font-semibold text-foreground truncate block">
-                          {formatCNPJ(t.tax_id) || t.tax_id || "--"}
-                        </span>
-                      </div>
-                      <div className="rounded-xl border border-border/60 bg-secondary/40 p-2.5">
-                        <span className="block text-[10px] font-bold uppercase text-muted-foreground">Slug / Domínio</span>
-                        <span className="font-mono text-[11px] font-semibold text-primary truncate block">
-                          {t.slug}.rideon.app
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Consumo de Cotas Compacto */}
-                    <div className="rounded-xl border border-border/60 bg-secondary/30 p-3 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[11px] font-bold uppercase text-muted-foreground flex items-center gap-1.5">
-                          <Gauge className="size-3.5 text-primary" />
-                          Rastreadores
-                        </span>
-                        <span className="font-mono text-xs font-bold text-foreground">
-                          {deviceCount} <span className="text-muted-foreground font-normal">/ {limit}</span>
-                        </span>
-                      </div>
-
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/80">
-                        <div
-                          className={`h-full transition-all duration-500 ${
-                            usagePercent >= 90
-                              ? "bg-destructive"
-                              : usagePercent >= 70
-                              ? "bg-amber-500"
-                              : "bg-emerald-500"
-                          }`}
-                          style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Limite por Cliente */}
-                    <div className="flex items-center justify-between rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs">
-                      <span className="text-[11px] font-bold uppercase text-muted-foreground flex items-center gap-1.5">
-                        <Bike className="size-3.5 text-primary" />
-                        Limite por Cliente
-                      </span>
-                      <span className="font-mono text-xs font-bold text-foreground">
-                        {t.settings?.customer_vehicle_limit || 1} {(t.settings?.customer_vehicle_limit || 1) === 1 ? "veículo" : "veículos"}
-                      </span>
-                    </div>
-
-                    {/* Módulos Badge Preview */}
-                    <div className="flex flex-wrap items-center gap-1">
-                      {(t.settings?.enabled_modules || ["telemetry", "tracking"]).slice(0, 4).map((mod) => (
-                        <span
-                          key={mod}
-                          className="rounded-md border border-border/60 bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground"
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => openThemeModal(t)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                          title="Personalizar Identidade Visual e Tema"
                         >
-                          {mod}
-                        </span>
-                      ))}
-                      {(t.settings?.enabled_modules?.length || 0) > 4 && (
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          +{(t.settings?.enabled_modules?.length || 0) - 4}
-                        </span>
-                      )}
+                          <Palette className="size-3.5" />
+                          <span>Tema</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => openSettingsModal(t)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                          title="Configurar Cotas e Módulos"
+                        >
+                          <Sliders className="size-3.5" />
+                          <span>Plano</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setDomainsModalTenant(t)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                          title="Apontamentos DNS e SSL"
+                        >
+                          <Globe className="size-3.5" />
+                          <span>DNS</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Ações Rápidas no Card */}
-                  <div className="mt-5 grid grid-cols-3 gap-2 border-t border-border/60 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => openThemeModal(t)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-2.5 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-sm"
-                      title="Personalizar Identidade Visual e Tema"
-                    >
-                      <Palette className="size-3.5" />
-                      <span>Tema</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openSettingsModal(t)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-secondary/60 px-2.5 py-2 text-xs font-bold text-foreground hover:bg-secondary hover:border-foreground/20 transition-all"
-                      title="Configurar Cotas e Módulos"
-                    >
-                      <Sliders className="size-3.5" />
-                      <span>Plano</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDomainsModalTenant(t)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-secondary/60 px-2.5 py-2 text-xs font-bold text-foreground hover:bg-secondary hover:border-foreground/20 transition-all"
-                      title="Apontamentos DNS e SSL"
-                    >
-                      <Globe className="size-3.5" />
-                      <span>DNS</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* MODAL 1: Personalizar Tema / Edição de Tema Separada */}
         {themeModalTenant && (

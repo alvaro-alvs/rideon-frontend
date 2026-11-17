@@ -133,391 +133,352 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-6xl py-6 space-y-8">
+      <div className="w-full space-y-4">
         {/* Suggestion modal / banner on first login */}
         <Suspense fallback={null}>
           <FirstLoginPasswordModal />
         </Suspense>
 
-        {/* Top Header & Plan Info */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <p className="section-kicker">
-                {isMaster
-                  ? "CENTRAL DE CONTROLE MASTER"
-                  : isMgr
-                    ? `GESTÃO DE FROTA • ${(tenant.branding?.brand_name || "EMPRESA").toUpperCase()}`
-                    : "CENTRAL DO PILOTO"}
-              </p>
-              {hasVehicle && (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${isFleetUser || isMultiVehiclePlan
-                      ? "bg-primary/20 text-primary border border-primary/40"
-                      : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                    }`}
-                >
-                  <ShieldCheck className="size-3.5" />
-                  {isFleetUser
-                    ? `Frota Ativa • ${motorcycles.length} Veículo${motorcycles.length === 1 ? "" : "s"}`
-                    : isMultiVehiclePlan
-                      ? `Plano Multi-Veículos • ${motorcycles.length} Motos`
-                      : "Plano Individual • 1 Moto"}
-                </span>
-              )}
-            </div>
-            <h1 className="mt-2 text-3xl sm:text-4xl font-bold uppercase tracking-tight text-foreground">
-              {isLoading
-                ? "Carregando telemetria..."
-                : isFleetUser
-                  ? hasVehicle
-                    ? `Frota da Empresa Conectada • ${motorcycles.length} Veículo${motorcycles.length === 1 ? "" : "s"}`
-                    : "Nenhum veículo cadastrado na frota"
-                  : hasVehicle
-                    ? "Sua moto está monitorada e protegida"
-                    : "Nenhum veículo cadastrado"}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => void refresh()}
-              disabled={isLoading}
-              title="Atualizar dados de telemetria"
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:border-primary/50 hover:bg-card hover:text-foreground disabled:opacity-50"
-            >
-              <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin text-primary" : ""}`} />
-              <span>Sincronizar</span>
-            </button>
-            {hasVehicle && (
-              <button
-                onClick={() => setIsMapModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90"
-              >
-                <Maximize2 className="size-3.5" />
-                <span>Rastreio</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Multi-Vehicle Plan Switcher Tabs */}
-        {isMultiVehiclePlan && (
-          <div className="rounded-xl border border-border bg-card/40 p-3 backdrop-blur">
-            <div className="mb-2 flex items-center justify-between px-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Bike className="size-4 text-primary" />
-                Selecione o Veículo para Monitorar
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                Alternando visão em tempo real
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {motorcycles.map((bike) => {
-                const isSelected = (bike.id ?? "") === (selectedVehicleId ?? "");
-                const bikeName =
-                  `${bike.brand ?? ""} ${bike.model ?? ""}`.trim() ||
-                  bike.model ||
-                  "Motocicleta";
-
-                return (
-                  <button
-                    key={bike.id ?? bike.license_plate}
-                    onClick={() => bike.id && setSelectedVehicleId(bike.id)}
-                    className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-all ${isSelected
-                        ? "border-primary bg-primary/10 shadow-md shadow-primary/10 text-foreground ring-1 ring-primary/40"
-                        : "border-border/70 bg-card/50 text-muted-foreground hover:border-border hover:bg-card/90 hover:text-foreground"
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <p className="section-kicker">
+                  {isMaster
+                    ? "CENTRAL DE CONTROLE MASTER"
+                    : isMgr
+                      ? `GESTÃO DE FROTA • ${(tenant.branding?.brand_name || "EMPRESA").toUpperCase()}`
+                      : "CENTRAL DO PILOTO"}
+                </p>
+                {hasVehicle && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${isFleetUser || isMultiVehiclePlan
+                        ? "bg-primary/15 text-primary"
+                        : "bg-emerald-500/15 text-emerald-400"
                       }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`grid size-9 shrink-0 place-items-center rounded-md ${isSelected
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                          }`}
-                      >
-                        <Bike className="size-5" />
-                      </div>
-                      <div className="truncate">
-                        <p className="text-sm font-semibold truncate leading-snug">
-                          {bikeName}
-                        </p>
-                        <p className="text-xs font-mono font-bold tracking-wider text-muted-foreground">
-                          {bike.license_plate || "PLACA --"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end shrink-0">
-                      <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
-                        <span className="relative flex size-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
-                        </span>
-                        Ativa
-                      </span>
-                      {isSelected && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary mt-1">
-                          Selecionada
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Telemetry Summary Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/40">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">
-                Velocidade Atual
-              </span>
-              <div className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
-                <Activity className="size-4" />
-              </div>
-            </div>
-            <p className="mt-4 text-3xl font-extrabold tracking-tight">{speed}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {speed === "0 km/h" ? "Veículo estacionado" : "Em deslocamento contínuo"}
-            </p>
-          </article>
-
-          <article className="relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/40">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">
-                Bateria
-              </span>
-              <div className="grid size-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                <BatteryCharging className="size-4" />
-              </div>
-            </div>
-            <p className="mt-4 text-3xl font-extrabold tracking-tight text-emerald-400">
-              {battery}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {hasVehicle ? "Carga ideal • Sem fuga de corrente" : "Aguardando sinal"}
-            </p>
-          </article>
-
-          <article className="relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/40">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">
-                Ignição
-              </span>
-              <div
-                className={`grid size-8 place-items-center rounded-lg ${isIgnitionOn
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-amber-500/15 text-amber-400"
-                  }`}
-              >
-                <Zap className="size-4" />
-              </div>
-            </div>
-            <p
-              className={`mt-4 text-3xl font-extrabold tracking-tight ${isIgnitionOn ? "text-emerald-400" : "text-amber-400"
-                }`}
-            >
-              {isLoading ? "..." : hasVehicle ? (isIgnitionOn ? "Ligada" : "Desligada") : "--"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {isVirtualAnchorActive ? "Âncora virtual de bloqueio ativa" : "Monitoramento padrão"}
-            </p>
-          </article>
-
-          <article className="relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/40">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">
-                Sinal do Rastreador
-              </span>
-              <div className="grid size-8 place-items-center rounded-lg bg-sky-500/10 text-sky-400">
-                <Radio className="size-4" />
-              </div>
-            </div>
-            <p className="mt-4 text-3xl font-extrabold tracking-tight text-sky-400">
-              {hasVehicle ? "Online" : "--"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {motorcycle?.device?.serial_number
-                ? `Equipamento ${motorcycle.device.serial_number}`
-                : "Conexão IoT criptografada"}
-            </p>
-          </article>
-        </div>
-
-        {/* Hoverable and Clickable Live Telemetry Mini-map */}
-        <section
-          onClick={handleMapClick}
-          tabIndex={0}
-          role="button"
-          aria-label="Abrir mapa de telemetria em tempo real"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleMapClick();
-            }
-          }}
-          className="group relative h-[380px] sm:h-[420px] cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-lg transition-all duration-300 hover:border-primary hover:shadow-xl hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          {/* Background Map View / Fallback Grid */}
-          <div className="absolute inset-0 pointer-events-none">
-            {activePosition ? (
-              <GoogleMapView
-                position={activePosition}
-                heading={activeHeading}
-                interactive={false}
-                markerType="pin"
-                showCircle={true}
-                zoom={16}
-              />
-            ) : (
-              <div className="mini-map h-full w-full opacity-60" />
-            )}
-          </div>
-
-          {/* Vignette & Contrast Overlay so floating components stand out */}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/35" />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/30 via-transparent to-background/30" />
-
-          {/* Subtle animated scan grid line on hover */}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/5 to-primary/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-          {/* Top-Right Floating Expand Prompt Badge */}
-          <div className="pointer-events-auto absolute top-4 right-4 z-10 flex items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md shadow-lg transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
-            {hasVehicle ? (
-              <>
-                <Maximize2 className="size-4" />
-                <span>Expandir Telemetria em Tempo Real</span>
-              </>
-            ) : (
-              <>
-                <Plus className="size-4" />
-                <span>Cadastrar Veículo</span>
-              </>
-            )}
-          </div>
-
-          {/* Bottom Floating Vehicle Info Card / Registration CTA Button */}
-          {hasVehicle ? (
-            <div className="pointer-events-auto absolute bottom-5 left-5 z-10 max-w-md rounded-xl border border-border/80 bg-background/95 p-4 shadow-xl backdrop-blur-md transition-colors group-hover:border-primary/50">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex size-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500"></span>
+                    <ShieldCheck className="size-3.5" />
+                    {isFleetUser
+                      ? `Frota Ativa • ${motorcycles.length} Veículo${motorcycles.length === 1 ? "" : "s"}`
+                      : isMultiVehiclePlan
+                        ? `Plano Multi-Veículos • ${motorcycles.length} Motos`
+                        : "Plano Individual • 1 Moto"}
                   </span>
-                  <p className="text-xs font-bold uppercase tracking-[.1em] text-primary">
-                    {hasLiveCoords ? "Localização • GPS" : "Última Posição Registrada"}
-                  </p>
-                </div>
-                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">
-                  {motorcyclePlate || "PLACA --"}
+                )}
+              </div>
+              <h1 className="mt-1.5 font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                {isLoading
+                  ? "Carregando telemetria..."
+                  : isFleetUser
+                    ? hasVehicle
+                      ? `Frota da Empresa Conectada • ${motorcycles.length} Veículo${motorcycles.length === 1 ? "" : "s"}`
+                      : "Nenhum veículo cadastrado na frota"
+                    : hasVehicle
+                      ? "Sua moto está monitorada e protegida"
+                      : "Nenhum veículo cadastrado"}
+              </h1>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                onClick={() => void refresh()}
+                disabled={isLoading}
+                title="Atualizar dados de telemetria"
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin text-primary" : ""}`} />
+                <span>Sincronizar</span>
+              </button>
+              {hasVehicle && (
+                <button
+                  onClick={() => setIsMapModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/20 transition hover:bg-primary/90 cursor-pointer"
+                >
+                  <Maximize2 className="size-3.5" />
+                  <span>Rastreio</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Multi-Vehicle Plan Switcher Strip */}
+          {isMultiVehiclePlan && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Bike className="size-4 text-primary" />
+                  Selecione o veículo para monitorar
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Visão em tempo real
                 </span>
               </div>
-              <p className="mt-1.5 text-base font-bold text-foreground">
-                {motorcycleModel}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
-                Clique na área do mapa para abrir o painel completo de rotas e telemetria
-              </p>
-            </div>
-          ) : (
-            <Link
-              href="/dashboard/vehicles"
-              onClick={(e) => e.stopPropagation()}
-              className="group/btn pointer-events-auto absolute bottom-5 left-5 z-10 flex items-center gap-3.5 rounded-xl border border-primary/60 bg-background/95 p-4 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-primary hover:text-primary-foreground"
-            >
-              <div className="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground transition-colors group-hover/btn:bg-background group-hover/btn:text-primary">
-                <Plus className="size-5 stroke-[2.5]" />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.1em] text-primary group-hover/btn:text-primary-foreground">
-                  Cadastre seu Veículo
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground group-hover/btn:text-primary-foreground/90">
-                  Vincule seu veículo para ativar a proteção 24 horas
-                </p>
-              </div>
-            </Link>
-          )}
+              <div className="flex flex-wrap gap-2">
+                {motorcycles.map((bike) => {
+                  const isSelected = (bike.id ?? "") === (selectedVehicleId ?? "");
+                  const bikeName =
+                    `${bike.brand ?? ""} ${bike.model ?? ""}`.trim() ||
+                    bike.model ||
+                    "Motocicleta";
 
-          {/* Central Placeholder if no vehicle or waiting for initial satellite fix */}
-          {!hasVehicle && (
-            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 grid size-14 place-items-center rounded-full bg-primary shadow-xl shadow-primary/40 transition-transform duration-300 group-hover:scale-110">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
-              <Plus className="relative z-10 size-7 stroke-[3] text-primary-foreground" />
+                  return (
+                    <button
+                      key={bike.id ?? bike.license_plate}
+                      onClick={() => bike.id && setSelectedVehicleId(bike.id)}
+                      className={`inline-flex items-center gap-2.5 rounded-xl px-3.5 py-2 text-left transition-all cursor-pointer ${isSelected
+                          ? "bg-primary/15 text-foreground ring-1 ring-primary/50"
+                          : "bg-background/50 text-muted-foreground hover:bg-background hover:text-foreground"
+                        }`}
+                    >
+                      <Bike className={`size-4 shrink-0 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="text-xs font-semibold truncate">{bikeName}</span>
+                      <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+                        {bike.license_plate || "--"}
+                      </span>
+                      <span className="size-2 rounded-full bg-emerald-500" />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
-          {hasVehicle && !activePosition && (
-            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-4 py-3 shadow-xl backdrop-blur-md">
-              <div className="relative flex size-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex size-3 rounded-full bg-amber-500"></span>
+
+          {/* Unified Telemetry Summary (Clean, borderless on card surface) */}
+          <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+            <div className="py-1">
+              <div className="flex items-center gap-2">
+                <Activity className="size-4 text-primary" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Velocidade Atual
+                </span>
               </div>
-              <p className="text-xs font-bold uppercase tracking-wider text-foreground">
-                Aguardando sinal GPS
+              <p className="mt-2 font-display text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-foreground">
+                {speed}
               </p>
-              <p className="text-[11px] text-muted-foreground text-center">
-                Ligue a ignição ao ar livre para sincronizar
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {speed === "0 km/h" ? "Veículo estacionado" : "Em deslocamento contínuo"}
               </p>
             </div>
-          )}
-        </section>
 
-        {/* Quick Rider Security Controls */}
-        {hasVehicle && (
-          <div className="rounded-2xl border border-border bg-card p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h3 className="text-base font-bold uppercase tracking-wide text-foreground flex items-center gap-2">
-                  <Lock className="size-4 text-primary" />
-                  Controles Rápidos de Segurança
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Ações imediatas para proteger seu veículo onde quer que ele esteja estacionado.
-                </p>
+            <div className="py-1">
+              <div className="flex items-center gap-2">
+                <BatteryCharging className="size-4 text-emerald-400" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Bateria
+                </span>
               </div>
+              <p className="mt-2 font-display text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-emerald-400">
+                {battery}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {hasVehicle ? "Carga ideal • Sem fuga de corrente" : "Aguardando sinal"}
+              </p>
+            </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsVirtualAnchorActive(!isVirtualAnchorActive)}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition ${isVirtualAnchorActive
-                      ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                    }`}
-                >
-                  <Lock className="size-3.5" />
-                  <span>
-                    {isVirtualAnchorActive ? "Âncora Virtual: Ativa" : "Ativar Âncora Virtual"}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground transition hover:border-primary hover:text-foreground"
-                >
-                  <Share2 className="size-3.5" />
-                  <span>{shareSuccess ? "Link Copiado!" : "Compartilhar Trajeto"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsMapModalOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-red-400 transition hover:bg-red-500/20"
-                >
-                  <ShieldAlert className="size-3.5" />
-                  <span>Central de Alerta</span>
-                </button>
+            <div className="py-1">
+              <div className="flex items-center gap-2">
+                <Zap className={`size-4 ${isIgnitionOn ? "text-emerald-400" : "text-amber-400"}`} />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Ignição
+                </span>
               </div>
+              <p
+                className={`mt-2 font-display text-2xl sm:text-3xl font-bold tracking-tight ${isIgnitionOn ? "text-emerald-400" : "text-amber-400"
+                  }`}
+              >
+                {isLoading ? "..." : hasVehicle ? (isIgnitionOn ? "Ligada" : "Desligada") : "--"}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {isVirtualAnchorActive ? "Âncora virtual ativa" : "Monitoramento padrão"}
+              </p>
+            </div>
+
+            <div className="py-1">
+              <div className="flex items-center gap-2">
+                <Radio className="size-4 text-sky-400" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Sinal do Rastreador
+                </span>
+              </div>
+              <p className="mt-2 font-display text-2xl sm:text-3xl font-bold tracking-tight text-sky-400">
+                {hasVehicle ? "Online" : "--"}
+              </p>
+              <p className="mt-0.5 font-mono text-xs text-muted-foreground truncate">
+                {motorcycle?.device?.serial_number
+                  ? `ID ${motorcycle.device.serial_number}`
+                  : "Conexão IoT criptografada"}
+              </p>
             </div>
           </div>
-        )}
+
+          {/* Embedded Live Telemetry Map */}
+          <section
+            onClick={handleMapClick}
+            tabIndex={0}
+            role="button"
+            aria-label="Abrir mapa de telemetria em tempo real"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleMapClick();
+              }
+            }}
+            className="group relative h-[380px] sm:h-[420px] cursor-pointer overflow-hidden rounded-xl bg-surface transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {/* Background Map View / Fallback Grid */}
+            <div className="absolute inset-0 pointer-events-none">
+              {activePosition ? (
+                <GoogleMapView
+                  position={activePosition}
+                  heading={activeHeading}
+                  interactive={false}
+                  markerType="pin"
+                  showCircle={true}
+                  zoom={16}
+                />
+              ) : (
+                <div className="mini-map h-full w-full opacity-60" />
+              )}
+            </div>
+
+            {/* Vignette & Contrast Overlay */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/30" />
+
+            {/* Top-Right Floating Expand Prompt Badge */}
+            <div className="pointer-events-auto absolute top-4 right-4 z-10 flex items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-3.5 py-2 text-xs font-semibold text-muted-foreground backdrop-blur-md shadow-lg transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
+              {hasVehicle ? (
+                <>
+                  <Maximize2 className="size-4" />
+                  <span>Expandir Telemetria em Tempo Real</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="size-4" />
+                  <span>Cadastrar Veículo</span>
+                </>
+              )}
+            </div>
+
+            {/* Bottom Floating Vehicle Info / Registration CTA */}
+            {hasVehicle ? (
+              <div className="pointer-events-auto absolute bottom-5 left-5 z-10 max-w-md rounded-xl border border-border/80 bg-background/95 p-4 shadow-xl backdrop-blur-md transition-colors group-hover:border-primary/50">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex size-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500"></span>
+                    </span>
+                    <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                      {hasLiveCoords ? "Localização • GPS" : "Última Posição Registrada"}
+                    </p>
+                  </div>
+                  <span className="rounded bg-secondary px-2 py-0.5 font-mono text-xs font-bold text-foreground">
+                    {motorcyclePlate || "PLACA --"}
+                  </span>
+                </div>
+                <p className="mt-1.5 font-display text-base font-bold text-foreground">
+                  {motorcycleModel}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                  Clique no mapa para abrir o painel completo de rotas e telemetria
+                </p>
+              </div>
+            ) : (
+              <Link
+                href="/dashboard/vehicles"
+                onClick={(e) => e.stopPropagation()}
+                className="group/btn pointer-events-auto absolute bottom-5 left-5 z-10 flex items-center gap-3.5 rounded-xl border border-primary/60 bg-background/95 p-4 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-primary hover:text-primary-foreground"
+              >
+                <div className="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground transition-colors group-hover/btn:bg-background group-hover/btn:text-primary">
+                  <Plus className="size-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-primary group-hover/btn:text-primary-foreground">
+                    Cadastre seu Veículo
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground group-hover/btn:text-primary-foreground/90">
+                    Vincule seu veículo para ativar a proteção 24 horas
+                  </p>
+                </div>
+              </Link>
+            )}
+
+            {/* Central Placeholder */}
+            {!hasVehicle && (
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 grid size-14 place-items-center rounded-full bg-primary shadow-xl shadow-primary/40 transition-transform duration-300 group-hover:scale-110">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50"></span>
+                <Plus className="relative z-10 size-7 stroke-[3] text-primary-foreground" />
+              </div>
+            )}
+            {hasVehicle && !activePosition && (
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-4 py-3 shadow-xl backdrop-blur-md">
+                <div className="relative flex size-3">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex size-3 rounded-full bg-amber-500"></span>
+                </div>
+                <p className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  Aguardando sinal GPS
+                </p>
+                <p className="text-xs text-muted-foreground text-center">
+                  Ligue a ignição ao ar livre para sincronizar
+                </p>
+              </div>
+            )}
+          </section>
+
+          {/* Quick Rider Security Controls Footer */}
+          {hasVehicle && (
+            <div className="rounded-xl bg-background/40 p-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="font-display text-sm font-bold text-foreground flex items-center gap-2">
+                    <Lock className="size-4 text-primary" />
+                    Controles Rápidos de Segurança
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Ações imediatas para proteger seu veículo onde quer que esteja estacionado.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsVirtualAnchorActive(!isVirtualAnchorActive)}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${isVirtualAnchorActive
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                        : "border-border bg-background/60 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      }`}
+                  >
+                    <Lock className="size-3.5" />
+                    <span>
+                      {isVirtualAnchorActive ? "Âncora Virtual: Ativa" : "Ativar Âncora Virtual"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border bg-background/60 px-3.5 py-2 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground cursor-pointer"
+                  >
+                    <Share2 className="size-3.5" />
+                    <span>{shareSuccess ? "Link Copiado!" : "Compartilhar Trajeto"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsMapModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 cursor-pointer"
+                  >
+                    <ShieldAlert className="size-3.5" />
+                    <span>Central de Alerta</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Live Telemetry Modal */}

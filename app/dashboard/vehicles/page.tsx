@@ -437,43 +437,72 @@ export default function VehiclesPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-6xl space-y-10 py-4">
-        {/* ========================================================================= */}
-        {/* HERO HEADER & STATS / ACTIVE VEHICLE BAR                                  */}
-        {/* ========================================================================= */}
-        <header className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-card/40 via-card/15 to-transparent p-6 sm:p-8 backdrop-blur-md">
-          {/* Ambient Cyber Glow Accents - Efeito Difuso */}
-          <div className="pointer-events-none absolute -right-16 -top-16 size-80 rounded-full bg-primary/10 blur-3xl opacity-75" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-80 rounded-full bg-emerald-500/10 blur-3xl opacity-70" />
-
-          {/* Banner do Fleet User / Gestor */}
-          {isFleetUser && (
-            <div className="relative z-10 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 shrink-0">
-                  <Bike className="size-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-foreground">
-                    {isMaster ? "Visão Global da Frota (Admin)" : "Painel Avançado de Frota (Gestor)"}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {isMaster
-                      ? "Para vincular dispositivos (IMEI), telemetria em tempo real e controle de condutores de todos os parceiros, use a central de Frota."
-                      : "Você pode vincular rastreadores, gerenciar condutores e acompanhar a telemetria detalhada de todos os veículos da sua empresa no painel de Frota."}
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/admin/vehicles"
-                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
-              >
-                Ir para Controle de Frota
-              </Link>
+      <div className="w-full space-y-4">
+        {/* Global Error Banner */}
+        {error && (
+          <div
+            role="alert"
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-primary/50 bg-primary/10 p-4 text-xs font-semibold text-primary"
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle className="size-5 shrink-0 text-primary" />
+              <span>{error}</span>
             </div>
-          )}
+            <div className="flex items-center gap-2 shrink-0">
+              {error.toLowerCase().includes("sessão") && (
+                <Link
+                  href="/login?expired=1&from=/dashboard/vehicles"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:opacity-90 transition-all"
+                >
+                  Fazer Login Novamente
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={() => setError("")}
+                className="text-primary hover:opacity-75 p-1"
+                title="Fechar alerta"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* ========================================================================= */}
+          {/* HERO HEADER & STATS / ACTIVE VEHICLE BAR                                  */}
+          {/* ========================================================================= */}
+          <header className="space-y-4">
+            {/* Banner do Fleet User / Gestor */}
+            {isFleetUser && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/30 shrink-0">
+                    <Bike className="size-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                      {isMaster ? "Visão Global da Frota (Admin)" : "Painel Avançado de Frota (Gestor)"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {isMaster
+                        ? "Para vincular dispositivos (IMEI), telemetria em tempo real e controle de condutores de todos os parceiros, use a central de Frota."
+                        : "Você pode vincular rastreadores, gerenciar condutores e acompanhar a telemetria detalhada de todos os veículos da sua empresa no painel de Frota."}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/admin/vehicles"
+                  className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
+                >
+                  Ir para Controle de Frota
+                </Link>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             {/* Lado Esquerdo: Identificação & Título */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2.5">
@@ -723,40 +752,9 @@ export default function VehiclesPage() {
           </div>
         </header>
 
-        {/* Global Error Banner */}
-        {error && (
-          <div
-            role="alert"
-            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-primary/50 bg-primary/10 p-4 text-xs font-semibold text-primary shadow-lg backdrop-blur-md"
-          >
-            <div className="flex items-center gap-3">
-              <AlertCircle className="size-5 shrink-0 text-primary" />
-              <span>{error}</span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {error.toLowerCase().includes("sessão") && (
-                <Link
-                  href="/login?expired=1&from=/dashboard/vehicles"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-primary/20 hover:opacity-90 transition-all"
-                >
-                  Fazer Login Novamente
-                </Link>
-              )}
-              <button
-                type="button"
-                onClick={() => setError("")}
-                className="text-primary hover:opacity-75 p-1"
-                title="Fechar alerta"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Loading Indicator */}
         {view === "loading" && (
-          <div className="rounded-2xl border border-border/80 bg-card/60 p-12 text-center shadow-lg backdrop-blur-md">
+          <div className="rounded-xl bg-background/40 p-12 text-center">
             <div className="relative mx-auto mb-4 flex size-14 items-center justify-center">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-25" />
               <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/30">
@@ -906,7 +904,7 @@ export default function VehiclesPage() {
         {/* SEÇÃO 3: ETAPA PENDENTE DE CADASTRO (STEPPER MODERNO)                      */}
         {/* ========================================================================= */}
         {view === "pending-card" && pendingRider && (
-          <section className="overflow-hidden rounded-3xl border border-primary/40 bg-card/90 p-6 shadow-2xl backdrop-blur-xl sm:p-8 space-y-6 max-w-3xl mx-auto">
+          <section className="overflow-hidden rounded-xl border border-primary/40 bg-background/40 p-5 sm:p-6 space-y-6">
             {/* Stepper Header */}
             <div className="flex items-center justify-between border-b border-border/60 pb-4">
               <div className="space-y-1">
@@ -959,7 +957,7 @@ export default function VehiclesPage() {
         {/* SEÇÃO 4: SUCESSO DE CADASTRO                                               */}
         {/* ========================================================================= */}
         {view === "success" && (
-          <section className="overflow-hidden rounded-3xl border border-emerald-500/40 bg-card/90 p-8 shadow-2xl backdrop-blur-xl max-w-3xl mx-auto space-y-6 text-center sm:text-left">
+          <section className="overflow-hidden rounded-xl border border-emerald-500/40 bg-background/40 p-6 space-y-6 text-center sm:text-left">
             <div className="flex flex-col sm:flex-row items-center gap-5">
               <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/10">
                 <CheckCircle2 className="size-9" />
@@ -1035,7 +1033,7 @@ export default function VehiclesPage() {
                   {/* ========================================================= */}
                   {/* SEÇÃO 1 (ACIMA): DADOS DA MOTOCICLETA                     */}
                   {/* ========================================================= */}
-                  <section className="relative z-20 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
+                  <section className="relative z-20 rounded-xl border border-border/60 bg-background/40 p-5 sm:p-6 space-y-6">
                     <div className="flex items-center gap-3 border-b border-border/60 pb-4">
                       <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
                         <Bike className="size-5" />
@@ -1147,7 +1145,7 @@ export default function VehiclesPage() {
                   {/* ========================================================= */}
                   {/* SEÇÃO 2 (ABAIXO): PILOTO RESPONSÁVEL COM ATALHO DE TRAVA  */}
                   {/* ========================================================= */}
-                  <section className="relative z-10 rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8 space-y-6">
+                  <section className="relative z-10 rounded-xl border border-border/60 bg-background/40 p-5 sm:p-6 space-y-6">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-4">
                       <div className="flex items-center gap-3">
                         <div
@@ -1320,7 +1318,7 @@ export default function VehiclesPage() {
                 <div className="space-y-6 lg:col-span-4">
                   <div className="sticky top-6 space-y-6">
                     {/* Live Mercosul Plate Preview Box */}
-                    <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-6 shadow-xl backdrop-blur-xl text-center space-y-4">
+                    <div className="overflow-hidden rounded-xl border border-border/60 bg-background/40 p-5 text-center space-y-4">
                       <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         <Zap className="size-3.5 text-primary" />
                         <span>Preview da Placa Mercosul</span>
@@ -1339,7 +1337,7 @@ export default function VehiclesPage() {
                     </div>
 
                     {/* Card de Resumo Rápido */}
-                    <div className="overflow-hidden rounded-3xl border border-border/70 bg-secondary/40 p-6 backdrop-blur-xl space-y-4">
+                    <div className="overflow-hidden rounded-xl border border-border/60 bg-secondary/40 p-5 space-y-4">
                       <h4 className="text-xs font-black uppercase tracking-widest text-primary">
                         Resumo do Cadastro
                       </h4>
@@ -1400,7 +1398,7 @@ export default function VehiclesPage() {
                   document.getElementById("vehicle-form-section")?.scrollIntoView({ behavior: "smooth" });
                 }, 50);
               }}
-              className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border/80 bg-card/40 p-5 text-xs font-black uppercase tracking-widest text-muted-foreground backdrop-blur-md transition-all duration-300 hover:border-primary hover:bg-secondary hover:text-foreground hover:shadow-xl hover:shadow-primary/5 cursor-pointer"
+              className="group flex w-full items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border/80 bg-background/40 p-5 text-xs font-black uppercase tracking-widest text-muted-foreground transition-all duration-300 hover:border-primary hover:bg-secondary hover:text-foreground cursor-pointer"
             >
               <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover:scale-110">
                 <Plus className="size-4" />
@@ -1409,6 +1407,7 @@ export default function VehiclesPage() {
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {/* ========================================================================= */}

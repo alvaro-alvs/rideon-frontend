@@ -279,90 +279,11 @@ export default function AdminVehiclesPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-7xl py-4 space-y-8">
-        {/* Header Hero */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-cyan-500/10 blur-3xl" />
-
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
-                  <Bike className="size-3.5" />
-                  Controle de Frota
-                </span>
-                <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary border border-primary/30">
-                  Filtros & Dispositivos
-                </span>
-              </div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
-                {isMaster ? "Veículos da Plataforma (Global)" : `Veículos da Frota • ${tenant.branding?.brand_name || "Sua Empresa"}`}
-              </h1>
-              <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm">
-                {isMaster
-                  ? "Painel do Administrador Geral para monitoramento consolidado de todos os veículos de todos os parceiros."
-                  : "Painel do Gestor para monitorar todos os veículos da sua empresa, filtrar por condutor, verificar status dos rastreadores (IMEI) e acessar telemetria em tempo real."}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => void fetchData()}
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary hover:border-primary/40 transition-colors shadow-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`size-4 ${refreshing ? "animate-spin text-primary" : ""}`} />
-                Atualizar
-              </button>
-              <button
-                onClick={() => setIsNewVehicleModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
-              >
-                <Plus className="size-4 stroke-[3]" />
-                Novo Veículo
-              </button>
-            </div>
-          </div>
-
-          {/* Metrics */}
-          <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Total de Motos
-              </p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">{stats.total}</span>
-                <span className="text-[10px] font-semibold text-primary">veículos</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Com Rastreador Vinculado
-              </p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">{stats.linked}</span>
-                <span className="text-[10px] font-semibold text-cyan-400">rastreados</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Aguardando Equipamento
-              </p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">{stats.unlinked}</span>
-                <span className="text-[10px] font-semibold text-amber-400">sem IMEI</span>
-              </div>
-            </div>
-          </div>
-        </header>
-
+      <div className="w-full space-y-4">
         {/* Feedback Alert */}
         {feedback && (
           <div
-            className={`flex items-center gap-3 rounded-2xl border p-4 text-xs font-bold shadow-lg animate-in fade-in duration-200 ${
+            className={`flex items-center gap-3 rounded-xl border p-4 text-xs font-semibold animate-in fade-in duration-200 ${
               feedback.type === "success"
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                 : "border-red-500/30 bg-red-500/10 text-red-400"
@@ -380,207 +301,257 @@ export default function AdminVehiclesPage() {
           </div>
         )}
 
-        {/* Advanced Filters Bar */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/60 p-4 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filtrar por placa, modelo, marca ou cliente proprietário..."
-              className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-            />
-          </div>
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
+                  <Bike className="size-3.5" />
+                  Controle de Frota
+                </span>
+                <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  Filtros & Dispositivos
+                </span>
+              </div>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                {isMaster ? "Veículos da Plataforma (Global)" : `Veículos da Frota • ${tenant.branding?.brand_name || "Sua Empresa"}`}
+              </h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                {isMaster
+                  ? "Painel do Administrador Geral para monitoramento consolidado de todos os veículos de todos os parceiros."
+                  : "Painel do Gestor para monitorar todos os veículos da sua empresa, filtrar por condutor, verificar status dos rastreadores (IMEI) e acessar telemetria em tempo real."}
+              </p>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Customer Filter Dropdown */}
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="all">Todos os Clientes</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.email})
-                </option>
-              ))}
-            </select>
-
-            {/* Tracker Status Filter */}
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1 text-xs">
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
-                onClick={() => setTrackerFilter("all")}
-                className={`rounded-lg px-2.5 py-1.5 font-bold uppercase tracking-wider transition-all ${
-                  trackerFilter === "all"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                onClick={() => void fetchData()}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50 cursor-pointer"
               >
-                Todos
+                <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin text-primary" : ""}`} />
+                Atualizar
               </button>
               <button
-                onClick={() => setTrackerFilter("linked")}
-                className={`rounded-lg px-2.5 py-1.5 font-bold uppercase tracking-wider transition-all ${
-                  trackerFilter === "linked"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                onClick={() => setIsNewVehicleModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 cursor-pointer"
               >
-                Com IMEI
-              </button>
-              <button
-                onClick={() => setTrackerFilter("unlinked")}
-                className={`rounded-lg px-2.5 py-1.5 font-bold uppercase tracking-wider transition-all ${
-                  trackerFilter === "unlinked"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Sem IMEI
+                <Plus className="size-4" />
+                Novo Veículo
               </button>
             </div>
-          </div>
-        </div>
+          </header>
 
-        {/* Vehicles Grid */}
-        {loading ? (
-          <div className="flex h-64 items-center justify-center rounded-2xl border border-border bg-card">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <RefreshCw className="size-8 animate-spin text-primary" />
-              <p className="text-xs font-semibold uppercase tracking-wider">Carregando veículos...</p>
+          {/* Metrics (Clean, borderless on card surface) */}
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Total de Motos
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.total}</span>
+                <span className="text-xs font-medium text-primary">veículos</span>
+              </div>
+            </div>
+
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Com Rastreador Vinculado
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.linked}</span>
+                <span className="text-xs font-medium text-cyan-400">rastreados</span>
+              </div>
+            </div>
+
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Aguardando Equipamento
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.unlinked}</span>
+                <span className="text-xs font-medium text-amber-400">sem IMEI</span>
+              </div>
             </div>
           </div>
-        ) : filteredVehicles.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center">
-            <Bike className="size-10 text-muted-foreground/60" />
-            <h3 className="text-sm font-bold uppercase text-foreground">Nenhum veículo encontrado</h3>
-            <p className="max-w-md text-xs text-muted-foreground">
-              Nenhuma motocicleta corresponde aos filtros aplicados. Cadastre novos veículos ou ajuste os termos de busca.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredVehicles.map((v) => {
-              const hasDevice = Boolean(v.device);
 
-              return (
-                <div
-                  key={v.id}
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-card to-card/70 p-5 shadow-lg transition-all duration-300 hover:border-primary/50 hover:shadow-primary/5"
+          {/* Advanced Filters Bar */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            {/* Search Input */}
+            <div className="relative flex-1 lg:max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filtrar por placa, modelo, marca ou cliente proprietário..."
+                className="w-full rounded-xl bg-background/60 py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Customer Filter Dropdown */}
+              <select
+                value={selectedCustomerId}
+                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                className="rounded-xl bg-background/60 px-3 py-2 text-xs font-medium text-foreground focus:outline-none"
+              >
+                <option value="all">Todos os Clientes</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.email})
+                  </option>
+                ))}
+              </select>
+
+              {/* Tracker Status Filter */}
+              <div className="flex items-center gap-1 rounded-xl bg-background/50 p-1 text-xs">
+                <button
+                  onClick={() => setTrackerFilter("all")}
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
+                    trackerFilter === "all"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  <div className="space-y-4">
-                    {/* Top Row: Plate & Status Badge */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="inline-block rounded-md bg-secondary/80 px-2 py-0.5 text-xs font-mono font-black uppercase tracking-wider text-foreground border border-border">
-                          {v.license_plate}
+                  Todos
+                </button>
+                <button
+                  onClick={() => setTrackerFilter("linked")}
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
+                    trackerFilter === "linked"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Com IMEI
+                </button>
+                <button
+                  onClick={() => setTrackerFilter("unlinked")}
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
+                    trackerFilter === "unlinked"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Sem IMEI
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Vehicles Clean List */}
+          {loading ? (
+            <div className="flex h-56 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <RefreshCw className="size-8 animate-spin text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-wider">Carregando veículos...</p>
+              </div>
+            </div>
+          ) : filteredVehicles.length === 0 ? (
+            <div className="flex h-56 flex-col items-center justify-center gap-3 text-center">
+              <Bike className="size-10 text-muted-foreground/60" />
+              <h3 className="font-display text-base font-bold text-foreground">Nenhum veículo encontrado</h3>
+              <p className="max-w-md text-xs text-muted-foreground">
+                Nenhuma motocicleta corresponde aos filtros aplicados. Cadastre novos veículos ou ajuste os termos de busca.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {filteredVehicles.map((v) => {
+                const hasDevice = Boolean(v.device);
+
+                return (
+                  <div
+                    key={v.id}
+                    className="flex flex-col gap-3 rounded-xl px-4 py-3.5 transition-colors hover:bg-background/40 lg:flex-row lg:items-center lg:justify-between"
+                  >
+                    {/* Plate, Model & Status */}
+                    <div className="flex flex-wrap items-center gap-4 min-w-0">
+                      <div className="rounded-lg bg-secondary px-2.5 py-1.5 font-mono text-xs font-bold uppercase tracking-wider text-foreground">
+                        {v.license_plate}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-display text-sm font-bold text-foreground">
+                            {v.brand} {v.model}
+                          </h3>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              v.status === "active"
+                                ? "bg-emerald-500/15 text-emerald-400"
+                                : "bg-secondary text-muted-foreground"
+                            }`}
+                          >
+                            {v.status === "active" ? "Ativo" : v.status}
+                          </span>
                         </div>
-                        <h3 className="mt-1.5 text-base font-black text-foreground">
-                          {v.brand} {v.model}
-                        </h3>
-                        <p className="text-xs text-muted-foreground font-mono">
-                          Ano: {v.year} • Cor: {v.color}
+                        <p className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="font-mono">Ano {v.year} • {v.color}</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <User className="size-3 text-primary" />
+                            <span className="font-medium text-foreground">
+                              {v.rider_name || "Cliente Não Vinculado"}
+                            </span>
+                          </span>
                         </p>
                       </div>
-
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                          v.status === "active"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                            : "bg-secondary text-muted-foreground border border-border"
-                        }`}
-                      >
-                        {v.status === "active" ? "Ativo" : v.status}
-                      </span>
                     </div>
 
-                    {/* Owner Client Pill */}
-                    <div className="rounded-xl border border-border/60 bg-secondary/40 p-2.5">
+                    {/* Tracker IMEI & Actions */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs">
                       <div className="flex items-center gap-2">
-                        <User className="size-3.5 text-primary shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Cliente Proprietário
-                          </p>
-                          <p className="text-xs font-black text-foreground truncate">
-                            {v.rider_name || "Cliente Não Vinculado"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tracker Device Status */}
-                    <div className="rounded-xl border border-border/60 bg-background/50 p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Cpu className="size-3 text-cyan-400" />
-                          Rastreador (IMEI)
-                        </span>
-
+                        <Cpu className="size-3.5 text-cyan-400" />
                         {hasDevice ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-cyan-400">
-                            <Radio className="size-2.5 animate-pulse text-emerald-400" />
-                            {v.device?.serial_number}
-                          </span>
+                          <>
+                            <span className="inline-flex items-center gap-1.5 font-mono font-semibold text-cyan-400">
+                              <Radio className="size-3 animate-pulse text-emerald-400" />
+                              {v.device?.serial_number}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void handleUnlinkDevice(v)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                              title="Desvincular equipamento"
+                            >
+                              <Unlink className="size-3" />
+                              <span>Desvincular</span>
+                            </button>
+                          </>
                         ) : (
-                          <span className="text-[10px] font-bold uppercase text-amber-400">
-                            Pendente
-                          </span>
-                        )}
-                      </div>
-
-                      {hasDevice ? (
-                        <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2 text-[10px] text-muted-foreground font-mono">
-                          <span className="text-foreground/80 font-medium font-sans">Equipamento GPS</span>
-                          <button
-                            type="button"
-                            onClick={() => void handleUnlinkDevice(v)}
-                            className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors cursor-pointer"
-                            title="Desvincular equipamento"
-                          >
-                            <Unlink className="size-2.5" />
-                            <span>Desvincular</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-2 border-t border-border/40 pt-2">
                           <button
                             onClick={() => {
                               setSelectedVehicleForLink(v);
                               setIsLinkDeviceModalOpen(true);
                             }}
-                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 py-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all cursor-pointer"
                           >
                             <Link2 className="size-3" />
                             Vincular Rastreador
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedTelemetryVehicle(v)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                      >
+                        <Maximize2 className="size-3.5" />
+                        Ver no Mapa
+                      </button>
+
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {v.created_at ? new Date(v.created_at).toLocaleDateString("pt-BR") : "--"}
+                      </span>
                     </div>
                   </div>
-
-                  {/* Actions Footer */}
-                  <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-3">
-                    <button
-                      onClick={() => setSelectedTelemetryVehicle(v)}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
-                    >
-                      <Maximize2 className="size-3.5" />
-                      Ver no Mapa
-                    </button>
-
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {v.created_at ? new Date(v.created_at).toLocaleDateString("pt-BR") : "--"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Modal: Novo Veículo */}
         {isNewVehicleModalOpen && (

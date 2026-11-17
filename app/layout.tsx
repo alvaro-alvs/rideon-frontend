@@ -1,10 +1,29 @@
 import type { Metadata } from "next";
+import { Fustat, Inter_Tight, JetBrains_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import "./globals.css";
 
 import { fetchTenantConfig } from "@/lib/tenant";
 import { TenantProvider } from "@/app/components/tenant-provider";
+
+const fustat = Fustat({
+  subsets: ["latin"],
+  variable: "--font-fustat",
+  display: "swap",
+});
+
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  variable: "--font-inter-tight",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
@@ -38,7 +57,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const accentColor = tenant.branding.accent_color || "#ff3b30";
 
   return (
-    <html lang={tenant.language || "pt-BR"} className="h-full antialiased">
+    <html
+      lang={tenant.language || "pt-BR"}
+      className={`h-full antialiased ${fustat.variable} ${interTight.variable} ${jetbrainsMono.variable}`}
+    >
       <head>
         <style
           dangerouslySetInnerHTML={{

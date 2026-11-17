@@ -294,102 +294,108 @@ export default function AdminFinancialPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground">
-              <CreditCard className="size-5 text-primary" />
-              Financeiro
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Situação cadastral, adimplência e última mensalidade dos clientes.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => loadData(true)}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Atualizar
-          </button>
-        </div>
-
-        {/* Summary KPIs */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border/70 bg-card p-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Total de Clientes</span>
-              <Users className="size-4 text-primary" />
-            </div>
-            <p className="mt-1.5 text-2xl font-bold text-foreground">{data?.total ?? 0}</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-500/20 bg-card p-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Adimplentes</span>
-              <CheckCircle2 className="size-4 text-emerald-400" />
-            </div>
-            <p className="mt-1.5 text-2xl font-bold text-emerald-400">{data?.compliant ?? 0}</p>
-          </div>
-          <div className="rounded-2xl border border-rose-500/20 bg-card p-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Inadimplentes</span>
-              <AlertCircle className="size-4 text-rose-400" />
-            </div>
-            <p className="mt-1.5 text-2xl font-bold text-rose-400">{data?.overdue ?? 0}</p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar cliente por nome ou e-mail..."
-              className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {(
-              [
-                { id: "all", label: "Todos" },
-                { id: "compliant", label: "Adimplentes" },
-                { id: "overdue", label: "Inadimplentes" },
-                { id: "pending", label: "Pendentes" },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setStatusFilter(opt.id)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                  statusFilter === opt.id
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
+      <div className="w-full space-y-4">
         {error && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-300">
             {error}
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                <CreditCard className="size-5 text-primary" />
+                Financeiro
+              </h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Situação cadastral, adimplência e última mensalidade dos clientes.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
+          </div>
+
+          {/* Summary KPIs (Clean, borderless on card surface) */}
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className="py-1">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Users className="size-4 text-primary" />
+                <span>Total de Clientes</span>
+              </div>
+              <p className="mt-1.5 font-display text-2xl font-bold tabular-nums text-foreground">
+                {data?.total ?? 0}
+              </p>
+            </div>
+            <div className="py-1">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <CheckCircle2 className="size-4 text-emerald-400" />
+                <span>Adimplentes</span>
+              </div>
+              <p className="mt-1.5 font-display text-2xl font-bold tabular-nums text-emerald-400">
+                {data?.compliant ?? 0}
+              </p>
+            </div>
+            <div className="py-1">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <AlertCircle className="size-4 text-rose-400" />
+                <span>Inadimplentes</span>
+              </div>
+              <p className="mt-1.5 font-display text-2xl font-bold tabular-nums text-rose-400">
+                {data?.overdue ?? 0}
+              </p>
+            </div>
+          </div>
+
+          {/* Filters Toolbar */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar cliente por nome ou e-mail..."
+                className="w-full rounded-xl bg-background/60 py-2.5 pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5 rounded-xl bg-background/50 p-1">
+              {(
+                [
+                  { id: "all", label: "Todos" },
+                  { id: "compliant", label: "Adimplentes" },
+                  { id: "overdue", label: "Inadimplentes" },
+                  { id: "pending", label: "Pendentes" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setStatusFilter(opt.id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${statusFilter === opt.id
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                    }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-border/70 bg-secondary/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <thead className="bg-background/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3">Situação Cadastral</th>
@@ -424,11 +430,10 @@ export default function AdminFinancialPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                              isActive
-                                ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                                : "border border-border bg-secondary text-muted-foreground"
-                            }`}
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isActive
+                              ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                              : "border border-border bg-secondary text-muted-foreground"
+                              }`}
                           >
                             {isActive ? "Ativo" : "Inativo"}
                           </span>
@@ -508,22 +513,20 @@ export default function AdminFinancialPage() {
                 <button
                   type="button"
                   onClick={() => setChargeMode("pending")}
-                  className={`rounded-lg py-1.5 font-semibold transition ${
-                    chargeMode === "pending"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`rounded-lg py-1.5 font-semibold transition ${chargeMode === "pending"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   Cobrança em Aberto
                 </button>
                 <button
                   type="button"
                   onClick={() => setChargeMode("paid")}
-                  className={`rounded-lg py-1.5 font-semibold transition ${
-                    chargeMode === "paid"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`rounded-lg py-1.5 font-semibold transition ${chargeMode === "paid"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   Já Pago
                 </button>

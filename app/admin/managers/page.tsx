@@ -95,7 +95,7 @@ export default function AdminManagersPage() {
         .then((data: TenantItem[]) => {
           if (Array.isArray(data)) setTenants(data);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [currentUser]);
 
@@ -201,272 +201,266 @@ export default function AdminManagersPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-7xl py-4 space-y-8">
-        {/* Header Hero */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-blue-500/10 blur-3xl" />
+      <div className="w-full space-y-4">
+        {successMessage && (
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-semibold text-emerald-400">
+            <CheckCircle2 className="size-4 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+        )}
 
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
                   <ShieldAlert className="size-3.5" />
                   Painel Master Admin
                 </span>
-                <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary border border-primary/30">
+                <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
                   Gestão de Gerentes & Tenants
                 </span>
               </div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                 Gerentes da Plataforma
               </h1>
-              <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm">
+              <p className="max-w-2xl text-sm text-muted-foreground">
                 Visão consolidada de todos os gestores e parceiros White-Label. Cada gerente administra seus equipamentos, clientes e frota no seu respectivo tenant.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
                 onClick={() => void fetchManagers()}
                 disabled={refreshing}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary hover:border-primary/40 transition-colors shadow-sm disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50 cursor-pointer"
               >
-                <RefreshCw className={`size-4 ${refreshing ? "animate-spin text-primary" : ""}`} />
+                <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin text-primary" : ""}`} />
                 Atualizar
               </button>
               <button
                 onClick={handleOpenModal}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-black uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm shadow-primary/20 cursor-pointer"
               >
                 <Plus className="size-4" />
                 Novo Gerente
               </button>
             </div>
-          </div>
+          </header>
 
-          {/* Quick Metrics */}
-          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+          {/* Metrics (Clean, borderless on card surface) */}
+          <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
                 Total de Gerentes
               </p>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
                   {stats.totalManagers}
                 </span>
-                <span className="text-[10px] font-semibold text-primary">ativos</span>
+                <span className="text-xs font-medium text-primary">ativos</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
                 Tenants Parceiros
               </p>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
                   {stats.totalTenants}
                 </span>
-                <span className="text-[10px] font-semibold text-emerald-500">marcas</span>
+                <span className="text-xs font-medium text-emerald-400">marcas</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
                 Equipamentos em Gestão
               </p>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
                   {stats.totalDevices}
                 </span>
-                <span className="text-[10px] font-semibold text-cyan-400">rastreadores</span>
+                <span className="text-xs font-medium text-cyan-400">rastreadores</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
                 Clientes Finais Atendidos
               </p>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
                   {stats.totalCustomers}
                 </span>
-                <span className="text-[10px] font-semibold text-purple-400">condutores</span>
+                <span className="text-xs font-medium text-purple-400">condutores</span>
               </div>
             </div>
           </div>
-        </header>
 
-        {/* Filters and Search Bar */}
-        {successMessage && (
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-semibold text-emerald-400">
-            <CheckCircle2 className="size-4 shrink-0" />
-            <span>{successMessage}</span>
-          </div>
-        )}
-        <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/60 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por e-mail do gerente, nome da empresa ou slug..."
-              className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-            />
-          </div>
+          {/* Search & Role Filters */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 sm:max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por e-mail do gerente, nome da empresa ou slug..."
+                className="w-full rounded-xl bg-background/60 py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
+              />
+            </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 rounded-xl border border-border bg-background p-1 text-xs">
+            <div className="flex items-center gap-1 rounded-xl bg-background/50 p-1 text-xs">
               <button
                 onClick={() => setRoleFilter("all")}
-                className={`rounded-lg px-3 py-1.5 font-bold uppercase tracking-wider transition-all ${
-                  roleFilter === "all"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`rounded-lg px-3 py-1.5 font-semibold transition-all cursor-pointer ${roleFilter === "all"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 Todos
               </button>
               <button
                 onClick={() => setRoleFilter("owner")}
-                className={`rounded-lg px-3 py-1.5 font-bold uppercase tracking-wider transition-all ${
-                  roleFilter === "owner"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`rounded-lg px-3 py-1.5 font-semibold transition-all cursor-pointer ${roleFilter === "owner"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 Proprietários
               </button>
               <button
                 onClick={() => setRoleFilter("manager")}
-                className={`rounded-lg px-3 py-1.5 font-bold uppercase tracking-wider transition-all ${
-                  roleFilter === "manager"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`rounded-lg px-3 py-1.5 font-semibold transition-all cursor-pointer ${roleFilter === "manager"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 Gerentes
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Managers Grid */}
-        {loading ? (
-          <div className="flex h-64 items-center justify-center rounded-2xl border border-border bg-card">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <RefreshCw className="size-8 animate-spin text-primary" />
-              <p className="text-xs font-semibold uppercase tracking-wider">Carregando gerentes...</p>
+          {/* Managers List */}
+          {loading ? (
+            <div className="flex h-56 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <RefreshCw className="size-8 animate-spin text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-wider">Carregando gerentes...</p>
+              </div>
             </div>
-          </div>
-        ) : filteredManagers.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center">
-            <Building2 className="size-10 text-muted-foreground/60" />
-            <h3 className="text-sm font-bold uppercase text-foreground">Nenhum gerente encontrado</h3>
-            <p className="max-w-md text-xs text-muted-foreground">
-              Nenhum gestor corresponde aos filtros aplicados. Crie novos parceiros ou ajuste os termos de busca.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredManagers.map((m) => {
-              const initials = m.email
-                .split("@")[0]
-                .slice(0, 2)
-                .toUpperCase();
+          ) : filteredManagers.length === 0 ? (
+            <div className="flex h-56 flex-col items-center justify-center gap-3 text-center">
+              <Building2 className="size-10 text-muted-foreground/60" />
+              <h3 className="font-display text-base font-bold text-foreground">Nenhum gerente encontrado</h3>
+              <p className="max-w-md text-xs text-muted-foreground">
+                Nenhum gestor corresponde aos filtros aplicados. Crie novos parceiros ou ajuste os termos de busca.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {filteredManagers.map((m) => {
+                const initials = m.email
+                  .split("@")[0]
+                  .slice(0, 2)
+                  .toUpperCase();
 
-              return (
-                <div
-                  key={m.id}
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-card to-card/70 p-5 shadow-lg transition-all duration-300 hover:border-primary/50 hover:shadow-primary/5"
-                >
-                  <div className="space-y-4">
-                    {/* Header Card */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-sm font-black text-primary shadow-inner">
-                          {initials}
-                        </div>
-                        <div>
-                          <p className="text-xs font-black uppercase tracking-wide text-foreground">
+                return (
+                  <div
+                    key={m.id}
+                    className="flex flex-col gap-4 rounded-xl px-4 py-3.5 transition-colors hover:bg-background/40 lg:flex-row lg:items-center lg:justify-between"
+                  >
+                    {/* Identity & Tenant */}
+                    <div className="flex flex-wrap items-center gap-4 min-w-0">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-sm font-bold text-primary">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-display text-sm font-bold text-foreground">
                             {m.email.split("@")[0]}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
-                            <Mail className="size-3 text-muted-foreground" />
-                            <span className="truncate max-w-[160px]">{m.email}</span>
-                          </div>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${m.role === "tenant_owner"
+                              ? "bg-amber-500/15 text-amber-400"
+                              : m.role === "admin" || m.role === "platform_admin"
+                                ? "bg-red-500/15 text-red-400"
+                                : "bg-blue-500/15 text-blue-400"
+                              }`}
+                          >
+                            {m.role === "tenant_owner"
+                              ? "Proprietário"
+                              : m.role === "admin" || m.role === "platform_admin"
+                                ? "Administrador"
+                                : "Gerente"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1 font-mono">
+                            <Mail className="size-3" />
+                            {m.email}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Building2 className="size-3 text-primary" />
+                            <span className="font-medium text-foreground">
+                              {m.tenant_name || "RideOn Default"}
+                            </span>
+                            {m.tenant_slug && (
+                              <span className="font-mono text-[11px] text-primary">
+                                ({m.tenant_slug})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Inline Operation Stats & Status */}
+                    <div className="flex flex-wrap items-center gap-6 text-xs">
+                      <div className="flex items-center gap-5">
+                        <div className="flex items-center gap-1.5">
+                          <Cpu className="size-3.5 text-cyan-400" />
+                          <span className="font-display font-bold tabular-nums text-foreground">
+                            {m.device_count || 0}
+                          </span>
+                          <span className="text-muted-foreground">equip.</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Users className="size-3.5 text-purple-400" />
+                          <span className="font-display font-bold tabular-nums text-foreground">
+                            {m.customer_count || 0}
+                          </span>
+                          <span className="text-muted-foreground">clientes</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Bike className="size-3.5 text-emerald-400" />
+                          <span className="font-display font-bold tabular-nums text-foreground">
+                            {m.motorcycle_count || 0}
+                          </span>
+                          <span className="text-muted-foreground">motos</span>
                         </div>
                       </div>
 
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                          m.role === "tenant_owner"
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
-                            : m.role === "admin" || m.role === "platform_admin"
-                              ? "bg-red-500/10 text-red-400 border border-red-500/30"
-                              : "bg-blue-500/10 text-blue-400 border border-blue-500/30"
-                        }`}
-                      >
-                        {m.role === "tenant_owner"
-                          ? "Proprietário"
-                          : m.role === "admin" || m.role === "platform_admin"
-                            ? "Administrador"
-                            : "Gerente"}
-                      </span>
-                    </div>
-
-                    {/* Tenant Badge Pill */}
-                    <div className="rounded-xl border border-border/60 bg-secondary/50 p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Building2 className="size-3 text-primary" />
-                          Tenant White-Label
+                      <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-emerald-400" />
+                          {m.status || "Ativo"}
                         </span>
-                        <span className="text-[10px] font-mono text-primary font-bold">
-                          {m.tenant_slug || "sem slug"}
+                        <span>
+                          {m.created_at ? new Date(m.created_at).toLocaleDateString("pt-BR") : "--"}
                         </span>
-                      </div>
-                      <p className="mt-1 text-sm font-black text-foreground truncate">
-                        {m.tenant_name || "RideOn Default"}
-                      </p>
-                    </div>
-
-                    {/* Operation Stats */}
-                    <div className="grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
-                      <div className="rounded-lg bg-background/50 p-2 border border-border/40">
-                        <Cpu className="mx-auto size-3.5 text-cyan-400 mb-1" />
-                        <p className="text-sm font-black text-foreground">{m.device_count || 0}</p>
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Equipamentos</p>
-                      </div>
-
-                      <div className="rounded-lg bg-background/50 p-2 border border-border/40">
-                        <Users className="mx-auto size-3.5 text-purple-400 mb-1" />
-                        <p className="text-sm font-black text-foreground">{m.customer_count || 0}</p>
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Clientes</p>
-                      </div>
-
-                      <div className="rounded-lg bg-background/50 p-2 border border-border/40">
-                        <Bike className="mx-auto size-3.5 text-emerald-400 mb-1" />
-                        <p className="text-sm font-black text-foreground">{m.motorcycle_count || 0}</p>
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Motos</p>
                       </div>
                     </div>
                   </div>
-
-                  {/* Card Footer */}
-                  <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-3 text-[10px] text-muted-foreground font-mono">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Status: {m.status || "Ativo"}
-                    </span>
-                    <span>Criado: {m.created_at ? new Date(m.created_at).toLocaleDateString("pt-BR") : "--"}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Create Manager Modal */}

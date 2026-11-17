@@ -2,50 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Activity,
   AlertCircle,
-  AlertTriangle,
-  BadgeAlert,
   Bell,
   BellRing,
-  Bike,
   Building2,
   CheckCircle2,
-  ChevronRight,
   Clock,
-  Copy,
-  Cpu,
-  Database,
-  ExternalLink,
-  Flame,
-  Globe,
-  HardDrive,
-  History,
-  KeyRound,
-  LayoutDashboard,
   LogOut,
   Mail,
-  Palette,
   Phone,
-  Radio,
   RefreshCw,
   Save,
-  Server,
-  Settings,
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Smartphone,
   Sparkles,
-  Terminal,
   User,
-  Users,
   Volume2,
   VolumeX,
-  Zap,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
@@ -67,7 +43,7 @@ import {
   testNotificationSound,
 } from "@/lib/notifications/sound";
 
-type TabId = "profile" | "security" | "iot" | "preferences";
+type TabId = "profile" | "security" | "preferences";
 
 interface ProfileData {
   user: {
@@ -107,7 +83,6 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Security & Session State
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [antiTheftMode, setAntiTheftMode] = useState(true);
   const [batteryAlert, setBatteryAlert] = useState(true);
 
@@ -150,8 +125,6 @@ export default function SettingsPage() {
       // Check URL hash on initial load
       if (window.location.hash === "#seguranca" || window.location.hash === "#security") {
         setActiveTab("security");
-      } else if (window.location.hash === "#iot" || window.location.hash === "#hardware") {
-        setActiveTab("iot");
       } else if (window.location.hash === "#preferencias" || window.location.hash === "#preferences") {
         setActiveTab("preferences");
       }
@@ -200,13 +173,6 @@ export default function SettingsPage() {
       void loadProfile();
     }
   }, [currentUser.status]);
-
-  // Copy to clipboard helper
-  const handleCopy = (text: string, keyName: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedKey(keyName);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
 
   // Phone input formatting
   const handlePhoneChange = (val: string) => {
@@ -327,60 +293,89 @@ export default function SettingsPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-6xl space-y-8 py-2">
-        {/* ========================================================================= */}
-        {/* HERO HEADER & TITLE                                                       */}
-        {/* ========================================================================= */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/30 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-red-600/10 blur-3xl" />
+      <div className="w-full space-y-4">
+        {/* Global Feedback Banners */}
+        <AnimatePresence>
+          {saveSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-semibold text-emerald-400"
+            >
+              <CheckCircle2 className="size-4 shrink-0 text-emerald-400" />
+              <span>{saveSuccess}</span>
+            </motion.div>
+          )}
 
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
+          {saveError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-400"
+            >
+              <AlertCircle className="size-4 shrink-0 text-red-400" />
+              <span>{saveError}</span>
+            </motion.div>
+          )}
+
+          {prefSavedMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs font-semibold text-primary"
+            >
+              <Sparkles className="size-4 shrink-0 text-primary" />
+              <span>{prefSavedMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
                   <ShieldCheck className="size-3.5" />
                   Sessão Autenticada
                 </span>
 
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
                     isMaster
-                      ? "bg-primary text-white shadow-sm shadow-primary/30"
+                      ? "bg-primary/15 text-primary"
                       : isMgr
-                        ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                        : "bg-secondary text-primary border border-primary/30"
+                        ? "bg-amber-500/15 text-amber-400"
+                        : "bg-secondary text-muted-foreground"
                   }`}
                 >
                   {isMaster ? "Master Admin" : isMgr ? "Gestor de Frota" : "Piloto RideOn"}
                 </span>
-
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
-                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  RBAC em Tempo Real
-                </span>
               </div>
 
-              <h1 className="text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                 Configurações da Conta
               </h1>
 
-              <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                Gerencie seus dados cadastrais, credenciais de acesso, parâmetros de segurança,
-                regras de RBAC e especificações da arquitetura IoT RideOn.
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Gerencie seus dados cadastrais, preferências de segurança e notificações da sua conta.
               </p>
             </div>
 
             {/* Quick Action Tools */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => void loadProfile()}
                 disabled={profileLoading}
-                className="flex items-center gap-2 rounded-2xl border border-border/80 bg-background/60 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground backdrop-blur-md transition-all hover:border-primary hover:bg-primary hover:text-white disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50 cursor-pointer"
                 title="Recarregar dados do servidor"
               >
-                <RefreshCw className={`size-3.5 ${profileLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`size-3.5 ${profileLoading ? "animate-spin text-primary" : ""}`} />
                 <span>Atualizar</span>
               </button>
 
@@ -392,134 +387,73 @@ export default function SettingsPage() {
                     window.location.href = "/login";
                   });
                 }}
-                className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 backdrop-blur-md transition-all hover:bg-red-500/20 hover:text-red-300 cursor-pointer"
+                className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors cursor-pointer"
               >
                 <LogOut className="size-3.5" />
                 <span>Sair</span>
               </button>
             </div>
+          </header>
+
+          {/* Tabs Navigation */}
+          <div className="flex flex-wrap items-center gap-1 rounded-xl bg-background/50 p-1 w-fit overflow-x-auto no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className={`group relative flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "profile"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <User className="size-3.5" />
+              <span>Perfil & Cadastro</span>
+              {activeTab === "profile" && (
+                <motion.div
+                  layoutId="activeTabBadge"
+                  className="absolute inset-0 rounded-lg border border-primary/40 -z-10"
+                />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("security")}
+              className={`group relative flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "security"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Shield className="size-3.5" />
+              <span>Segurança</span>
+              {activeTab === "security" && (
+                <motion.div
+                  layoutId="activeTabBadge"
+                  className="absolute inset-0 rounded-lg border border-primary/40 -z-10"
+                />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("preferences")}
+              className={`group relative flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "preferences"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Bell className="size-3.5" />
+              <span>Preferências</span>
+              {activeTab === "preferences" && (
+                <motion.div
+                  layoutId="activeTabBadge"
+                  className="absolute inset-0 rounded-lg border border-primary/40 -z-10"
+                />
+              )}
+            </button>
           </div>
-        </header>
-
-        {/* ========================================================================= */}
-        {/* TABS NAVIGATION                                                           */}
-        {/* ========================================================================= */}
-        <div className="flex border-b border-border/80 pb-px overflow-x-auto no-scrollbar gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab("profile")}
-            className={`group relative flex items-center gap-2.5 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeTab === "profile"
-                ? "bg-primary text-white shadow-lg shadow-primary/25"
-                : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
-            }`}
-          >
-            <User className="size-4" />
-            <span>Perfil & Cadastro</span>
-            {activeTab === "profile" && (
-              <motion.div
-                layoutId="activeTabBadge"
-                className="absolute inset-0 rounded-2xl border border-primary/40 -z-10"
-              />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("security")}
-            className={`group relative flex items-center gap-2.5 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeTab === "security"
-                ? "bg-primary text-white shadow-lg shadow-primary/25"
-                : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
-            }`}
-          >
-            <Shield className="size-4" />
-            <span>Segurança & RBAC</span>
-            {activeTab === "security" && (
-              <motion.div
-                layoutId="activeTabBadge"
-                className="absolute inset-0 rounded-2xl border border-primary/40 -z-10"
-              />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("iot")}
-            className={`group relative flex items-center gap-2.5 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeTab === "iot"
-                ? "bg-primary text-white shadow-lg shadow-primary/25"
-                : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
-            }`}
-          >
-            <Radio className="size-4" />
-            <span>Hardware IoT & Broker</span>
-            {activeTab === "iot" && (
-              <motion.div
-                layoutId="activeTabBadge"
-                className="absolute inset-0 rounded-2xl border border-primary/40 -z-10"
-              />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("preferences")}
-            className={`group relative flex items-center gap-2.5 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeTab === "preferences"
-                ? "bg-primary text-white shadow-lg shadow-primary/25"
-                : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
-            }`}
-          >
-            <Bell className="size-4" />
-            <span>Preferências</span>
-            {activeTab === "preferences" && (
-              <motion.div
-                layoutId="activeTabBadge"
-                className="absolute inset-0 rounded-2xl border border-primary/40 -z-10"
-              />
-            )}
-          </button>
-        </div>
-
-        {/* Global Feedback Banners */}
-        <AnimatePresence>
-          {saveSuccess && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-bold text-emerald-400 shadow-lg shadow-emerald-500/10"
-            >
-              <CheckCircle2 className="size-5 shrink-0 text-emerald-400" />
-              <span>{saveSuccess}</span>
-            </motion.div>
-          )}
-
-          {saveError && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-xs font-bold text-red-400 shadow-lg shadow-red-500/10"
-            >
-              <AlertCircle className="size-5 shrink-0 text-red-400" />
-              <span>{saveError}</span>
-            </motion.div>
-          )}
-
-          {prefSavedMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 text-xs font-bold text-primary shadow-lg shadow-primary/10"
-            >
-              <Sparkles className="size-5 shrink-0 text-primary" />
-              <span>{prefSavedMessage}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ========================================================================= */}
         {/* TAB 1: PERFIL & DADOS CADASTRAIS                                          */}
@@ -532,58 +466,55 @@ export default function SettingsPage() {
             className="space-y-6"
           >
             {/* Identity Card Overview */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="rounded-xl bg-background/40 p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-rose-600 font-black text-xl text-white shadow-lg shadow-primary/30 ring-2 ring-primary/20">
+                  <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-rose-600 font-black text-lg text-white shadow-md shadow-primary/25">
                     {userInitials || "RO"}
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-black uppercase tracking-tight text-foreground">
+                      <h2 className="font-display text-lg font-bold text-foreground">
                         {fullName || email.split("@")[0]}
                       </h2>
-                      <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-400 border border-emerald-500/20">
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
                         Ativo
                       </span>
                     </div>
                     <p className="font-mono text-xs text-muted-foreground">{email}</p>
                     <p className="text-[11px] text-muted-foreground">
                       {profileData?.rider
-                        ? "Perfil de Piloto vinculado e registrado na API."
-                        : "Conta de usuário ativa (perfil de piloto aguardando dados)."}
+                        ? "Perfil de piloto ativo."
+                        : "Conta de usuário ativa (complete seus dados cadastrais abaixo)."}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-secondary/50 p-3.5 sm:text-right">
+                <div className="flex flex-col gap-1 rounded-xl bg-secondary/50 px-4 py-3 sm:text-right">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Papel no Sistema (RBAC)
+                    Tipo de Conta
                   </span>
-                  <span className="text-xs font-black uppercase tracking-wider text-primary">
+                  <span className="text-xs font-bold uppercase tracking-wider text-primary">
                     {isMaster ? "Master Admin" : isMgr ? "Gestor de Frota" : "Piloto / Rider"}
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    Tenant: {tenant.branding?.brand_name || tenant.trade_name || "RideOn Default"}
+                  <span className="text-[11px] text-muted-foreground">
+                    Organização: {tenant.branding?.brand_name || tenant.trade_name || "RideOn Default"}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Cadastral Form */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
-              <div className="mb-6 flex items-center justify-between border-b border-border/60 pb-4">
+            <div className="rounded-xl bg-background/40 p-5 sm:p-6">
+              <div className="mb-5 flex items-center justify-between border-b border-border/50 pb-3.5">
                 <div>
-                  <h3 className="text-lg font-black uppercase tracking-tight text-foreground">
+                  <h3 className="font-display text-base font-bold text-foreground">
                     Edição de Dados Cadastrais
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Edite as informações cadastrais vinculadas ao seu perfil de piloto e conta.
                   </p>
                 </div>
-                <span className="rounded-lg bg-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary border border-primary/20">
-                  PATCH /api/v1/riders/:id
-                </span>
               </div>
 
               <form onSubmit={handleSaveProfile} className="space-y-6">
@@ -624,7 +555,7 @@ export default function SettingsPage() {
                       className="w-full rounded-xl border border-border/60 bg-secondary/20 px-4 py-3 text-sm font-mono text-muted-foreground cursor-not-allowed opacity-80"
                     />
                     <p className="text-[10px] text-muted-foreground">
-                      O e-mail é a chave de login do token JWT. Para alterá-lo, contate o administrador.
+                      O e-mail é utilizado para acesso à sua conta. Para alterá-lo, contate o administrador.
                     </p>
                   </div>
 
@@ -683,8 +614,8 @@ export default function SettingsPage() {
                     />
                     <p className="text-[10px] text-muted-foreground">
                       {profileData?.rider?.date_of_birth
-                        ? "Data de nascimento registrada no perfil de piloto (RFC3339 imutável após criação)."
-                        : "Obrigatório para criação do perfil inicial de piloto conforme a API."}
+                        ? "Data de nascimento registrada no perfil de piloto (não pode ser alterada após o cadastro)."
+                        : "Obrigatório para completar seu cadastro de piloto."}
                     </p>
                   </div>
 
@@ -714,7 +645,7 @@ export default function SettingsPage() {
                         className="w-full rounded-xl border border-border/80 bg-secondary/40 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-mono"
                       />
                       <p className="text-[10px] text-muted-foreground">
-                        Identificação fiscal da pessoa jurídica vinculada ao Tenant.
+                        Identificação fiscal da pessoa jurídica vinculada à frota.
                       </p>
                     </div>
                   )}
@@ -746,7 +677,7 @@ export default function SettingsPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: SEGURANÇA, SESSÃO & RBAC                                           */}
+        {/* TAB 2: SEGURANÇA                                                          */}
         {/* ========================================================================= */}
         {activeTab === "security" && (
           <motion.div
@@ -755,147 +686,8 @@ export default function SettingsPage() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            {/* RBAC Info Card */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
-              <div className="flex items-center gap-3 border-b border-border/60 pb-4">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <ShieldAlert className="size-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black uppercase tracking-tight text-foreground">
-                    Modelo de Segurança e Controle de Acesso (RBAC)
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Visão detalhada do seu nível de autorização conforme documentação oficial da API.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Papel Atual Atribuído
-                    </span>
-                    <span className="rounded bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 text-xs font-black uppercase">
-                      {role}
-                    </span>
-                  </div>
-                  <p className="text-xs text-foreground font-semibold">
-                    {isMaster
-                      ? "Acesso Total à Plataforma (Master Admin)"
-                      : isMgr
-                        ? "Gestão de Carteira e Frota (Tenant Manager)"
-                        : "Piloto Particular (Rider)"}
-                  </p>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    {isMaster
-                      ? "Permite provisionar gerentes, hardware IoT, visualizar todas as telemetrias e administrar marcas."
-                      : isMgr
-                        ? "Permite gerenciar clientes, veículos da carteira, equipamentos GPS associados e configurações de marca."
-                        : "Permite gerenciar seu veículo pessoal, traçar rotas e acompanhar telemetria em tempo real."}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Validação em Tempo Real
-                    </span>
-                    <span className="rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-xs font-black uppercase">
-                      MongoDB Live
-                    </span>
-                  </div>
-                  <p className="text-xs text-foreground font-semibold">
-                    Revogação Instantânea de Acesso
-                  </p>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    O middleware da API (<code className="font-mono text-primary">RequireRole</code>)
-                    sempre consulta a coleção de usuários no MongoDB. Caso seu papel seja promovido
-                    ou alterado, o efeito é imediato sem necessidade de esperar o token expirar.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Identifiers & Token Lifecycles */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
-              <h3 className="text-lg font-black uppercase tracking-tight text-foreground border-b border-border/60 pb-4">
-                Identificadores da Conta & Sessão JWT
-              </h3>
-
-              <div className="mt-6 space-y-4">
-                {/* User UUID */}
-                <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-secondary/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      User ID (UUID v4)
-                    </span>
-                    <p className="font-mono text-xs font-bold text-foreground break-all">
-                      {user?.id || profileData?.user.id || "Não disponível"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleCopy(user?.id || profileData?.user.id || "", "userid")
-                    }
-                    className="flex items-center gap-1.5 self-start sm:self-auto rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-bold uppercase text-foreground hover:border-primary hover:text-primary transition-all cursor-pointer"
-                  >
-                    <Copy className="size-3.5" />
-                    <span>{copiedKey === "userid" ? "Copiado!" : "Copiar ID"}</span>
-                  </button>
-                </div>
-
-                {/* Rider UUID */}
-                {profileData?.rider && (
-                  <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-secondary/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Rider Profile ID (UUID v4)
-                      </span>
-                      <p className="font-mono text-xs font-bold text-foreground break-all">
-                        {profileData.rider.id}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCopy(profileData.rider?.id || "", "riderid")
-                      }
-                      className="flex items-center gap-1.5 self-start sm:self-auto rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-bold uppercase text-foreground hover:border-primary hover:text-primary transition-all cursor-pointer"
-                    >
-                      <Copy className="size-3.5" />
-                      <span>{copiedKey === "riderid" ? "Copiado!" : "Copiar ID"}</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* JWT Refresh Token Strategy */}
-                <div className="rounded-2xl border border-border/70 bg-secondary/20 p-4 text-xs leading-relaxed text-muted-foreground space-y-2">
-                  <div className="flex items-center gap-2 text-foreground font-bold">
-                    <KeyRound className="size-4 text-primary" />
-                    <span>Estratégia de Tokens e Renovação Transparente</span>
-                  </div>
-                  <p>
-                    A RideOn utiliza uma arquitetura de tokens com dupla camada:
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1">
-                    <li>
-                      <strong className="text-foreground">Access Token (JWT):</strong> Curta duração
-                      (15 minutos), assinado digitalmente, mantido em cookie HTTP-Only seguro.
-                    </li>
-                    <li>
-                      <strong className="text-foreground">Refresh Token:</strong> Longa duração
-                      (7 dias), renovado transparentemente pelo Next.js Proxy em caso de expiração do JWT.
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
             {/* Anti-Theft Guard */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
+            <div className="rounded-xl bg-background/40 p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -933,170 +725,7 @@ export default function SettingsPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: HARDWARE IOT & PROTOCOLOS (README_ADMIN.MD)                         */}
-        {/* ========================================================================= */}
-        {activeTab === "iot" && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            {/* Broker & Ingestion Architecture */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
-              <div className="flex items-center gap-3 border-b border-border/60 pb-4">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Server className="size-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black uppercase tracking-tight text-foreground">
-                    Arquitetura do Broker IoT e Ingestão de Pacotes
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Acoplamento entre <code className="font-mono text-primary">rideon-broker</code> e a API REST.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4 space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Porta de Escuta TCP
-                  </span>
-                  <p className="text-xl font-black font-mono text-primary">:5023</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Recepção de telemetria binária bruta de rastreadores veiculares (ex: GT06, Teltonika).
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4 space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Identificador Canônico
-                  </span>
-                  <p className="text-xl font-black font-mono text-foreground">IMEI / Serial</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    O campo <code className="font-mono text-primary">serial_number</code> na API indexa os pacotes no MongoDB.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4 space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Transmissão em Tempo Real
-                  </span>
-                  <p className="text-xl font-black font-mono text-emerald-400">WebSocket /ws</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Streaming de coordenadas direto para a interface do mapa via eventos push.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Protocol Support Table (from README_ADMIN.md §5) */}
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl">
-              <div className="mb-4 flex items-center justify-between border-b border-border/60 pb-4">
-                <div>
-                  <h3 className="text-lg font-black uppercase tracking-tight text-foreground">
-                    Protocolos e Hardwares Suportados
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Conforme especificação da tabela do Guia do Administrador (README_ADMIN.md §5).
-                  </p>
-                </div>
-                <span className="rounded-lg bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase text-emerald-400 border border-emerald-500/20">
-                  7 Protocolos Ativos
-                </span>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-border/80 text-[10px] font-bold uppercase text-muted-foreground">
-                    <tr>
-                      <th className="py-3 px-4">Protocolo</th>
-                      <th className="py-3 px-4">Identificador</th>
-                      <th className="py-3 px-4">Canal / Mecanismo</th>
-                      <th className="py-3 px-4">Cenário de Uso Recomendado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60 font-mono">
-                    <tr className="hover:bg-secondary/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground font-sans">GT06</td>
-                      <td className="py-3 px-4 text-primary">gt06</td>
-                      <td className="py-3 px-4 text-muted-foreground">TCP :5023</td>
-                      <td className="py-3 px-4 text-foreground font-sans">
-                        Rastreadores veiculares comerciais populares (Concox, Coban, Accurate, J16 4G).
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-secondary/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground font-sans">Teltonika</td>
-                      <td className="py-3 px-4 text-primary">teltonika</td>
-                      <td className="py-3 px-4 text-muted-foreground">Codec 8 / 8E</td>
-                      <td className="py-3 px-4 text-foreground font-sans">
-                        Rastreadores industriais e telemetria avançada de frotas pesadas.
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-secondary/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground font-sans">Queclink</td>
-                      <td className="py-3 px-4 text-primary">queclink</td>
-                      <td className="py-3 px-4 text-muted-foreground">@Track</td>
-                      <td className="py-3 px-4 text-foreground font-sans">
-                        Módulos de alta precisão e dispositivos autônomos com bateria de longa duração.
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-secondary/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground font-sans">MQTT</td>
-                      <td className="py-3 px-4 text-primary">mqtt</td>
-                      <td className="py-3 px-4 text-muted-foreground">Broker MQTT</td>
-                      <td className="py-3 px-4 text-foreground font-sans">
-                        Dispositivos IoT customizados baseados em ESP32 ou Raspberry Pi.
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-secondary/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground font-sans">HTTP Gateway</td>
-                      <td className="py-3 px-4 text-primary">http</td>
-                      <td className="py-3 px-4 text-muted-foreground">POST /api/v1/telemetry</td>
-                      <td className="py-3 px-4 text-foreground font-sans">
-                        Simuladores de bancada, webhooks ou gateways REST diretos.
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-secondary/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-foreground font-sans">Smartphone</td>
-                      <td className="py-3 px-4 text-primary">smartphone</td>
-                      <td className="py-3 px-4 text-muted-foreground">GPS Nativo / App</td>
-                      <td className="py-3 px-4 text-foreground font-sans">
-                        App móvel RideOn funcionando como rastreador por software.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Quick Link to Hardware Inventory for Admins */}
-            {isAdminOrMgr && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-3xl border border-primary/30 bg-primary/5 p-6 sm:p-8">
-                <div className="space-y-1">
-                  <h4 className="text-base font-black uppercase text-foreground">
-                    Gerenciamento Avançado de Equipamentos
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Acesse o painel completo de provisionamento, ativação e vinculação de rastreadores a veículos.
-                  </p>
-                </div>
-                <Link
-                  href="/admin/devices"
-                  className="flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/30 transition-all hover:bg-primary/90"
-                >
-                  <Cpu className="size-4" />
-                  <span>Inventário de Dispositivos</span>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 4: PREFERÊNCIAS & NOTIFICAÇÕES                                        */}
+        {/* TAB 3: PREFERÊNCIAS & NOTIFICAÇÕES                                        */}
         {/* ========================================================================= */}
         {activeTab === "preferences" && (
           <motion.div
@@ -1105,8 +734,8 @@ export default function SettingsPage() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            <div className="rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl space-y-6">
-              <h3 className="text-lg font-black uppercase tracking-tight text-foreground border-b border-border/60 pb-4">
+            <div className="rounded-xl bg-background/40 p-5 sm:p-6 space-y-6">
+              <h3 className="font-display text-base font-bold text-foreground border-b border-border/50 pb-3.5">
                 Alertas de Telemetria e Notificações
               </h3>
 
@@ -1398,6 +1027,7 @@ export default function SettingsPage() {
             </div>
           </motion.div>
         )}
+        </div>
       </div>
     </DashboardShell>
   );

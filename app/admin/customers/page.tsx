@@ -374,351 +374,317 @@ export default function AdminCustomersPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-7xl py-4 space-y-8">
-        {/* Header Hero */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card/90 to-secondary/40 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-primary/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 size-64 rounded-full bg-emerald-500/10 blur-3xl" />
-
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-primary border border-primary/20">
-                  <UserCheck className="size-3.5" />
-                  Gestão de Clientes
-                </span>
-                <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary border border-primary/30">
-                  Carteira do Tenant
-                </span>
-              </div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-foreground sm:text-3xl">
-                Clientes & Condutores
-              </h1>
-              <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm">
-                Gerencie todos os clientes da sua carteira, consulte seus veículos cadastrados e equipamentos vinculados, ou adicione novos condutores.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => void fetchCustomers()}
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary hover:border-primary/40 transition-colors shadow-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`size-4 ${refreshing ? "animate-spin text-primary" : ""}`} />
-                Atualizar
-              </button>
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
-              >
-                <Plus className="size-4 stroke-[3]" />
-                Novo Cliente
-              </button>
-            </div>
-          </div>
-
-          {/* Metrics */}
-          <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Total de Clientes
-              </p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
-                  {stats.totalCustomers}
-                </span>
-                <span className="text-[10px] font-semibold text-primary">condutores</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Clientes com Veículos
-              </p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
-                  {stats.customersWithVehicles}
-                </span>
-                <span className="text-[10px] font-semibold text-emerald-400">ativos</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/80 bg-background/50 p-4 backdrop-blur">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Motos Monitoradas
-              </p>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-foreground">
-                  {stats.totalVehicles}
-                </span>
-                <span className="text-[10px] font-semibold text-cyan-400">veículos</span>
-              </div>
-            </div>
-          </div>
-        </header>
-
+      <div className="w-full space-y-4">
         {/* Success Banner */}
         {successMessage && (
-          <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-bold text-emerald-400 animate-in fade-in">
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-semibold text-emerald-400 animate-in fade-in">
             <CheckCircle2 className="size-4 shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
 
-        {/* Filter Toolbar */}
-        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Buscar por nome, e-mail, telefone ou empresa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background py-2 pl-10 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Master Admin Tenant Filter Dropdown */}
-            {currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role) && tenants.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <Building2 className="size-3.5 text-muted-foreground" />
-                <select
-                  value={tenantFilter}
-                  onChange={(e) => setTenantFilter(e.target.value)}
-                  className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="all">Todas as Empresas</option>
-                  {tenants.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.trade_name || t.legal_name}
-                    </option>
-                  ))}
-                </select>
+        {/* Unified Single Card (Expanded, No Harsh Dividers) */}
+        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
+                  <UserCheck className="size-3.5" />
+                  Gestão de Clientes
+                </span>
+                <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  Carteira do Tenant
+                </span>
               </div>
-            )}
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                Clientes & Condutores
+              </h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Gerencie todos os clientes da sua carteira, consulte seus veículos cadastrados e equipamentos vinculados, ou adicione novos condutores.
+              </p>
+            </div>
 
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
-                onClick={() => setVehicleFilter("all")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  vehicleFilter === "all"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                onClick={() => void fetchCustomers()}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50 cursor-pointer"
               >
-                Todos
+                <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin text-primary" : ""}`} />
+                Atualizar
               </button>
               <button
-                onClick={() => setVehicleFilter("has_vehicles")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  vehicleFilter === "has_vehicles"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 cursor-pointer"
               >
-                Com Veículos
-              </button>
-              <button
-                onClick={() => setVehicleFilter("no_vehicles")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  vehicleFilter === "no_vehicles"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Sem Veículos
+                <Plus className="size-4" />
+                Novo Cliente
               </button>
             </div>
-          </div>
-        </div>
+          </header>
 
-        {/* Customer Cards List */}
-        {loading ? (
-          <div className="flex h-64 items-center justify-center rounded-2xl border border-border bg-card">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <RefreshCw className="size-8 animate-spin text-primary" />
-              <p className="text-xs font-semibold uppercase tracking-wider">Carregando clientes...</p>
+          {/* Metrics (Clean, borderless on card surface) */}
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Total de Clientes
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
+                  {stats.totalCustomers}
+                </span>
+                <span className="text-xs font-medium text-primary">condutores</span>
+              </div>
+            </div>
+
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Clientes com Veículos
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
+                  {stats.customersWithVehicles}
+                </span>
+                <span className="text-xs font-medium text-emerald-400">ativos</span>
+              </div>
+            </div>
+
+            <div className="py-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Motos Monitoradas
+              </p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
+                  {stats.totalVehicles}
+                </span>
+                <span className="text-xs font-medium text-cyan-400">veículos</span>
+              </div>
             </div>
           </div>
-        ) : filteredCustomers.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center">
-            <Users className="size-10 text-muted-foreground/60" />
-            <h3 className="text-sm font-bold uppercase text-foreground">Nenhum cliente encontrado</h3>
-            <p className="max-w-md text-xs text-muted-foreground">
-              Nenhum cliente corresponde aos critérios de pesquisa. Cadastre novos clientes no botão acima.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredCustomers.map((cust) => {
-              const initials = cust.name
-                .split(" ")
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join("")
-                .toUpperCase();
 
-              return (
-                <div
-                  key={cust.id}
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-card to-card/70 p-5 shadow-lg transition-all duration-300 hover:border-primary/50 hover:shadow-primary/5"
+          {/* Filter Toolbar */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 sm:max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, e-mail, telefone ou empresa..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl bg-background/60 py-2.5 pl-10 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role) && tenants.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  <select
+                    value={tenantFilter}
+                    onChange={(e) => setTenantFilter(e.target.value)}
+                    className="rounded-xl bg-background/60 px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary focus:outline-none"
+                  >
+                    <option value="all">Todas as Empresas</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.trade_name || t.legal_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1 rounded-xl bg-background/50 p-1">
+                <button
+                  onClick={() => setVehicleFilter("all")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                    vehicleFilter === "all"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  <div className="space-y-4">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-sm font-black text-primary shadow-inner">
+                  Todos
+                </button>
+                <button
+                  onClick={() => setVehicleFilter("has_vehicles")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                    vehicleFilter === "has_vehicles"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Com Veículos
+                </button>
+                <button
+                  onClick={() => setVehicleFilter("no_vehicles")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                    vehicleFilter === "no_vehicles"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Sem Veículos
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Customers Clean List */}
+          {loading ? (
+            <div className="flex h-56 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <RefreshCw className="size-8 animate-spin text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-wider">Carregando clientes...</p>
+              </div>
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="flex h-56 flex-col items-center justify-center gap-3 text-center">
+              <Users className="size-10 text-muted-foreground/60" />
+              <h3 className="font-display text-base font-bold text-foreground">Nenhum cliente encontrado</h3>
+              <p className="max-w-md text-xs text-muted-foreground">
+                Nenhum cliente corresponde aos critérios de pesquisa. Cadastre novos clientes no botão acima.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {filteredCustomers.map((cust) => {
+                const initials = cust.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase();
+
+                return (
+                  <div
+                    key={cust.id}
+                    className="flex flex-col gap-3 rounded-xl px-4 py-3.5 transition-colors hover:bg-background/40"
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      {/* Identity */}
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-sm font-bold text-primary">
                           {initials || "CL"}
                         </div>
-                        <div>
-                          <p className="text-xs font-black uppercase tracking-wide text-foreground">
-                            {cust.name}
-                          </p>
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
-                            <Mail className="size-3 text-muted-foreground" />
-                            <span className="truncate max-w-[170px]">{cust.email}</span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-display text-sm font-bold text-foreground">
+                              {cust.name}
+                            </p>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                cust.motorcycle_count > 0
+                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  : "bg-secondary text-muted-foreground"
+                              }`}
+                            >
+                              {cust.motorcycle_count} / {cust.vehicle_limit || 1} {(cust.vehicle_limit || 1) === 1 ? "Moto" : "Motos"}
+                            </span>
+                            {cust.motorcycle_count >= (cust.vehicle_limit || 1) && (
+                              <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                                Limite Atingido
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1 font-mono">
+                              <Mail className="size-3" />
+                              {cust.email}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Phone className="size-3 text-primary" />
+                              {cust.phone || "--"}
+                            </span>
+                            <span className="inline-flex items-center gap-1 font-mono text-[11px]">
+                              <Calendar className="size-3" />
+                              {cust.date_of_birth ? new Date(cust.date_of_birth).toLocaleDateString("pt-BR") : "--"}
+                            </span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                            cust.motorcycle_count > 0
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                              : "bg-secondary text-muted-foreground border border-border"
-                          }`}
-                        >
-                          {cust.motorcycle_count} / {cust.vehicle_limit || 1} {(cust.vehicle_limit || 1) === 1 ? "Moto" : "Motos"}
-                        </span>
-                        {cust.motorcycle_count >= (cust.vehicle_limit || 1) && (
-                          <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[8px] font-extrabold uppercase text-amber-400">
-                            Limite Atingido
+                      {/* Tenant, Manager & Quick Actions */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-secondary/70 px-2.5 py-1 text-[11px] font-medium text-foreground">
+                          <Building2 className="size-3 text-primary shrink-0" />
+                          <span className="truncate max-w-[140px]">
+                            {cust.tenant_name || cust.tenant_slug || "Empresa Parceira"}
                           </span>
+                        </span>
+
+                        {cust.manager_email ? (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                            <ShieldCheck className="size-3 shrink-0" />
+                            <span className="truncate max-w-[150px]" title={cust.manager_email}>
+                              {cust.manager_name || cust.manager_email}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-secondary/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+                            Sem Gestor
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenLimitModal(cust)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-secondary px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-primary/15 hover:text-primary transition-colors cursor-pointer"
+                          title="Determinar limite de veículos deste cliente"
+                        >
+                          <Bike className="size-3 text-primary shrink-0" />
+                          <span>Limite: {cust.vehicle_limit || 1}</span>
+                        </button>
+
+                        {currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role) && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssignModal(cust)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-secondary px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-primary/15 hover:text-primary transition-colors cursor-pointer"
+                            title="Vincular ou alterar gestor deste cliente"
+                          >
+                            <UserPlus className="size-3 text-primary shrink-0" />
+                            <span>{cust.manager_id ? "Trocar Gestor" : "Vincular Gestor"}</span>
+                          </button>
                         )}
                       </div>
                     </div>
 
-                    {/* Tenant & Manager Badges */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-secondary/80 px-2 py-0.5 text-[10px] font-bold text-foreground border border-border/80">
-                        <Building2 className="size-3 text-primary shrink-0" />
-                        <span className="truncate max-w-[130px]">
-                          {cust.tenant_name || cust.tenant_slug || "Empresa Parceira"}
-                        </span>
-                      </span>
-                      {cust.manager_email ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
-                          <ShieldCheck className="size-3 shrink-0" />
-                          <span className="truncate max-w-[140px]" title={cust.manager_email}>
-                            Gestor: {cust.manager_name || cust.manager_email}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground border border-border">
-                          Sem Gestor
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenLimitModal(cust)}
-                        className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[10px] font-bold text-foreground border border-border hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
-                        title="Determinar limite de veículos deste cliente"
-                      >
-                        <Bike className="size-3 text-primary shrink-0" />
-                        <span>Limite: {cust.vehicle_limit || 1}</span>
-                      </button>
-
-                      {currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role) && (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenAssignModal(cust)}
-                          className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[10px] font-bold text-foreground border border-border hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-colors"
-                          title="Vincular ou alterar gestor deste cliente"
-                        >
-                          <UserPlus className="size-3 text-primary shrink-0" />
-                          <span>{cust.manager_id ? "Trocar Gestor" : "Vincular Gestor"}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Contact Info Pill */}
-                    <div className="flex items-center justify-between rounded-xl border border-border/60 bg-secondary/40 px-3 py-2 text-xs">
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground font-medium">
-                        <Phone className="size-3 text-primary" />
-                        {cust.phone || "--"}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground font-mono text-[11px]">
-                        <Calendar className="size-3 text-muted-foreground" />
-                        {cust.date_of_birth ? new Date(cust.date_of_birth).toLocaleDateString("pt-BR") : "--"}
-                      </span>
-                    </div>
-
-                    {/* Vehicles Section */}
-                    <div className="space-y-2 border-t border-border/60 pt-3">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                        <span>Veículos Vinculados</span>
-                        <span className="font-mono text-foreground font-bold">{cust.motorcycles?.length || 0}</span>
-                      </p>
-
-                      {cust.motorcycles && cust.motorcycles.length > 0 ? (
-                        <div className="space-y-1.5">
-                          {cust.motorcycles.map((m) => (
-                            <div
-                              key={m.id}
-                              className="flex items-center justify-between rounded-lg border border-border/70 bg-background/60 p-2 text-xs"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Bike className="size-3.5 text-primary" />
-                                <div>
-                                  <p className="font-bold text-foreground text-[11px] leading-tight">
-                                    {m.brand} {m.model}
-                                  </p>
-                                  <p className="font-mono text-[10px] text-muted-foreground uppercase">
-                                    {m.license_plate}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div>
-                                {m.device ? (
-                                  <span className="inline-flex items-center gap-1 rounded bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 text-[9px] font-mono font-bold text-cyan-400">
-                                    <Cpu className="size-2.5" />
-                                    {m.device.serial_number}
-                                  </span>
-                                ) : (
-                                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground uppercase">
-                                    Sem IMEI
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[11px] italic text-muted-foreground">
-                          Nenhum veículo associado a este cliente.
-                        </p>
-                      )}
-                    </div>
+                    {/* Linked Vehicles Inline Strip */}
+                    {cust.motorcycles && cust.motorcycles.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 pl-0 sm:pl-13.5 text-xs">
+                        <span className="text-[11px] font-medium text-muted-foreground">Veículos:</span>
+                        {cust.motorcycles.map((m) => (
+                          <div
+                            key={m.id}
+                            className="inline-flex items-center gap-2 rounded-lg bg-secondary/40 px-2.5 py-1 text-xs"
+                          >
+                            <Bike className="size-3 text-primary" />
+                            <span className="font-semibold text-foreground">
+                              {m.brand} {m.model}
+                            </span>
+                            <span className="font-mono text-[11px] text-muted-foreground uppercase">
+                              {m.license_plate}
+                            </span>
+                            {m.device ? (
+                              <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-cyan-400">
+                                <Cpu className="size-3" />
+                                {m.device.serial_number}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-amber-400">Sem IMEI</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Card Footer */}
-                  <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-3 text-[10px] text-muted-foreground font-mono">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="size-1.5 rounded-full bg-emerald-400" />
-                      Status: {cust.status || "Ativo"}
-                    </span>
-                    <span>Criado: {cust.created_at ? new Date(cust.created_at).toLocaleDateString("pt-BR") : "--"}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Modal: Novo Cliente */}
         {isModalOpen && (
