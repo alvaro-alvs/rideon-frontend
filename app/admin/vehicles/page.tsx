@@ -26,6 +26,7 @@ import {
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
 import { OwnerSelect } from "@/app/components/owner-select";
+import { TrackerSelect } from "@/app/components/tracker-select";
 import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
 import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -248,12 +249,14 @@ export default function AdminVehiclesPage() {
 
   const filteredVehicles = useMemo(() => {
     return vehicles.filter((v) => {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
+        !q ||
         v.license_plate.toLowerCase().includes(q) ||
         v.model.toLowerCase().includes(q) ||
         v.brand.toLowerCase().includes(q) ||
-        (v.rider_name && v.rider_name.toLowerCase().includes(q));
+        (v.rider_name && v.rider_name.toLowerCase().includes(q)) ||
+        (v.device?.serial_number && v.device.serial_number.toLowerCase().includes(q));
 
       const matchesCustomer =
         selectedCustomerId === "all" || v.rider_id === selectedCustomerId;
@@ -283,11 +286,10 @@ export default function AdminVehiclesPage() {
         {/* Feedback Alert */}
         {feedback && (
           <div
-            className={`flex items-center gap-3 rounded-xl border p-4 text-xs font-semibold animate-in fade-in duration-200 ${
-              feedback.type === "success"
+            className={`flex items-center gap-3 rounded-xl border p-4 text-xs font-semibold animate-in fade-in duration-200 ${feedback.type === "success"
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                 : "border-red-500/30 bg-red-500/10 text-red-400"
-            }`}
+              }`}
           >
             {feedback.type === "success" ? (
               <CheckCircle2 className="size-5 shrink-0" />
@@ -386,7 +388,7 @@ export default function AdminVehiclesPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filtrar por placa, modelo, marca ou cliente proprietário..."
+                placeholder="Filtrar por placa, modelo, marca, cliente ou IMEI..."
                 className="w-full rounded-xl bg-background/60 py-2.5 pl-10 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
               />
             </div>
@@ -410,31 +412,28 @@ export default function AdminVehiclesPage() {
               <div className="flex items-center gap-1 rounded-xl bg-background/50 p-1 text-xs">
                 <button
                   onClick={() => setTrackerFilter("all")}
-                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
-                    trackerFilter === "all"
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${trackerFilter === "all"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   Todos
                 </button>
                 <button
                   onClick={() => setTrackerFilter("linked")}
-                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
-                    trackerFilter === "linked"
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${trackerFilter === "linked"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   Com IMEI
                 </button>
                 <button
                   onClick={() => setTrackerFilter("unlinked")}
-                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${
-                    trackerFilter === "unlinked"
+                  className={`rounded-lg px-2.5 py-1.5 font-semibold transition-all cursor-pointer ${trackerFilter === "unlinked"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   Sem IMEI
                 </button>
@@ -479,11 +478,10 @@ export default function AdminVehiclesPage() {
                             {v.brand} {v.model}
                           </h3>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              v.status === "active"
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${v.status === "active"
                                 ? "bg-emerald-500/15 text-emerald-400"
                                 : "bg-secondary text-muted-foreground"
-                            }`}
+                              }`}
                           >
                             {v.status === "active" ? "Ativo" : v.status}
                           </span>
@@ -524,6 +522,7 @@ export default function AdminVehiclesPage() {
                           <button
                             onClick={() => {
                               setSelectedVehicleForLink(v);
+                              setSelectedDeviceToLink("");
                               setIsLinkDeviceModalOpen(true);
                             }}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all cursor-pointer"
@@ -755,7 +754,10 @@ export default function AdminVehiclesPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setIsLinkDeviceModalOpen(false)}
+                  onClick={() => {
+                    setIsLinkDeviceModalOpen(false);
+                    setSelectedDeviceToLink("");
+                  }}
                   className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                 >
                   <X className="size-5" />
@@ -772,25 +774,23 @@ export default function AdminVehiclesPage() {
                       Nenhum equipamento em standby disponível no seu tenant. Cadastre novos equipamentos no menu Dispositivos.
                     </div>
                   ) : (
-                    <select
+                    <TrackerSelect
+                      required
+                      options={standbyDevices}
                       value={selectedDeviceToLink}
-                      onChange={(e) => setSelectedDeviceToLink(e.target.value)}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      <option value="">Selecione um equipamento...</option>
-                      {standbyDevices.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          IMEI: {d.serial_number} ({d.protocol ? d.protocol.toUpperCase() : "GPS"})
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setSelectedDeviceToLink}
+                      placeholder="Pesquisar ou selecionar rastreador por IMEI..."
+                    />
                   )}
                 </div>
 
                 <div className="mt-6 flex items-center justify-end gap-3 border-t border-border/80 pt-4">
                   <button
                     type="button"
-                    onClick={() => setIsLinkDeviceModalOpen(false)}
+                    onClick={() => {
+                      setIsLinkDeviceModalOpen(false);
+                      setSelectedDeviceToLink("");
+                    }}
                     className="rounded-xl border border-border px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                   >
                     Cancelar
