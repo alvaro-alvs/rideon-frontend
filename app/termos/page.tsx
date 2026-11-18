@@ -5,7 +5,7 @@ import { LegalContent } from './legal-content';
 export const metadata: Metadata = {
   title: 'Termos de Uso e Adesão | RideOn Telemetria & Rastreamento',
   description:
-    'Termos de uso, regulamentação do plano de adesão com permanência mínima de 4 meses, homologação ANATEL e conformidade com a LGPD.',
+  'Termos de uso, regulamentação do plano de adesão com permanência mínima de 4 meses, direito de arrependimento de 7 dias (CDC art. 49), reembolso, homologação ANATEL e conformidade com a LGPD.',
 };
 
 export default function TermosPage() {

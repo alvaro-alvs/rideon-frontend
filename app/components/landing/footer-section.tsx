@@ -77,9 +77,11 @@ export function FooterSection() {
 
         {/* Bottom Bar */}
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/50 pt-8 sm:flex-row">
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} RideOn. Todos os direitos reservados.
-          </p>
+          <div className="text-center text-xs text-muted-foreground sm:text-left">
+            <p>
+              © {new Date().getFullYear()} RideOn. Todos os direitos reservados. • CNPJ: 70.086.510/0001-09
+            </p>
+          </div>
           <div className="flex items-center gap-6 text-xs text-muted-foreground">
             <Link href="/termos" className="hover:text-foreground transition-colors">
               Termos de Uso

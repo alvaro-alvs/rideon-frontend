@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -19,15 +18,14 @@ import {
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
+import { ChargeModal } from "@/app/admin/financial/components/charge-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isPlatformOrTenantAdmin } from "@/lib/auth";
 import type {
-  BillingCycle,
   ComplianceStatus,
   CustomerBillingSummary,
   InvoiceItem,
   ManagerCustomersBillingResponse,
-  PaymentMethod,
 } from "@/lib/types/financial";
 
 function formatCurrencyCents(cents?: number) {
@@ -36,19 +34,6 @@ function formatCurrencyCents(cents?: number) {
     style: "currency",
     currency: "BRL",
   });
-}
-
-function formatPriceInputFromDigits(raw: string) {
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "R$ 0,00";
-  const cents = Number.parseInt(digits, 10);
-  return formatCurrencyCents(cents);
-}
-
-function parsePriceInputToCents(formatted: string) {
-  const digits = formatted.replace(/\D/g, "");
-  if (!digits) return 0;
-  return Number.parseInt(digits, 10);
 }
 
 function formatDate(iso?: string) {
@@ -97,18 +82,6 @@ export default function AdminFinancialPage() {
   // Create / Edit charge modal
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerBillingSummary | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<InvoiceItem | null>(null);
-  const [chargeMode, setChargeMode] = useState<"paid" | "pending">("pending");
-  const [planName, setPlanName] = useState("Plano Padrão");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
-  const [allowInstallments, setAllowInstallments] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
-  const [amountReais, setAmountReais] = useState("R$ 99,90");
-  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
-  const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [cardBrand, setCardBrand] = useState("");
-  const [cardLast4, setCardLast4] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [modalError, setModalError] = useState("");
 
   // Customer charges list modal (Edit / Delete)
   const [chargesCustomer, setChargesCustomer] = useState<CustomerBillingSummary | null>(null);
@@ -176,35 +149,11 @@ export default function AdminFinancialPage() {
   const openPaymentModal = (c: CustomerBillingSummary) => {
     setEditingInvoice(null);
     setSelectedCustomer(c);
-    setChargeMode("pending");
-    setPlanName(c.plan_name || "Plano Padrão");
-    setBillingCycle(c.billing_cycle || "monthly");
-    setAllowInstallments(c.allow_installments ?? true);
-    setPaymentMethod(c.payment_method || "card");
-    setAmountReais(formatCurrencyCents(c.amount_cents || 9990));
-    const today = new Date().toISOString().slice(0, 10);
-    setPaidAt(today);
-    setDueDate(today);
-    setCardBrand("");
-    setCardLast4("");
-    setModalError("");
   };
 
   const openEditInvoiceModal = (c: CustomerBillingSummary, inv: InvoiceItem) => {
     setEditingInvoice(inv);
     setSelectedCustomer(c);
-    setChargeMode(inv.status === "paid" ? "paid" : "pending");
-    setPlanName(inv.plan_name || "Plano Padrão");
-    setBillingCycle(inv.billing_cycle || "monthly");
-    setAllowInstallments(inv.allow_installments ?? true);
-    setPaymentMethod(inv.payment_method || "card");
-    setAmountReais(formatCurrencyCents(inv.amount_cents || 9990));
-    const today = new Date().toISOString().slice(0, 10);
-    setPaidAt(inv.paid_at ? inv.paid_at.slice(0, 10) : today);
-    setDueDate(inv.due_date ? inv.due_date.slice(0, 10) : today);
-    setCardBrand(inv.card_brand || "");
-    setCardLast4(inv.card_last4 || "");
-    setModalError("");
   };
 
   const openChargesModal = async (c: CustomerBillingSummary) => {
@@ -240,56 +189,11 @@ export default function AdminFinancialPage() {
     }
   };
 
-  const handleRecordPayment = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!selectedCustomer) return;
-
-    const amountCents = parsePriceInputToCents(amountReais);
-    if (!amountCents || amountCents <= 0) {
-      setModalError("Informe um valor válido maior que zero.");
-      return;
+  const handleChargeSaved = async () => {
+    if (chargesCustomer) {
+      await openChargesModal(chargesCustomer);
     }
-
-    setSaving(true);
-    setModalError("");
-    try {
-      const isEdit = Boolean(editingInvoice);
-      const endpoint = isEdit
-        ? `/api/admin/financial/invoices/${editingInvoice!.id}`
-        : `/api/admin/financial/customers/${selectedCustomer.rider_id}/manual-payment`;
-      const res = await fetch(endpoint, {
-        method: isEdit ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan_name: planName.trim() || "Plano Padrão",
-          billing_cycle: billingCycle,
-          payment_method: paymentMethod,
-          amount_cents: amountCents,
-          allow_installments: billingCycle === "yearly" ? allowInstallments : false,
-          installments: billingCycle === "yearly" && allowInstallments ? 12 : 1,
-          status: chargeMode,
-          paid_at: chargeMode === "paid" ? paidAt : undefined,
-          due_date: chargeMode === "pending" ? dueDate : undefined,
-          card_brand: paymentMethod === "card" ? cardBrand.trim() : "",
-          card_last4: paymentMethod === "card" ? cardLast4.trim() : "",
-        }),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) {
-        setModalError(body?.error?.message || body?.message || "Falha ao salvar cobrança.");
-        return;
-      }
-      setSelectedCustomer(null);
-      setEditingInvoice(null);
-      if (chargesCustomer) {
-        await openChargesModal(chargesCustomer);
-      }
-      await loadData(true);
-    } catch {
-      setModalError("Erro de conexão ao salvar cobrança.");
-    } finally {
-      setSaving(false);
-    }
+    await loadData(true);
   };
 
   return (
@@ -488,204 +392,16 @@ export default function AdminFinancialPage() {
         </div>
       </div>
 
-      {/* Manual Payment Modal */}
-      {selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-foreground">
-                  {editingInvoice ? "Editar Cobrança" : "Cobrança do Cliente"}
-                </h2>
-                <p className="text-xs text-muted-foreground">{selectedCustomer.name}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedCustomer(null)}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRecordPayment} className="flex flex-col gap-3 text-xs">
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-background p-1">
-                <button
-                  type="button"
-                  onClick={() => setChargeMode("pending")}
-                  className={`rounded-lg py-1.5 font-semibold transition ${chargeMode === "pending"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  Cobrança em Aberto
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChargeMode("paid")}
-                  className={`rounded-lg py-1.5 font-semibold transition ${chargeMode === "paid"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  Já Pago
-                </button>
-              </div>
-              <div>
-                <label className="mb-1 block font-semibold text-muted-foreground">Plano</label>
-                <input
-                  type="text"
-                  value={planName}
-                  onChange={(e) => setPlanName(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block font-semibold text-muted-foreground">
-                    Tipo de Cobrança
-                  </label>
-                  <select
-                    value={billingCycle}
-                    onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
-                  >
-                    <option value="monthly">Mensalidade</option>
-                    <option value="yearly">Anual</option>
-                    <option value="one_time">Cobrança Única</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block font-semibold text-muted-foreground">
-                    Forma de Pagamento
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
-                  >
-                    <option value="card">Cartão (AbacatePay)</option>
-                    <option value="pix">PIX (AbacatePay)</option>
-                    <option value="manual">Manual / Dinheiro</option>
-                  </select>
-                </div>
-              </div>
-
-              {billingCycle === "yearly" && (
-                <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 bg-secondary/20 p-3">
-                  <label className="flex cursor-pointer items-center gap-2 font-semibold text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={allowInstallments}
-                      onChange={(e) => setAllowInstallments(e.target.checked)}
-                      className="size-4 rounded border-border accent-primary"
-                    />
-                    Permitir parcelamento em 12x para o cliente
-                  </label>
-                  {allowInstallments && (
-                    <span className="text-[11px] text-muted-foreground">
-                      Cliente verá{" "}
-                      <strong className="text-foreground">
-                        12x de {formatCurrencyCents(Math.round(parsePriceInputToCents(amountReais) / 12))}/mês
-                      </strong>{" "}
-                      (Total anual: {amountReais})
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {paymentMethod === "card" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1 block font-semibold text-muted-foreground">
-                      Bandeira (opcional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Visa, Mastercard..."
-                      value={cardBrand}
-                      onChange={(e) => setCardBrand(e.target.value)}
-                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block font-semibold text-muted-foreground">
-                      Final do cartão
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={4}
-                      placeholder="4242"
-                      value={cardLast4}
-                      onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, ""))}
-                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block font-semibold text-muted-foreground">
-                    Valor (R$)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={amountReais}
-                    onChange={(e) => setAmountReais(formatPriceInputFromDigits(e.target.value))}
-                    placeholder="R$ 0,00"
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 font-mono text-foreground focus:border-primary focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block font-semibold text-muted-foreground">
-                    {chargeMode === "pending" ? "Data de Vencimento" : "Data do Pagamento"}
-                  </label>
-                  <input
-                    type="date"
-                    value={chargeMode === "pending" ? dueDate : paidAt}
-                    onChange={(e) =>
-                      chargeMode === "pending"
-                        ? setDueDate(e.target.value)
-                        : setPaidAt(e.target.value)
-                    }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {modalError && (
-                <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-rose-400">{modalError}</p>
-              )}
-
-              <div className="mt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCustomer(null)}
-                  className="rounded-xl border border-border px-3.5 py-2 font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-                >
-                  {saving
-                    ? "Salvando..."
-                    : editingInvoice
-                      ? "Salvar Alterações"
-                      : chargeMode === "pending"
-                        ? "Gerar Cobrança"
-                        : "Confirmar Pagamento"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Create / Edit Charge Modal */}
+      <ChargeModal
+        customer={selectedCustomer}
+        editingInvoice={editingInvoice}
+        onClose={() => {
+          setSelectedCustomer(null);
+          setEditingInvoice(null);
+        }}
+        onSaved={handleChargeSaved}
+      />
 
       {/* Customer Charges List Modal (Edit / Delete) */}
       {chargesCustomer && (
