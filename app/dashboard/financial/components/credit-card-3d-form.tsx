@@ -504,9 +504,8 @@ export function CreditCard3DForm({
           <div className="flex items-start gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[11px] text-emerald-300">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              Criptografia TLS ponta a ponta. Número completo e CVV nunca são gravados nos nossos
-              servidores — a cobrança é tokenizada e processada no ambiente seguro da{" "}
-              <strong>AbacatePay</strong>.
+              Criptografia ponta a ponta. Número completo e CVV nunca são gravados nos nossos
+              servidores — o pagamento é processado em ambiente seguro.
             </span>
           </div>
 
@@ -526,7 +525,7 @@ export function CreditCard3DForm({
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50 cursor-pointer"
             >
               <ExternalLink className="size-3" />
-              Checkout AbacatePay (Cartão / Wallet)
+              Pagar na página segura (Cartão / Wallet)
             </button>
 
             <div className="flex items-center gap-2">
@@ -543,7 +542,7 @@ export function CreditCard3DForm({
                 className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
               >
                 <Lock className="size-3.5" />
-                {tokenizing || submitting ? "Processando na AbacatePay..." : `Pagar ${amountLabel}`}
+                {tokenizing || submitting ? "Processando pagamento..." : `Pagar ${amountLabel}`}
               </button>
             </div>
           </div>

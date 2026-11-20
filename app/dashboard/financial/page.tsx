@@ -11,7 +11,9 @@ import {
   CreditCard,
   ExternalLink,
   QrCode,
+  Receipt,
   RefreshCw,
+  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -51,9 +53,61 @@ function formatCurrencyCents(cents?: number) {
 
 function formatDate(iso?: string) {
   if (!iso) return "—";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (dateOnly) {
+    return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("pt-BR");
+}
+
+function daysDiffFromToday(iso?: string): number | null {
+  if (!iso) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  let targetMs: number;
+  if (match) {
+    targetMs = Date.UTC(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+    );
+  } else {
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime())) return null;
+    targetMs = Date.UTC(
+      parsed.getUTCFullYear(),
+      parsed.getUTCMonth(),
+      parsed.getUTCDate(),
+    );
+  }
+  const now = new Date();
+  const todayMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((targetMs - todayMs) / 86_400_000);
+}
+
+/**
+ * Resolves the effective display status of an invoice.
+ * Paid invoices (status === "paid" or paid_at present) ALWAYS remain "paid",
+ * even if their original due_date is in the past.
+ */
+function getEffectiveInvoiceStatus(
+  inv: Pick<InvoiceItem, "status" | "due_date" | "paid_at">,
+): InvoiceStatus {
+  if (inv.status === "paid" || Boolean(inv.paid_at)) {
+    return "paid";
+  }
+  if (inv.status === "cancelled") {
+    return "cancelled";
+  }
+  if (inv.status === "overdue") {
+    return "overdue";
+  }
+  const diff = daysDiffFromToday(inv.due_date);
+  if (diff !== null && diff < 0) {
+    return "overdue";
+  }
+  return "pending";
 }
 
 function normalizeQrDataUrl(raw?: string) {
@@ -75,6 +129,13 @@ function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
       <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-rose-400">
         <AlertCircle className="size-3" />
         Vencida
+      </span>
+    );
+  }
+  if (status === "cancelled") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+        Cancelada
       </span>
     );
   }
@@ -168,9 +229,10 @@ export default function CustomerFinancialPage() {
 
   const openInvoices = useMemo(
     () =>
-      (billing?.history ?? []).filter(
-        (inv) => inv.status === "pending" || inv.status === "overdue",
-      ),
+      (billing?.history ?? []).filter((inv) => {
+        const status = getEffectiveInvoiceStatus(inv);
+        return status === "pending" || status === "overdue";
+      }),
     [billing],
   );
 
@@ -179,19 +241,28 @@ export default function CustomerFinancialPage() {
       const matched = billing?.history?.find((inv) => inv.id === selectedInvoiceId);
       if (matched) return matched;
     }
-    if (
-      billing?.current_invoice &&
-      (billing.current_invoice.status === "pending" ||
-        billing.current_invoice.status === "overdue")
-    ) {
-      return billing.current_invoice;
+    if (billing?.current_invoice) {
+      const currentEff = getEffectiveInvoiceStatus(billing.current_invoice);
+      if (currentEff === "pending" || currentEff === "overdue") {
+        return billing.current_invoice;
+      }
     }
     return openInvoices[0] ?? billing?.current_invoice;
   }, [selectedInvoiceId, billing, openInvoices]);
 
   const invoiceKey = activeInvoice?.id || "default";
-  const activeStatus: InvoiceStatus = activeInvoice?.status ?? billing?.status ?? "pending";
+  const activeStatus: InvoiceStatus = useMemo(() => {
+    if (activeInvoice) {
+      return getEffectiveInvoiceStatus(activeInvoice);
+    }
+    if (billing?.status === "paid") {
+      return "paid";
+    }
+    return billing?.status ?? "pending";
+  }, [activeInvoice, billing?.status]);
+
   const isPaid = activeStatus === "paid";
+  const isOverdueUnpaid = !isPaid && activeStatus === "overdue";
   const activePlanName = activeInvoice?.plan_name ?? billing?.plan_name ?? "Plano Padrão";
   const activeBillingCycle = activeInvoice?.billing_cycle ?? billing?.billing_cycle ?? "monthly";
   const activeAmountCents = activeInvoice?.amount_cents ?? billing?.amount_cents ?? 0;
@@ -201,6 +272,7 @@ export default function CustomerFinancialPage() {
   const activePaymentMethod = activeInvoice?.payment_method ?? billing?.payment_method ?? "card";
   const activeGateway = activeInvoice?.gateway_provider ?? billing?.gateway ?? "abacatepay";
   const activeDueDate = activeInvoice?.due_date ?? billing?.due_date;
+  const activePaidAt = activeInvoice?.paid_at ?? billing?.last_paid_at;
   const activeCardBrand = activeInvoice?.card_brand ?? billing?.card_brand;
   const activeCardLast4 = activeInvoice?.card_last4 ?? billing?.card_last4;
 
@@ -211,7 +283,7 @@ export default function CustomerFinancialPage() {
   const activeCardLink =
     cardLinkByInvoice[invoiceKey] || (!isPaid ? activeInvoice?.checkout_url : "") || "";
 
-  // Poll every 5s and recheck on window focus while waiting for AbacatePay PIX or Card confirmation
+  // Poll every 5s and recheck on window focus while waiting for PIX or Card confirmation
   useEffect(() => {
     const waitingPayment = !isPaid && Boolean(activePixCode || activePixQr || activeCardLink);
     if (!waitingPayment) return;
@@ -221,7 +293,11 @@ export default function CustomerFinancialPage() {
       const fresh = await loadBilling(true);
       if (!fresh) return;
       const targetNowPaid = prevInvoiceId
-        ? fresh.history?.some((inv) => inv.id === prevInvoiceId && inv.status === "paid")
+        ? fresh.history?.some(
+            (inv) =>
+              inv.id === prevInvoiceId &&
+              (inv.status === "paid" || Boolean(inv.paid_at)),
+          )
         : fresh.status === "paid";
       if (targetNowPaid) {
         setPixByInvoice((prev) => {
@@ -257,7 +333,7 @@ export default function CustomerFinancialPage() {
     };
   }, [isPaid, activePixCode, activePixQr, activeCardLink, activeInvoice?.id, invoiceKey, loadBilling]);
 
-  // Countdown for PIX expiration (AbacatePay PIX expires in 60 min)
+  // Countdown for PIX expiration (60 min)
   const expiresAt = localPix?.expiresAt;
   const shouldTickPix = Boolean(expiresAt && (activePixCode || activePixQr) && !isPaid);
 
@@ -363,13 +439,13 @@ export default function CustomerFinancialPage() {
     return ["pix", "card"];
   }, [activeInvoice?.allowed_payment_methods, billing?.allowed_payment_methods, activePaymentMethod]);
 
-  const abacateConfigured = Boolean(billing?.gateways_configured?.abacatepay);
+  const onlineConfigured = Boolean(billing?.gateways_configured?.abacatepay);
   const pixReady =
     allowedMethods.includes("pix") &&
-    (billing?.gateways_configured?.pix ?? abacateConfigured);
+    (billing?.gateways_configured?.pix ?? onlineConfigured);
   const cardReady =
     allowedMethods.includes("card") &&
-    (billing?.gateways_configured?.card ?? abacateConfigured);
+    (billing?.gateways_configured?.card ?? onlineConfigured);
   const manualOnly = allowedMethods.length === 1 && allowedMethods[0] === "manual";
   const canPayAmount = activeAmountCents > 0;
   const transparentCardEnabled = Boolean(
@@ -386,9 +462,67 @@ export default function CustomerFinancialPage() {
     });
   };
 
+  const dueHint = useMemo(() => {
+    if (isPaid) {
+      return { text: "Fatura quitada", tone: "emerald" as const };
+    }
+    const diff = daysDiffFromToday(activeDueDate);
+    if (diff === null) return null;
+    if (diff < 0) {
+      const abs = Math.abs(diff);
+      return {
+        text: abs === 1 ? "Venceu ontem" : `Venceu há ${abs} dias`,
+        tone: "rose" as const,
+      };
+    }
+    if (diff === 0) return { text: "Vence hoje", tone: "amber" as const };
+    if (diff === 1) return { text: "Vence amanhã", tone: "amber" as const };
+    if (diff <= 7) return { text: `Vence em ${diff} dias`, tone: "amber" as const };
+    return { text: `Em ${diff} dias`, tone: "muted" as const };
+  }, [isPaid, activeDueDate]);
+
+  const historyList = billing?.history ?? [];
+  const noBillingConfigured =
+    billing &&
+    !billing.has_profile &&
+    historyList.length === 0 &&
+    activeAmountCents <= 0;
+
   return (
     <DashboardShell>
-      <div className="w-full space-y-4">
+      <div className="w-full space-y-5">
+        {/* Page Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card px-5 py-4 sm:px-6 sm:py-5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
+              <CreditCard className="size-5" />
+            </div>
+            <div>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                Financeiro
+              </h1>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                Gerencie sua assinatura, acompanhe vencimentos e pague via PIX ou Cartão.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {billing && !noBillingConfigured && (
+              <InvoiceStatusBadge status={activeStatus} />
+            )}
+            <button
+              type="button"
+              onClick={() => loadBilling(true)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl border border-border/80 bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
+          </div>
+        </div>
+
         {error && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-300">
             {error}
@@ -411,82 +545,131 @@ export default function CustomerFinancialPage() {
           </div>
         )}
 
-        {/* Unified Single Card */}
-        <div className="w-full rounded-2xl border border-border/70 bg-card p-5 sm:p-7 space-y-6">
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                <CreditCard className="size-5 text-primary" />
-                Financeiro
-              </h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Dados da sua fatura atual, pagamento via PIX ou Cartão (AbacatePay) e vencimento.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => loadBilling(true)}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
-              Atualizar
-            </button>
+        {loading ? (
+          <div className="rounded-2xl border border-border/70 bg-card p-12 text-center text-sm text-muted-foreground">
+            Carregando dados financeiros...
           </div>
-
-          {loading ? (
-            <div className="p-10 text-center text-sm text-muted-foreground">
-              Carregando dados da fatura...
+        ) : noBillingConfigured ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-border/70 bg-card px-6 py-14 text-center">
+            <div className="mb-3 flex size-12 items-center justify-center rounded-2xl border border-border bg-secondary/60 text-muted-foreground">
+              <Receipt className="size-6" />
             </div>
-          ) : billing ? (
-            <>
-              {/* Fatura Atual Header */}
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {openInvoices.length > 1 ? "Fatura Selecionada" : "Fatura Atual"}
+            <h2 className="font-display text-lg font-bold text-foreground">
+              Nenhuma cobrança ativa
+            </h2>
+            <p className="mt-1 max-w-md text-xs text-muted-foreground">
+              Quando um plano ou fatura for lançado para sua conta, o resumo e as opções de
+              pagamento aparecerão aqui.
+            </p>
+          </div>
+        ) : billing ? (
+          <>
+            {/* Multiple Open Invoices Selector */}
+            {openInvoices.length > 1 && (
+              <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Selecione a fatura para pagar
                   </span>
-                  <h2 className="mt-0.5 font-display text-xl font-bold text-foreground">
-                    {activePlanName}{" "}
-                    <span className="font-sans text-xs font-medium text-muted-foreground">
-                      • {cycleLabel}
-                    </span>
-                  </h2>
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300">
+                    {openInvoices.length} faturas em aberto
+                  </span>
                 </div>
-                <InvoiceStatusBadge status={activeStatus} />
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {openInvoices.map((inv) => {
+                    const effStatus = getEffectiveInvoiceStatus(inv);
+                    const isSelected = activeInvoice?.id === inv.id;
+                    return (
+                      <button
+                        key={inv.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedInvoiceId(inv.id);
+                          setCheckoutError("");
+                        }}
+                        className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition cursor-pointer ${
+                          isSelected
+                            ? "border-primary bg-primary/10 shadow-sm"
+                            : "border-border/70 bg-background/50 hover:border-border hover:bg-background/80"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-semibold text-foreground">
+                            {inv.plan_name}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            Venc. {formatDate(inv.due_date)}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="font-mono text-xs font-bold tabular-nums text-foreground">
+                            {formatCurrencyCents(inv.amount_cents)}
+                          </span>
+                          <InvoiceStatusBadge status={effStatus} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            )}
 
-              {/* Unified Metrics */}
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <div className="py-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {showMonthlyInstallment ? "Valor mensal (12x)" : "Valor"}
-                  </span>
-                  {showMonthlyInstallment ? (
-                    <>
-                      <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">
-                        {formatCurrencyCents(monthlyCents)}
-                        <span className="font-sans text-xs font-medium text-muted-foreground">/mês</span>
+            {/* Main 2-Column Layout */}
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
+              {/* Left Column: Current Invoice & Payment */}
+              <div
+                className={`lg:col-span-7 rounded-2xl border bg-card p-5 sm:p-6 space-y-5 ${
+                  isPaid
+                    ? "border-emerald-500/25"
+                    : isOverdueUnpaid
+                      ? "border-rose-500/30"
+                      : "border-border/70"
+                }`}
+              >
+                {/* Plan Header */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {openInvoices.length > 1 ? "Fatura Selecionada" : "Fatura Atual"} • {cycleLabel}
+                    </span>
+                    <h2 className="mt-0.5 font-display text-xl font-bold text-foreground sm:text-2xl">
+                      {activePlanName}
+                    </h2>
+                  </div>
+                  <InvoiceStatusBadge status={activeStatus} />
+                </div>
+
+                {/* Hero Amount Box */}
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background/50 p-4 sm:p-5">
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {showMonthlyInstallment ? "Valor mensal (12x)" : "Valor da fatura"}
+                    </span>
+                    {showMonthlyInstallment ? (
+                      <>
+                        <p className="mt-1 font-display text-3xl font-bold tabular-nums text-foreground sm:text-4xl">
+                          {formatCurrencyCents(monthlyCents)}
+                          <span className="font-sans text-sm font-medium text-muted-foreground">/mês</span>
+                        </p>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          Total anual: {formatCurrencyCents(activeAmountCents)}
+                        </span>
+                      </>
+                    ) : (
+                      <p className="mt-1 font-display text-3xl font-bold tabular-nums text-foreground sm:text-4xl">
+                        {formatCurrencyCents(activeAmountCents)}
                       </p>
-                      <span className="block text-xs text-muted-foreground">
-                        Total anual: {formatCurrencyCents(activeAmountCents)}
-                      </span>
-                    </>
-                  ) : (
-                    <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">
-                      {formatCurrencyCents(activeAmountCents)}
-                    </p>
-                  )}
+                    )}
+                  </div>
 
                   {!isPaid && canInstallment12x && (
-                    <div className="mt-2.5 inline-flex rounded-lg bg-background p-0.5 text-[11px]">
+                    <div className="inline-flex rounded-xl border border-border/70 bg-card p-1 text-xs">
                       <button
                         type="button"
                         onClick={() => setUseInstallments(true)}
-                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${
+                        className={`rounded-lg px-3 py-1.5 font-semibold transition cursor-pointer ${
                           useInstallments
-                            ? "bg-primary text-primary-foreground"
+                            ? "bg-primary text-primary-foreground shadow-sm"
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
@@ -495,9 +678,9 @@ export default function CustomerFinancialPage() {
                       <button
                         type="button"
                         onClick={() => setUseInstallments(false)}
-                        className={`rounded-md px-2.5 py-1 font-semibold transition cursor-pointer ${
+                        className={`rounded-lg px-3 py-1.5 font-semibold transition cursor-pointer ${
                           !useInstallments
-                            ? "bg-primary text-primary-foreground"
+                            ? "bg-primary text-primary-foreground shadow-sm"
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
@@ -507,206 +690,274 @@ export default function CustomerFinancialPage() {
                   )}
                 </div>
 
-                <div className="py-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {isCard && !isOneTime ? "Próximo Vencimento (Cartão)" : "Vencimento"}
-                  </span>
-                  <p className="mt-1.5 flex items-center gap-2 font-display text-lg font-bold text-foreground">
-                    <Calendar className="size-4 text-primary" />
-                    {formatDate(activeDueDate)}
-                  </p>
-                  {isCard && isYearly && (
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      Renovação anual prevista para o próximo ano
+                {/* Metadata Tiles */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3.5">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      {isPaid
+                        ? "Vencimento"
+                        : isCard && !isOneTime
+                          ? "Próximo Vencimento"
+                          : "Vencimento"}
                     </span>
-                  )}
+                    <p className="mt-1.5 flex items-center gap-2 font-display text-base font-bold text-foreground">
+                      <Calendar className="size-4 text-primary" />
+                      {formatDate(activeDueDate)}
+                    </p>
+                    {dueHint && (
+                      <span
+                        className={`mt-1 block text-[11px] font-medium ${
+                          dueHint.tone === "emerald"
+                            ? "text-emerald-400"
+                            : dueHint.tone === "rose"
+                              ? "text-rose-400"
+                              : dueHint.tone === "amber"
+                                ? "text-amber-400"
+                                : "text-muted-foreground"
+                        }`}
+                      >
+                        {dueHint.text}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3.5">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Forma de Pagamento
+                    </span>
+                    <p className="mt-1.5 text-sm font-semibold text-foreground">
+                      {isCard
+                        ? `Cartão${activeCardBrand ? ` (${activeCardBrand})` : ""}${
+                            activeCardLast4 ? ` •••• ${activeCardLast4}` : ""
+                          }`
+                        : activePaymentMethod === "pix"
+                          ? "PIX"
+                          : "Acerto Manual"}
+                    </p>
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      {activeGateway === "manual" || activePaymentMethod === "manual"
+                        ? "Acerto direto com o gestor"
+                        : "Pagamento digital seguro"}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3.5">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      {activePaidAt ? "Último Pagamento" : "Situação"}
+                    </span>
+                    <p className="mt-1.5 text-sm font-semibold text-foreground">
+                      {activePaidAt
+                        ? formatDate(activePaidAt)
+                        : isPaid
+                          ? "Quitada"
+                          : isOverdueUnpaid
+                            ? "Pendente em atraso"
+                            : "Aguardando pagamento"}
+                    </p>
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      {isPaid
+                        ? "Assinatura regularizada"
+                        : isCard && isYearly
+                          ? "Renovação anual"
+                          : "Confirmação automática"}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="py-1">
-                  <span className="text-xs font-medium text-muted-foreground">Forma de Pagamento</span>
-                  <p className="mt-1.5 text-sm font-semibold text-foreground">
-                    {isCard
-                      ? `Cartão${activeCardBrand ? ` (${activeCardBrand})` : ""}${
-                          activeCardLast4 ? ` •••• ${activeCardLast4}` : ""
-                        }`
-                      : activePaymentMethod === "pix"
-                        ? "PIX"
-                        : "Manual"}
-                  </p>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    Gateway:{" "}
-                    {activeGateway === "manual" ? "Gerente" : "AbacatePay"}
-                  </span>
-                </div>
+                {/* Payment Actions or Paid Confirmation */}
+                {isPaid ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-xs text-emerald-300">
+                    <CheckCircle2 className="size-4 shrink-0 text-emerald-400" />
+                    <span>
+                      Esta fatura está quitada. Obrigado por manter sua assinatura em dia!
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-background/40 p-4 sm:p-5">
+                    {manualOnly ? (
+                      <p className="text-xs text-muted-foreground">
+                        Esta cobrança está configurada para acerto manual. Caso já tenha pago,
+                        solicite a baixa ao seu gerente.
+                      </p>
+                    ) : !canPayAmount ? (
+                      <p className="text-xs text-muted-foreground">
+                        Aguardando definição do valor da cobrança pelo gerente.
+                      </p>
+                    ) : !pixReady && !cardReady ? (
+                      <p className="text-xs text-muted-foreground">
+                        O pagamento online está temporariamente indisponível. Entre em contato com o
+                        suporte ou seu gerente.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                              Opções de Pagamento
+                            </h3>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Escolha pagar instantaneamente via{" "}
+                              <strong className="text-foreground">PIX</strong> ou com{" "}
+                              <strong className="text-foreground">Cartão de Crédito</strong>.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {pixReady && (
+                              <button
+                                type="button"
+                                disabled={payingMethod !== null}
+                                onClick={() => void handleCheckout("pix")}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                              >
+                                <QrCode className="size-3.5" />
+                                {payingMethod === "pix"
+                                  ? "Gerando QR Code..."
+                                  : activePixCode || activePixQr
+                                    ? "Gerar novo QR Code PIX"
+                                    : "Pagar com PIX"}
+                              </button>
+                            )}
+                            {cardReady && (
+                              <button
+                                type="button"
+                                disabled={payingMethod !== null}
+                                onClick={handleCardButtonClick}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                              >
+                                <CreditCard className="size-3.5" />
+                                {payingMethod === "card"
+                                  ? "Iniciando pagamento..."
+                                  : "Pagar com Cartão"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* PIX QR Code Box */}
+                        {(activePixQr || activePixCode) && (
+                          <div className="rounded-xl border border-emerald-500/30 bg-card/90 p-4 sm:p-5">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                                <QrCode className="size-4" />
+                                <span>PIX Instantâneo — QR Code</span>
+                              </div>
+                              {pixRemainingSec !== null && (
+                                <span className="font-mono text-[11px] text-muted-foreground">
+                                  {pixRemainingSec > 0
+                                    ? `Expira em ${Math.floor(pixRemainingSec / 60)}m ${String(
+                                        pixRemainingSec % 60,
+                                      ).padStart(2, "0")}s`
+                                    : "Código expirado — gere um novo acima"}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                              {activePixQr && (
+                                <div className="shrink-0 rounded-xl bg-white p-3 shadow-sm">
+                                  <img
+                                    src={normalizeQrDataUrl(activePixQr)}
+                                    alt="QR Code PIX"
+                                    className="size-44 object-contain"
+                                  />
+                                </div>
+                              )}
+
+                              <div className="flex w-full flex-1 flex-col gap-2.5">
+                                {activePixCode && (
+                                  <>
+                                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                      PIX Copia e Cola
+                                    </label>
+                                    <textarea
+                                      readOnly
+                                      rows={3}
+                                      value={activePixCode}
+                                      className="w-full rounded-xl border border-border bg-background p-2.5 font-mono text-[11px] text-foreground focus:outline-none"
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleCopyPix}
+                                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 cursor-pointer"
+                                      >
+                                        {copied ? (
+                                          <Check className="size-3.5" />
+                                        ) : (
+                                          <Copy className="size-3.5" />
+                                        )}
+                                        {copied ? "Código copiado!" : "Copiar código PIX"}
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                  <RefreshCw className="size-3 animate-spin" />
+                                  Aguardando confirmação automática após o pagamento no seu banco...
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Card Hosted Checkout Link */}
+                        {activeCardLink && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-300">
+                            <span className="flex items-center gap-2 font-medium">
+                              <ShieldCheck className="size-4 shrink-0" />
+                              Página de pagamento segura gerada!
+                            </span>
+                            <a
+                              href={activeCardLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold underline"
+                            >
+                              Abrir página de pagamento <ExternalLink className="size-3" />
+                            </a>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {checkoutError && (
+                      <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+                        {checkoutError}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Payment Gateway Actions & Internal PIX QR Code */}
-              {isPaid ? (
-                <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-xs text-emerald-300">
-                  <CheckCircle2 className="size-4 shrink-0" />
-                  <span>Esta fatura está quitada. Obrigado por manter sua assinatura em dia!</span>
+              {/* Right Column: Invoice History */}
+              <div className="lg:col-span-5 rounded-2xl border border-border/70 bg-card p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-base font-bold text-foreground">
+                      Histórico de Faturas
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {openInvoices.length > 0
+                        ? "Clique em uma fatura em aberto para pagar."
+                        : "Acompanhe seus lançamentos e quitações."}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-border bg-secondary/70 px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    {historyList.length}{" "}
+                    {historyList.length === 1 ? "fatura" : "faturas"}
+                  </span>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-4 rounded-xl bg-background/40 p-4">
-                  {manualOnly ? (
-                    <p className="text-xs text-muted-foreground">
-                      Esta cobrança está configurada para acerto manual. Caso já tenha pago,
-                      solicite a baixa ao seu gerente.
-                    </p>
-                  ) : !canPayAmount ? (
-                    <p className="text-xs text-muted-foreground">
-                      Aguardando definição do valor da cobrança pelo gerente.
-                    </p>
-                  ) : !pixReady && !cardReady ? (
-                    <p className="text-xs text-muted-foreground">
-                      O gateway de pagamento online (AbacatePay) ainda não está configurado neste
-                      ambiente. Entre em contato com o suporte ou seu gerente.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-xs text-muted-foreground">
-                          Escolha pagar via <strong className="text-foreground">PIX</strong> (QR Code
-                          instantâneo aqui na tela) ou{" "}
-                          <strong className="text-foreground">Cartão</strong> pela{" "}
-                          <strong className="text-foreground">AbacatePay</strong>.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {pixReady && (
-                            <button
-                              type="button"
-                              disabled={payingMethod !== null}
-                              onClick={() => void handleCheckout("pix")}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-                            >
-                              <QrCode className="size-3.5" />
-                              {payingMethod === "pix"
-                                ? "Gerando QR Code..."
-                                : activePixCode || activePixQr
-                                  ? "Gerar novo QR Code PIX"
-                                  : "Gerar QR Code PIX"}
-                            </button>
-                          )}
-                          {cardReady && (
-                            <button
-                              type="button"
-                              disabled={payingMethod !== null}
-                              onClick={handleCardButtonClick}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-                            >
-                              <CreditCard className="size-3.5" />
-                              {payingMethod === "card"
-                                ? "Iniciando checkout..."
-                                : "Pagar com Cartão"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
 
-                      {/* Internal PIX QR Code Box */}
-                      {(activePixQr || activePixCode) && (
-                        <div className="rounded-xl border border-emerald-500/30 bg-card/80 p-4 sm:p-5">
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
-                              <QrCode className="size-4" />
-                              <span>PIX Instantâneo — QR Code Interno (AbacatePay)</span>
-                            </div>
-                            {pixRemainingSec !== null && (
-                              <span className="font-mono text-[11px] text-muted-foreground">
-                                {pixRemainingSec > 0
-                                  ? `Expira em ${Math.floor(pixRemainingSec / 60)}m ${String(
-                                      pixRemainingSec % 60,
-                                    ).padStart(2, "0")}s`
-                                  : "Código expirado — gere um novo acima"}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-                            {activePixQr && (
-                              <div className="shrink-0 rounded-xl bg-white p-3 shadow-sm">
-                                <img
-                                  src={normalizeQrDataUrl(activePixQr)}
-                                  alt="QR Code PIX"
-                                  className="size-44 object-contain"
-                                />
-                              </div>
-                            )}
-
-                            <div className="flex w-full flex-1 flex-col gap-2.5">
-                              {activePixCode && (
-                                <>
-                                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                    PIX Copia e Cola
-                                  </label>
-                                  <textarea
-                                    readOnly
-                                    rows={3}
-                                    value={activePixCode}
-                                    className="w-full rounded-xl border border-border bg-background p-2.5 font-mono text-[11px] text-foreground focus:outline-none"
-                                  />
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={handleCopyPix}
-                                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 cursor-pointer"
-                                    >
-                                      {copied ? (
-                                        <Check className="size-3.5" />
-                                      ) : (
-                                        <Copy className="size-3.5" />
-                                      )}
-                                      {copied ? "Código copiado!" : "Copiar código PIX"}
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                <RefreshCw className="size-3 animate-spin" />
-                                Aguardando confirmação automática após o pagamento no seu banco...
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* AbacatePay Card Hosted Checkout Link */}
-                      {activeCardLink && (
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-300">
-                          <span>Checkout seguro AbacatePay gerado!</span>
-                          <a
-                            href={activeCardLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-semibold underline"
-                          >
-                            Abrir checkout AbacatePay <ExternalLink className="size-3" />
-                          </a>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {checkoutError && (
-                    <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
-                      {checkoutError}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Compact History */}
-              <div>
-                <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                  Histórico de Mensalidades
-                </h3>
-                {billing.history.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
+                {historyList.length === 0 ? (
+                  <div className="rounded-xl border border-border/50 bg-background/40 p-6 text-center text-xs text-muted-foreground">
                     Nenhum pagamento registrado até o momento.
-                  </p>
+                  </div>
                 ) : (
-                  <div className="space-y-1 text-xs">
-                    {billing.history.slice(0, 8).map((inv) => {
+                  <div className="space-y-2 text-xs">
+                    {historyList.slice(0, 10).map((inv) => {
+                      const effStatus = getEffectiveInvoiceStatus(inv);
+                      const isInvPaid = effStatus === "paid";
+                      const isInvOverdueUnpaid = !isInvPaid && effStatus === "overdue";
                       const isInvInstallment =
                         inv.billing_cycle === "yearly" &&
                         (Boolean(inv.allow_installments) || inv.installments === 12);
@@ -714,7 +965,7 @@ export default function CustomerFinancialPage() {
                         ? Math.round(inv.amount_cents / 12)
                         : inv.amount_cents;
                       const isSelectable =
-                        inv.status === "pending" || inv.status === "overdue";
+                        !isInvPaid && (effStatus === "pending" || effStatus === "overdue");
                       const isSelected = activeInvoice?.id === inv.id;
 
                       return (
@@ -728,32 +979,41 @@ export default function CustomerFinancialPage() {
                               setCheckoutError("");
                             }
                           }}
-                          className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                            isSelected
-                              ? "border border-primary/40 bg-primary/10"
-                              : isSelectable
-                                ? "hover:bg-background/50 cursor-pointer"
-                                : "hover:bg-background/30 cursor-default"
+                          className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left transition ${
+                            isSelected && isSelectable
+                              ? "border-primary/50 bg-primary/10"
+                              : isInvOverdueUnpaid
+                                ? "border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10 cursor-pointer"
+                                : isSelectable
+                                  ? "border-border/60 bg-background/40 hover:border-border hover:bg-background/70 cursor-pointer"
+                                  : "border-border/50 bg-background/30 cursor-default"
                           }`}
                         >
-                          <div>
-                            <span className="font-semibold text-foreground">{inv.plan_name}</span>
-                            <span className="ml-2 text-muted-foreground">
-                              • Venc. {formatDate(inv.due_date)}
-                            </span>
-                            {isSelected && isSelectable && (
-                              <span className="ml-2 text-[10px] font-semibold uppercase text-primary">
-                                • Selecionada
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="truncate font-semibold text-foreground">
+                                {inv.plan_name}
                               </span>
-                            )}
+                              {isSelected && isSelectable && (
+                                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">
+                                  Selecionada
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">
+                              {isInvPaid && inv.paid_at
+                                ? `Pago em ${formatDate(inv.paid_at)} • Venc. ${formatDate(inv.due_date)}`
+                                : `Venc. ${formatDate(inv.due_date)}`}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
+
+                          <div className="flex shrink-0 flex-col items-end gap-1">
                             <span className="font-mono font-semibold tabular-nums text-foreground">
                               {isInvInstallment
                                 ? `${formatCurrencyCents(installmentCents)}/mês`
                                 : formatCurrencyCents(inv.amount_cents)}
                             </span>
-                            <InvoiceStatusBadge status={inv.status} />
+                            <InvoiceStatusBadge status={effStatus} />
                           </div>
                         </button>
                       );
@@ -761,12 +1021,12 @@ export default function CustomerFinancialPage() {
                   </div>
                 )}
               </div>
-            </>
-          ) : null}
-        </div>
+            </div>
+          </>
+        ) : null}
       </div>
 
-      {/* 3D Credit Card Modal (used when AbacatePay transparent card SDK is configured) */}
+      {/* 3D Credit Card Modal */}
       {showCardModal && billing && (
         <CreditCard3DForm
           amountCents={activeAmountCents}

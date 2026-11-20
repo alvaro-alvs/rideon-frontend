@@ -98,13 +98,13 @@ const PAYMENT_METHOD_OPTIONS: Array<{
   {
     id: "pix",
     label: "PIX",
-    description: "QR Code e Copia e Cola instantâneo via AbacatePay",
+    description: "QR Code e Copia e Cola instantâneo",
     icon: QrCode,
   },
   {
     id: "card",
     label: "Cartão de Crédito",
-    description: "Checkout seguro via AbacatePay",
+    description: "Pagamento online com cartão de crédito",
     icon: CreditCard,
   },
   {

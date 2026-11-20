@@ -435,7 +435,22 @@ export default function AdminFinancialPage() {
               </p>
             ) : (
               <div className="max-h-80 divide-y divide-border/50 overflow-y-auto text-xs">
-                {customerInvoices.map((inv) => (
+                {customerInvoices.map((inv) => {
+                  const isPaid = inv.status === "paid" || Boolean(inv.paid_at);
+                  const statusLabel = isPaid
+                    ? "Paga"
+                    : inv.status === "overdue"
+                      ? "Vencida"
+                      : inv.status === "cancelled"
+                        ? "Cancelada"
+                        : "Em aberto";
+                  const statusColor = isPaid
+                    ? "text-emerald-400"
+                    : inv.status === "overdue"
+                      ? "text-rose-400"
+                      : "text-amber-400";
+
+                  return (
                   <div
                     key={inv.id}
                     className="flex flex-wrap items-center justify-between gap-2 py-3"
@@ -445,8 +460,8 @@ export default function AdminFinancialPage() {
                         {inv.plan_name} • {formatCurrencyCents(inv.amount_cents)}
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        {inv.status === "paid" ? "Pago em " : "Vencimento "}
-                        {formatDate(inv.status === "paid" ? inv.paid_at : inv.due_date)} •{" "}
+                        {isPaid ? "Pago em " : "Vencimento "}
+                        {formatDate(isPaid ? (inv.paid_at || inv.due_date) : inv.due_date)} •{" "}
                         {inv.billing_cycle === "yearly"
                           ? inv.allow_installments
                             ? "Anual (12x)"
@@ -454,11 +469,9 @@ export default function AdminFinancialPage() {
                           : inv.billing_cycle === "one_time"
                             ? "Única"
                             : "Mensal"} •{" "}
-                        {inv.status === "paid"
-                          ? "Paga"
-                          : inv.status === "overdue"
-                            ? "Vencida"
-                            : "Em aberto"}
+                        <span className={`font-semibold ${statusColor}`}>
+                          {statusLabel}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -481,7 +494,8 @@ export default function AdminFinancialPage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
