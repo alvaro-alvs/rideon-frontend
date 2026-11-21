@@ -133,6 +133,7 @@ const VALID_CLIENT_ALERT_TYPES = new Set([
   "gps_blind_enter",
   "gps_blind_exit",
   "power_off",
+  "vehicle_stopped",
 ]);
 
 function isRelevantClientNotification(item: BackendAlert): boolean {
@@ -189,7 +190,8 @@ function resolveAlertCategory(type: string): NotificationItem["type"] {
     type === "low_external_power" ||
     type === "gps_blind_enter" ||
     type === "gps_blind_exit" ||
-    type === "power_off"
+    type === "power_off" ||
+    type === "vehicle_stopped"
   ) {
     return "telemetry";
   }
@@ -242,6 +244,8 @@ function resolveAlertTitle(item: BackendAlert): string {
       return "Saída de Ponto Cego GPS";
     case "power_off":
       return "Rastreador Desligado";
+    case "vehicle_stopped":
+      return "Veículo Parado • Trajeto Salvo";
     default:
       return item.message ? item.message.split(":")[0] : "Notificação";
   }

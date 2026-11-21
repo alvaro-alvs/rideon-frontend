@@ -66,6 +66,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (master) {
     visibleNavItems = [
       { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Trajetos", href: "/dashboard/history", icon: History },
       { label: "Gerentes", href: "/admin/managers", icon: Building2, badge: "Master" },
       { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Global" },
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Global" },
@@ -77,6 +78,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   } else if (manager) {
     visibleNavItems = [
       { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Trajetos", href: "/dashboard/history", icon: History },
       { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Carteira" },
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Frota" },
       { label: "Equipamentos", href: "/admin/devices", icon: Cpu, badge: "IMEI" },
