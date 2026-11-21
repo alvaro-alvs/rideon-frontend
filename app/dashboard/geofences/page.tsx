@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Clock,
+  Crosshair,
   FileSearch,
   History,
   Plus,
@@ -12,13 +13,21 @@ import {
   ShieldCheck,
   Terminal,
   Trash2,
+  Wifi,
+  WifiOff,
+  X,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
-import { isValidCoordinate } from "@/lib/geo";
+import {
+  evaluateGeofenceLiveMetrics,
+  formatArea,
+  formatDistanceMeters,
+  isValidCoordinate,
+} from "@/lib/geo";
 import type {
   CommandAuditItem,
   GeofenceAuditItem,
@@ -30,6 +39,34 @@ import type {
   LatLngPoint,
 } from "@/lib/types/protection";
 
+function resolveWsUrl(token: string): string {
+  const envWs = process.env.NEXT_PUBLIC_WS_URL;
+  if (typeof window !== "undefined") {
+    const isHttps = window.location.protocol === "https:";
+    const protocol = isHttps ? "wss:" : "ws:";
+    if (envWs) {
+      try {
+        const parsed = new URL(envWs, window.location.origin);
+        if (
+          window.location.hostname !== "localhost" &&
+          window.location.hostname !== "127.0.0.1" &&
+          (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+        ) {
+          parsed.hostname = window.location.hostname;
+        }
+        if (isHttps && parsed.protocol === "ws:") parsed.protocol = "wss:";
+        parsed.searchParams.set("token", token);
+        return parsed.toString();
+      } catch {
+        // fallback below
+      }
+    }
+    const host = window.location.hostname || "localhost";
+    return `${protocol}//${host}:8080/ws?token=${encodeURIComponent(token)}`;
+  }
+  return `${envWs || "ws://localhost:8080/ws"}?token=${encodeURIComponent(token)}`;
+}
+
 export default function GeofencesPage() {
   const { motorcycle, motorcycles, selectedVehicleId, setSelectedVehicleId } = useMotorcycle();
   const locationState = useMotorcycleLocation(motorcycle?.id);
@@ -39,6 +76,15 @@ export default function GeofencesPage() {
   const [events, setEvents] = useState<GeofenceEventItem[]>([]);
   const [gfAudits, setGfAudits] = useState<GeofenceAuditItem[]>([]);
   const [cmdAudits, setCmdAudits] = useState<CommandAuditItem[]>([]);
+
+  // Real-time vehicle telemetry state
+  const [wsConnected, setWsConnected] = useState(false);
+  const [livePos, setLivePos] = useState<LatLngPoint | null>(null);
+  const [liveSpeed, setLiveSpeed] = useState<number>(0);
+  const [liveHeading, setLiveHeading] = useState<number>(0);
+  const [history, setHistory] = useState<LatLngPoint[]>([]);
+  const [inspectedFenceId, setInspectedFenceId] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   // Builder State
   const [name, setName] = useState("");
@@ -82,19 +128,143 @@ export default function GeofencesPage() {
   }, [motorcycle?.id]);
 
   useEffect(() => {
+    setInspectedFenceId(null);
+    setLivePos(null);
+    setHistory([]);
+    setDraftCenter(null);
     void loadAll();
   }, [loadAll]);
 
-  const mapCenter =
-    locationState.status === "ok" &&
-    isValidCoordinate(locationState.data.position.latitude, locationState.data.position.longitude)
-      ? locationState.data.position
-      : isValidCoordinate(motorcycle?.last_position?.latitude, motorcycle?.last_position?.longitude)
-        ? {
-            latitude: motorcycle!.last_position!.latitude,
-            longitude: motorcycle!.last_position!.longitude,
+  // Seed live position from initial location hook or cached last_position
+  useEffect(() => {
+    if (
+      locationState.status === "ok" &&
+      isValidCoordinate(locationState.data.position.latitude, locationState.data.position.longitude)
+    ) {
+      setLivePos((prev) => prev ?? locationState.data.position);
+      setLiveSpeed((prev) => prev || locationState.data.motion?.speed || 0);
+      setLiveHeading((prev) => prev || locationState.data.motion?.heading || 0);
+    } else if (
+      isValidCoordinate(motorcycle?.last_position?.latitude, motorcycle?.last_position?.longitude)
+    ) {
+      setLivePos((prev) =>
+        prev ?? {
+          latitude: motorcycle!.last_position!.latitude,
+          longitude: motorcycle!.last_position!.longitude,
+        },
+      );
+    }
+  }, [locationState, motorcycle]);
+
+  // Live WebSocket telemetry + 4s REST fallback polling
+  useEffect(() => {
+    const motoId = motorcycle?.id;
+    if (!motoId) return;
+
+    let active = true;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connectWs = async () => {
+      try {
+        const res = await fetch("/api/auth/token", { cache: "no-store" });
+        if (!res.ok || !active) return;
+        const { token } = (await res.json()) as { token?: string };
+        if (!token || !active) return;
+
+        const ws = new WebSocket(resolveWsUrl(token));
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (active) setWsConnected(true);
+        };
+
+        ws.onmessage = (event) => {
+          if (!active) return;
+          try {
+            const raw = JSON.parse(event.data) as Record<string, unknown>;
+            if (raw.event_type === "geofence_event") {
+              const evMoto = String(raw.motorcycle_id || "").toLowerCase();
+              if (evMoto === motoId.toLowerCase()) {
+                const ev = raw.event as GeofenceEventItem | undefined;
+                if (ev) {
+                  setEvents((prev) => [ev, ...prev].slice(0, 50));
+                }
+              }
+              return;
+            }
+
+            const rawMotoId = String(
+              raw.motorcycle_id ?? raw.motorcycleId ?? raw.MotorcycleID ?? "",
+            ).toLowerCase();
+            if (rawMotoId && rawMotoId !== motoId.toLowerCase()) return;
+
+            const pos = (raw.position ?? raw.Position) as Record<string, unknown> | undefined;
+            if (!pos) return;
+            const lat = Number(pos.latitude ?? pos.Latitude);
+            const lng = Number(pos.longitude ?? pos.Longitude);
+            if (!isValidCoordinate(lat, lng)) return;
+
+            const motion = (raw.motion ?? raw.Motion) as Record<string, unknown> | undefined;
+            const spd = Number(motion?.speed ?? motion?.Speed ?? 0);
+            const hdg = Number(motion?.heading ?? motion?.Heading ?? 0);
+
+            const pt = { latitude: lat, longitude: lng };
+            setLivePos(pt);
+            if (Number.isFinite(spd)) setLiveSpeed(spd);
+            if (Number.isFinite(hdg)) setLiveHeading(hdg);
+            setHistory((prev) => [...prev.slice(-49), pt]);
+          } catch {
+            // ignore non-telemetry payload
           }
-        : { latitude: -23.55052, longitude: -46.633308 };
+        };
+
+        ws.onclose = () => {
+          if (!active) return;
+          setWsConnected(false);
+          reconnectTimer = setTimeout(() => void connectWs(), 4000);
+        };
+        ws.onerror = () => {
+          if (active) setWsConnected(false);
+        };
+      } catch {
+        if (active) setWsConnected(false);
+      }
+    };
+
+    void connectWs();
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/motorcycles/${motoId}/location`, { cache: "no-store" });
+        if (!res.ok || !active) return;
+        const body = (await res.json()) as {
+          position?: LatLngPoint;
+          motion?: { speed?: number; heading?: number };
+        };
+        if (body.position && isValidCoordinate(body.position.latitude, body.position.longitude)) {
+          setLivePos(body.position);
+          if (typeof body.motion?.speed === "number") setLiveSpeed(body.motion.speed);
+          if (typeof body.motion?.heading === "number") setLiveHeading(body.motion.heading);
+          setHistory((prev) => [...prev.slice(-49), body.position!]);
+        }
+      } catch {
+        // ignore transient polling failure
+      }
+    }, 4000);
+
+    return () => {
+      active = false;
+      setWsConnected(false);
+      clearInterval(pollInterval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [motorcycle?.id]);
+
+  const mapCenter = livePos ?? { latitude: -23.55052, longitude: -46.633308 };
 
   useEffect(() => {
     if (!draftCenter && isValidCoordinate(mapCenter.latitude, mapCenter.longitude)) {
@@ -103,12 +273,33 @@ export default function GeofencesPage() {
   }, [draftCenter, mapCenter]);
 
   const handleMapClick = (coords: LatLngPoint) => {
+    setInspectedFenceId(null);
     if (shape === "circle") {
       setDraftCenter(coords);
     } else {
       setDraftPolygon((prev) => [...prev, coords]);
     }
   };
+
+  const inspectedFence = useMemo(
+    () => geofences.find((g) => g.id === inspectedFenceId) ?? null,
+    [geofences, inspectedFenceId],
+  );
+
+  const liveAreaMetrics = useMemo(() => {
+    if (inspectedFence) {
+      return evaluateGeofenceLiveMetrics(livePos, inspectedFence.shape, {
+        center: inspectedFence.center,
+        radiusMeters: inspectedFence.radius_meters,
+        polygon: inspectedFence.polygon,
+      });
+    }
+    return evaluateGeofenceLiveMetrics(livePos, shape, {
+      center: draftCenter,
+      radiusMeters,
+      polygon: draftPolygon,
+    });
+  }, [inspectedFence, livePos, shape, draftCenter, radiusMeters, draftPolygon]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +347,7 @@ export default function GeofencesPage() {
       }
       setName("");
       setDraftPolygon([]);
+      setInspectedFenceId(null);
       setFeedback("Cerca criada com sucesso e monitorada em tempo real!");
       await loadAll();
     } finally {
@@ -173,11 +365,40 @@ export default function GeofencesPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (inspectedFenceId === id) setInspectedFenceId(null);
     await fetch(`/api/geofences/${id}`, { method: "DELETE" });
     await loadAll();
   };
 
   const hasAnchor = geofences.some((g) => g.kind === "anchor" && g.active);
+  const activeBreach =
+    liveAreaMetrics.inside !== null &&
+    ((inspectedFence?.kind ?? kind) === "restricted_zone"
+      ? liveAreaMetrics.inside
+      : (inspectedFence?.kind ?? kind) === "safe_zone" ||
+          (inspectedFence?.kind ?? kind) === "anchor"
+        ? !liveAreaMetrics.inside
+        : false);
+
+  const activeDraftCircle = inspectedFence
+    ? inspectedFence.shape === "circle" && inspectedFence.center
+      ? {
+          center: inspectedFence.center,
+          radiusMeters: inspectedFence.radius_meters ?? 150,
+          color: "#38bdf8",
+        }
+      : null
+    : shape === "circle" && draftCenter
+      ? { center: draftCenter, radiusMeters }
+      : null;
+
+  const activeDraftPolygon = inspectedFence
+    ? inspectedFence.shape === "polygon"
+      ? inspectedFence.polygon ?? []
+      : []
+    : shape === "polygon"
+      ? draftPolygon
+      : [];
 
   return (
     <DashboardShell>
@@ -205,40 +426,127 @@ export default function GeofencesPage() {
           )}
         </div>
 
-        {/* Map + Builder Grid */}
+        {/* Map + Real-time Area Visualizer + Builder Grid */}
         <div className="grid gap-5 lg:grid-cols-12">
-          <div className="lg:col-span-7 rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3 text-xs">
+          <div className="lg:col-span-7 rounded-2xl border border-border bg-card overflow-hidden flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-xs">
               <span className="font-semibold text-foreground flex items-center gap-2">
                 <Radar className="size-4 text-primary" />
-                {shape === "circle"
-                  ? "Clique no mapa para posicionar o centro do círculo"
-                  : `Clique no mapa para adicionar vértices (${draftPolygon.length} pontos)`}
+                {inspectedFence
+                  ? `Visualizando: ${inspectedFence.name}`
+                  : shape === "circle"
+                    ? "Clique no mapa para posicionar o centro do círculo"
+                    : `Clique no mapa para adicionar vértices (${draftPolygon.length} pontos)`}
               </span>
-              {shape === "polygon" && draftPolygon.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setDraftPolygon([])}
-                  className="text-red-400 hover:underline font-semibold cursor-pointer"
-                >
-                  Limpar pontos
-                </button>
-              )}
+
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/70 px-2.5 py-1 text-[11px] font-semibold">
+                  {wsConnected ? (
+                    <>
+                      <Wifi className="size-3 text-emerald-400" />
+                      <span className="text-emerald-400">Ao Vivo</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="size-3 text-amber-400" />
+                      <span className="text-amber-400">Polling 4s</span>
+                    </>
+                  )}
+                  <span className="text-muted-foreground">• {Math.round(liveSpeed)} km/h</span>
+                </span>
+
+                {inspectedFence && (
+                  <button
+                    type="button"
+                    onClick={() => setInspectedFenceId(null)}
+                    className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-bold text-sky-400 hover:bg-sky-500/25 cursor-pointer"
+                  >
+                    <X className="size-3" /> Rascunho
+                  </button>
+                )}
+
+                {!inspectedFence && shape === "circle" && livePos && (
+                  <button
+                    type="button"
+                    onClick={() => setDraftCenter(livePos)}
+                    className="inline-flex items-center gap-1 text-sky-400 hover:underline font-semibold cursor-pointer"
+                  >
+                    <Crosshair className="size-3.5" /> Centro no GPS
+                  </button>
+                )}
+
+                {!inspectedFence && shape === "polygon" && draftPolygon.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setDraftPolygon([])}
+                    className="text-red-400 hover:underline font-semibold cursor-pointer"
+                  >
+                    Limpar pontos
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="h-[420px]">
+
+            <div className="h-[380px]">
               <GoogleMapView
                 position={mapCenter}
+                heading={liveHeading}
+                history={history}
                 geofences={geofences}
-                draftCircle={
-                  shape === "circle" && draftCenter
-                    ? { center: draftCenter, radiusMeters }
-                    : null
-                }
-                draftPolygon={shape === "polygon" ? draftPolygon : []}
-                pulseMode={hasAnchor ? "anchor" : "none"}
+                draftCircle={activeDraftCircle}
+                draftPolygon={activeDraftPolygon}
+                pulseMode={activeBreach ? "breach" : hasAnchor ? "anchor" : "none"}
                 onMapClick={handleMapClick}
                 zoom={15}
               />
+            </div>
+
+            {/* Real-time Area Telemetry Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 border-t border-border bg-background/40 p-3.5">
+              <div className="rounded-xl border border-border bg-card px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Área Real-Time
+                </p>
+                <p className="font-mono text-sm font-bold text-foreground">
+                  {formatArea(liveAreaMetrics.areaSqMeters)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-card px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Perímetro
+                </p>
+                <p className="font-mono text-sm font-bold text-foreground">
+                  {formatDistanceMeters(liveAreaMetrics.perimeterMeters)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-card px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Veículo vs Área
+                </p>
+                <p
+                  className={`text-xs font-bold mt-0.5 ${
+                    liveAreaMetrics.inside === null
+                      ? "text-muted-foreground"
+                      : liveAreaMetrics.inside
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                  }`}
+                >
+                  {liveAreaMetrics.inside === null
+                    ? "Sem sinal GPS"
+                    : liveAreaMetrics.inside
+                      ? "● Dentro da área"
+                      : "● Fora da área"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-card px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Dist. da Borda
+                </p>
+                <p className="font-mono text-sm font-bold text-foreground">
+                  {formatDistanceMeters(liveAreaMetrics.distanceToBorderMeters)}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -398,42 +706,70 @@ export default function GeofencesPage() {
                 {geofences.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Nenhuma cerca configurada para este veículo.</p>
                 ) : (
-                  geofences.map((f) => (
-                    <div
-                      key={f.id}
-                      className="rounded-xl border border-border bg-background/50 p-3.5 space-y-2.5"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-bold text-foreground">{f.name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {f.kind} • {f.shape === "circle" ? `${Math.round(f.radius_meters || 0)}m` : `${f.polygon?.length || 0} vértices`}
-                          </p>
+                  geofences.map((f) => {
+                    const isInspected = inspectedFenceId === f.id;
+                    const fenceMetrics = evaluateGeofenceLiveMetrics(livePos, f.shape, {
+                      center: f.center,
+                      radiusMeters: f.radius_meters,
+                      polygon: f.polygon,
+                    });
+                    return (
+                      <div
+                        key={f.id}
+                        onClick={() => setInspectedFenceId(isInspected ? null : f.id)}
+                        className={`rounded-xl border p-3.5 space-y-2.5 transition cursor-pointer ${
+                          isInspected
+                            ? "border-sky-400 bg-sky-500/10"
+                            : "border-border bg-background/50 hover:border-primary/50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold text-foreground">{f.name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {formatArea(fenceMetrics.areaSqMeters)} •{" "}
+                              {f.shape === "circle"
+                                ? `${Math.round(f.radius_meters || 0)}m`
+                                : `${f.polygon?.length || 0} vértices`}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleToggle(f);
+                            }}
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase cursor-pointer ${
+                              f.active
+                                ? "bg-emerald-500/15 text-emerald-400"
+                                : "bg-secondary text-muted-foreground"
+                            }`}
+                          >
+                            {f.active ? "Ativa" : "Pausada"}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => void handleToggle(f)}
-                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase cursor-pointer ${
-                            f.active
-                              ? "bg-emerald-500/15 text-emerald-400"
-                              : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {f.active ? "Ativa" : "Pausada"}
-                        </button>
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>
+                            {fenceMetrics.inside === null
+                              ? `Regra: ${f.trigger_on}`
+                              : fenceMetrics.inside
+                                ? "● Dentro agora"
+                                : "● Fora agora"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDelete(f.id);
+                            }}
+                            className="inline-flex items-center gap-1 text-red-400 hover:underline cursor-pointer"
+                          >
+                            <Trash2 className="size-3" /> Excluir
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                        <span>Regra: {f.trigger_on}</span>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(f.id)}
-                          className="inline-flex items-center gap-1 text-red-400 hover:underline cursor-pointer"
-                        >
-                          <Trash2 className="size-3" /> Excluir
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
