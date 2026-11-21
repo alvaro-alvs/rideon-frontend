@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Palette,
+  Radar,
   Settings,
   Users,
   X,
@@ -66,6 +67,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (master) {
     visibleNavItems = [
       { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Cercas & Proteção", href: "/dashboard/geofences", icon: Radar },
       { label: "Trajetos", href: "/dashboard/history", icon: History },
       { label: "Gerentes", href: "/admin/managers", icon: Building2, badge: "Master" },
       { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Global" },
@@ -78,6 +80,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   } else if (manager) {
     visibleNavItems = [
       { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Cercas & Proteção", href: "/dashboard/geofences", icon: Radar },
       { label: "Trajetos", href: "/dashboard/history", icon: History },
       { label: "Clientes", href: "/admin/customers", icon: Users, badge: "Carteira" },
       { label: "Veículos & Frota", href: "/admin/vehicles", icon: Bike, badge: "Frota" },
@@ -90,6 +93,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     // Cliente (Rider) — 100% focado em UX, sem menus administrativos
     visibleNavItems = [
       { label: "Visão Geral", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Cercas & Proteção", href: "/dashboard/geofences", icon: Radar },
       { label: "Meus Veículos", href: "/dashboard/vehicles", icon: Bike },
       { label: "Histórico", href: "/dashboard/history", icon: History },
       { label: "Financeiro", href: "/dashboard/financial", icon: CreditCard },

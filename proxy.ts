@@ -21,6 +21,7 @@ export async function proxy(request: NextRequest) {
   const isProtectedApi =
     pathname.startsWith("/api/") &&
     !pathname.startsWith("/api/auth/") &&
+    !pathname.startsWith("/api/public/") &&
     pathname !== "/api/health";
   const isProtectedPage =
     pathname.startsWith("/dashboard") ||

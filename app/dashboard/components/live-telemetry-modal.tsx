@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   BatteryCharging,
@@ -8,8 +8,13 @@ import {
   Info,
   MapPin,
   MapPinOff,
+  PanelRightClose,
+  PanelRightOpen,
+  Radar,
   Radio,
   RefreshCw,
+  Share2,
+  ShieldAlert,
   Wifi,
   WifiOff,
   X,
@@ -17,13 +22,19 @@ import {
 } from "lucide-react";
 
 import { GoogleMapView } from "./google-map-view";
+import { CommandControlPanel } from "./command-control-modal";
+import { ShareLinkPanel } from "./share-link-modal";
+import { GeofenceQuickPanel } from "./geofence-panel";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
 import { isValidCoordinate } from "@/lib/geo";
+import type { GeofenceEventItem, GeofenceItem } from "@/lib/types/protection";
 
 interface LiveTelemetryModalProps {
   isOpen: boolean;
   onClose: () => void;
   motorcycleId?: string;
+  isAdmin?: boolean;
+  initialTab?: "telemetry" | "geofences" | "commands" | "share";
   motorcycleInfo?: {
     model: string;
     licensePlate: string;
@@ -54,7 +65,6 @@ export interface TelemetryPoint {
   };
 }
 
-// Ponto neutro usado enquanto a localização real ainda não foi carregada
 const NEUTRAL_POSITION: TelemetryPoint = {
   position: { latitude: 0, longitude: 0 },
 };
@@ -67,6 +77,8 @@ export function LiveTelemetryModal(props: LiveTelemetryModalProps) {
 function LiveTelemetryModalContent({
   onClose,
   motorcycleId,
+  isAdmin = false,
+  initialTab = "telemetry",
   motorcycleInfo = { model: "Honda CG 160", licensePlate: "ABC1234" },
 }: LiveTelemetryModalProps) {
   const locationState = useMotorcycleLocation(motorcycleId);
@@ -76,22 +88,20 @@ function LiveTelemetryModalContent({
   >("connecting");
 
   const [telemetry, setTelemetry] = useState<TelemetryPoint>(NEUTRAL_POSITION);
-  const [history, setHistory] = useState<
-    Array<{ latitude: number; longitude: number }>
-  >([]);
+  const [history, setHistory] = useState<Array<{ latitude: number; longitude: number }>>([]);
+  const [geofences, setGeofences] = useState<GeofenceItem[]>([]);
+  const [events, setEvents] = useState<GeofenceEventItem[]>([]);
+  const [breachBanner, setBreachBanner] = useState<string | null>(null);
+  const [anchorBusy, setAnchorBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<"telemetry" | "geofences" | "commands" | "share">(initialTab);
+  const [panelOpen, setPanelOpen] = useState(true);
   const seededRef = useRef(false);
 
-  // Seed com a última localização persistida assim que a API responder
   useEffect(() => {
     if (locationState.status === "ok" && !seededRef.current) {
       seededRef.current = true;
       setTelemetry(locationState.data);
-      if (
-        isValidCoordinate(
-          locationState.data.position.latitude,
-          locationState.data.position.longitude,
-        )
-      ) {
+      if (isValidCoordinate(locationState.data.position.latitude, locationState.data.position.longitude)) {
         setHistory([
           {
             latitude: locationState.data.position.latitude,
@@ -102,12 +112,32 @@ function LiveTelemetryModalContent({
     }
   }, [locationState]);
 
+  const loadGeofenceData = useCallback(async () => {
+    if (!motorcycleId) return;
+    const [gfRes, evRes] = await Promise.all([
+      fetch(`/api/geofences?motorcycle_id=${motorcycleId}`, { cache: "no-store" }),
+      fetch(`/api/geofences/events?motorcycle_id=${motorcycleId}&limit=15`, { cache: "no-store" }),
+    ]);
+    if (gfRes.ok) {
+      const data = (await gfRes.json()) as { data?: GeofenceItem[] };
+      setGeofences(Array.isArray(data.data) ? data.data : []);
+    }
+    if (evRes.ok) {
+      const data = (await evRes.json()) as { data?: GeofenceEventItem[] };
+      setEvents(Array.isArray(data.data) ? data.data : []);
+    }
+  }, [motorcycleId]);
+
+  useEffect(() => {
+    void loadGeofenceData();
+  }, [loadGeofenceData]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const intentionalCloseRef = useRef(false);
   const retryCountRef = useRef(0);
+  const [reconnectTrigger, setReconnectTrigger] = useState(0);
 
-  // Determina URL resiliente do WebSocket (lida com redes locais, IP e HTTPS)
   function resolveWsUrl(token: string): string {
     const envWs = process.env.NEXT_PUBLIC_WS_URL;
     if (typeof window !== "undefined") {
@@ -130,7 +160,7 @@ function LiveTelemetryModalContent({
           parsed.searchParams.set("token", token);
           return parsed.toString();
         } catch {
-          // Segue para fallback se envWs não for URL absoluta válida
+          // fallback
         }
       }
 
@@ -141,7 +171,6 @@ function LiveTelemetryModalContent({
     return `${envWs || "ws://localhost:8080/ws"}?token=${encodeURIComponent(token)}`;
   }
 
-  // Maps PascalCase (Go backend struct) ou camelCase/snake_case payload to TelemetryPoint
   function mapToTelemetry(raw: Record<string, unknown>): TelemetryPoint | null {
     const pos = (raw.Position || raw.position) as Record<string, unknown> | undefined;
     if (!pos) return null;
@@ -177,13 +206,14 @@ function LiveTelemetryModalContent({
         ? {
             battery: toNum(device.Battery ?? device.battery),
             signal: toNum(device.Signal ?? device.signal),
-            ignition: typeof (device.Ignition ?? device.ignition) === "boolean" ? ((device.Ignition ?? device.ignition) as boolean) : undefined,
+            ignition:
+              typeof (device.Ignition ?? device.ignition) === "boolean"
+                ? ((device.Ignition ?? device.ignition) as boolean)
+                : undefined,
           }
         : undefined,
     };
   }
-
-  const [reconnectTrigger, setReconnectTrigger] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -194,37 +224,22 @@ function LiveTelemetryModalContent({
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-
       setConnectionStatus("connecting");
 
       try {
         const res = await fetch("/api/auth/token", { cache: "no-store" });
         if (!isMounted) return;
-
         if (!res.ok) {
-          console.warn(
-            "[WS] Falha ao obter token de autenticação (/api/auth/token status:",
-            res.status,
-            ")",
-          );
           setConnectionStatus("error");
           return;
         }
-
         const data = await res.json();
-        if (!isMounted) return;
-
-        const token = data.token;
-        if (!token) {
-          console.warn("[WS] Token de autenticação não retornado pela API");
+        if (!isMounted || !data.token) {
           setConnectionStatus("error");
           return;
         }
 
-        const wsUrl = resolveWsUrl(token);
-        console.log("[WS] Conectando ao WebSocket...");
-
-        // Remove handlers do socket anterior antes de fechar para evitar que eventos de close/error espúrios disparem
+        const wsUrl = resolveWsUrl(data.token);
         if (wsRef.current) {
           const oldWs = wsRef.current;
           wsRef.current = null;
@@ -240,38 +255,39 @@ function LiveTelemetryModalContent({
 
         ws.onopen = () => {
           if (!isMounted) return;
-          console.log("[WS] Conectado com sucesso");
           retryCountRef.current = 0;
           setConnectionStatus("connected");
         };
 
         ws.onmessage = (event) => {
           try {
-            const rawData = JSON.parse(event.data);
+            const rawData = JSON.parse(event.data) as Record<string, unknown>;
+            if (rawData.event_type === "geofence_event") {
+              const evMoto = String(rawData.motorcycle_id || "").toLowerCase();
+              if (!motorcycleId || evMoto === motorcycleId.toLowerCase()) {
+                const ev = rawData.event as GeofenceEventItem | undefined;
+                if (ev) {
+                  setEvents((prev) => [ev, ...prev].slice(0, 20));
+                  if (ev.event_type === "exit") {
+                    setBreachBanner(`Alerta de Cerca: saiu de "${ev.geofence_name}"`);
+                    setTimeout(() => setBreachBanner(null), 12000);
+                  }
+                }
+              }
+              return;
+            }
+
             const mapped = mapToTelemetry(rawData);
             if (!mapped || !isMounted) return;
 
-            // Correlaciona imediatamente a telemetria com a motocicleta ativa
             const activeId = (motorcycleId || "").toLowerCase();
             const eventMotoId = (mapped.motorcycle_id || "").toLowerCase();
-            const activeImei = (telemetry.imei || "").toLowerCase();
-            const eventImei = (mapped.imei || "").toLowerCase();
-
             if (activeId && eventMotoId && eventMotoId !== activeId) {
               return;
             }
 
-            if (activeImei && eventImei && eventImei !== activeImei) {
-              return;
-            }
-
             setTelemetry(mapped);
-            if (
-              isValidCoordinate(
-                mapped.position.latitude,
-                mapped.position.longitude,
-              )
-            ) {
+            if (isValidCoordinate(mapped.position.latitude, mapped.position.longitude)) {
               setHistory((prev) => [
                 ...prev.slice(-49),
                 {
@@ -280,65 +296,45 @@ function LiveTelemetryModalContent({
                 },
               ]);
             }
-          } catch (err) {
-            console.error("[WS] Erro ao processar dados de telemetria:", err);
+          } catch {
+            // ignore parse noise
           }
         };
 
         ws.onerror = () => {
           if (!isMounted || intentionalCloseRef.current) return;
-          // Eventos de erro do WebSocket no navegador são vazios ({}) por especificação W3C.
-          // Detalhes de motivo e código de encerramento são capturados no ws.onclose.
-          const sanitizedUrl = wsUrl.replace(/([?&]token=)[^&]+/, "$1***");
-          console.warn(`[WS] Falha na conexão WebSocket com ${sanitizedUrl}`);
           setConnectionStatus("error");
         };
 
-        ws.onclose = (e) => {
+        ws.onclose = () => {
           if (!isMounted) return;
-
           if (intentionalCloseRef.current) {
             setConnectionStatus("disconnected");
             return;
           }
-
-          console.log(
-            `[WS] Desconectado (código: ${e.code}, motivo: "${e.reason || "sem detalhes"}")`,
-          );
           setConnectionStatus("error");
-
-          // Tentativa de reconexão automática com backoff exponencial
           if (retryCountRef.current < 5) {
-            const delay = Math.min(
-              1500 * Math.pow(1.8, retryCountRef.current),
-              10000,
-            );
+            const delay = Math.min(1500 * Math.pow(1.8, retryCountRef.current), 10000);
             retryCountRef.current += 1;
-            console.log(
-              `[WS] Tentando reconectar em ${Math.round(delay)}ms (tentativa ${retryCountRef.current}/5)...`,
-            );
             reconnectTimeoutRef.current = setTimeout(() => {
               if (isMounted && !intentionalCloseRef.current) {
-                connect();
+                void connect();
               }
             }, delay);
           }
         };
-      } catch (err) {
+      } catch {
         if (!isMounted || intentionalCloseRef.current) return;
-        console.warn("[WS] Erro na inicialização:", err);
         setConnectionStatus("error");
       }
     }
 
-    connect();
-
+    void connect();
     return () => {
       isMounted = false;
       intentionalCloseRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
       }
       if (wsRef.current) {
         const ws = wsRef.current;
@@ -352,12 +348,8 @@ function LiveTelemetryModalContent({
     };
   }, [motorcycleId, reconnectTrigger]);
 
-  // 2. High-frequency REST polling fallback / complement (every 3.5s while modal is open)
-  // Garante que, caso o rastreador comece a pontuar enquanto o modal está aberto,
-  // os dados mais recentes sejam refletidos imediatamente sem depender unicamente de push.
   useEffect(() => {
     if (!motorcycleId) return;
-
     let active = true;
 
     const pollLocation = async () => {
@@ -366,64 +358,71 @@ function LiveTelemetryModalContent({
           cache: "no-store",
         });
         if (!active || !res.ok) return;
-
         const data = (await res.json()) as Record<string, unknown>;
         const mapped = mapToTelemetry(data);
         if (!active || !mapped) return;
 
-        if (
-          isValidCoordinate(
-            mapped.position.latitude,
-            mapped.position.longitude,
-          )
-        ) {
+        if (isValidCoordinate(mapped.position.latitude, mapped.position.longitude)) {
           setTelemetry((prev) => {
             const prevTime = prev.timestamp ? new Date(prev.timestamp).getTime() : 0;
             const nextTime = mapped.timestamp ? new Date(mapped.timestamp).getTime() : Date.now();
-            if (nextTime >= prevTime) {
-              return mapped;
-            }
-            return prev;
+            return nextTime >= prevTime ? mapped : prev;
           });
-
           setHistory((prev) => {
             const last = prev[prev.length - 1];
-            if (
-              !last ||
-              last.latitude !== mapped.position.latitude ||
-              last.longitude !== mapped.position.longitude
-            ) {
+            if (!last || last.latitude !== mapped.position.latitude || last.longitude !== mapped.position.longitude) {
               return [
                 ...prev.slice(-49),
-                {
-                  latitude: mapped.position.latitude,
-                  longitude: mapped.position.longitude,
-                },
+                { latitude: mapped.position.latitude, longitude: mapped.position.longitude },
               ];
             }
             return prev;
           });
         }
       } catch {
-        // Silencioso em caso de falha transitória
+        // silent
       }
     };
 
-    // Consulta inicial e loop a cada 3.5 segundos
     void pollLocation();
-    const interval = setInterval(() => {
-      void pollLocation();
-    }, 3500);
-
+    const interval = setInterval(() => void pollLocation(), 3500);
     return () => {
       active = false;
       clearInterval(interval);
     };
   }, [motorcycleId]);
 
+  const handleToggleAnchor = async () => {
+    if (!motorcycleId) return;
+    setAnchorBusy(true);
+    const activeAnchor = geofences.find((g) => g.kind === "anchor" && g.active);
+    try {
+      const res = await fetch(`/api/motorcycles/${motorcycleId}/anchor`, {
+        method: activeAnchor ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: activeAnchor ? undefined : JSON.stringify({ active: true, radius_meters: 60 }),
+      });
+      if (res.ok) {
+        await loadGeofenceData();
+      }
+    } finally {
+      setAnchorBusy(false);
+    }
+  };
+
+  const handleToggleFenceActive = async (fence: GeofenceItem) => {
+    const res = await fetch(`/api/geofences/${fence.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !fence.active }),
+    });
+    if (res.ok) {
+      await loadGeofenceData();
+    }
+  };
+
   const hasValidLocation = Boolean(
-    telemetry &&
-      isValidCoordinate(telemetry.position?.latitude, telemetry.position?.longitude),
+    telemetry && isValidCoordinate(telemetry.position?.latitude, telemetry.position?.longitude),
   );
   const isLoadingLocation =
     (locationState.status === "loading" || locationState.status === "idle") &&
@@ -434,19 +433,21 @@ function LiveTelemetryModalContent({
   const currentBattery = telemetry.device?.battery ?? 0;
   const currentSignal = telemetry.device?.signal ?? 0;
   const currentHeading = telemetry.motion?.heading ?? 0;
+  const hasActiveAnchor = geofences.some((g) => g.kind === "anchor" && g.active);
+  const pulseMode = breachBanner ? "breach" : hasActiveAnchor ? "anchor" : "none";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 md:p-6 animate-in fade-in duration-200">
-      <div className="relative flex h-full w-full max-w-7xl flex-col overflow-hidden border border-border bg-background shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 md:p-5 animate-in fade-in duration-200">
+      <div className="relative flex h-full w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
         {/* Modal Header */}
-        <div className="flex h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded bg-primary/10 text-primary">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card px-4 md:px-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <Radio className="size-5 animate-pulse" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="section-kicker">Monitoramento em Tempo Real</span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="section-kicker">Cockpit em Tempo Real</span>
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                     connectionStatus === "connected"
@@ -458,247 +459,249 @@ function LiveTelemetryModalContent({
                 >
                   {connectionStatus === "connected" ? (
                     <>
-                      <Wifi className="size-3" /> Conectado
+                      <Wifi className="size-3" /> Ao Vivo
                     </>
                   ) : connectionStatus === "connecting" ? (
                     <>
-                      <Zap className="size-3 animate-spin" /> Conectando...
+                      <Zap className="size-3 animate-spin" /> Conectando
                     </>
                   ) : (
                     <>
-                      <WifiOff className="size-3" /> Desconectado
+                      <WifiOff className="size-3" /> Offline
                     </>
                   )}
                 </span>
-                {!hasValidLocation && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                    <MapPinOff className="size-3" /> Sem GPS
+                {hasActiveAnchor && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-400">
+                    <Radar className="size-3 animate-pulse" /> Âncora Armada
                   </span>
                 )}
                 {(connectionStatus === "error" || connectionStatus === "disconnected") && (
                   <button
+                    type="button"
                     onClick={() => {
                       retryCountRef.current = 0;
                       intentionalCloseRef.current = false;
                       setReconnectTrigger((n) => n + 1);
                     }}
-                    className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-400 hover:bg-red-500/20 transition-colors"
+                    className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-400 hover:bg-red-500/20 cursor-pointer"
                   >
                     <RefreshCw className="size-2.5" /> Reconectar
                   </button>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-bold uppercase text-foreground md:text-base">
-                  {motorcycleInfo.model} • <span className="text-muted-foreground">{motorcycleInfo.licensePlate}</span>
-                </h2>
-                {telemetry.imei && (
-                  <span className="rounded bg-secondary/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground border border-border">
-                    IMEI: {telemetry.imei}
-                  </span>
-                )}
-              </div>
+              <h2 className="truncate text-sm font-bold uppercase text-foreground md:text-base">
+                {motorcycleInfo.model} •{" "}
+                <span className="text-muted-foreground">{motorcycleInfo.licensePlate}</span>
+              </h2>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="flex size-10 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-            aria-label="Fechar monitoramento"
-          >
-            <X className="size-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPanelOpen((v) => !v)}
+              title={panelOpen ? "Recolher painel tático" : "Abrir painel tático"}
+              className="hidden lg:inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
+            >
+              {panelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+              <span>{panelOpen ? "Ocultar Painel" : "Controles"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex size-10 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
+              aria-label="Fechar monitoramento"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Modal Content / Map Area */}
-        <div className="relative flex-1 bg-black overflow-hidden">
-          {isLoadingLocation ? (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 backdrop-blur-sm">
-              <span className="relative flex size-10">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-40" />
-                <span className="relative inline-flex size-10 items-center justify-center rounded-full bg-primary/10">
-                  <MapPin className="size-5 text-primary" />
+        {/* Split Content: Map + Tactical Side Panel */}
+        <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
+          {/* Map Area */}
+          <div className="relative flex-1 bg-black overflow-hidden min-h-[300px]">
+            {breachBanner && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full border border-red-500 bg-red-600/95 px-4 py-2 text-xs font-bold text-white shadow-2xl animate-bounce">
+                <ShieldAlert className="size-4" />
+                <span>{breachBanner}</span>
+              </div>
+            )}
+
+            {isLoadingLocation ? (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 backdrop-blur-sm">
+                <span className="relative flex size-10">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-40" />
+                  <span className="relative inline-flex size-10 items-center justify-center rounded-full bg-primary/10">
+                    <MapPin className="size-5 text-primary" />
+                  </span>
                 </span>
-              </span>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Consultando última localização...
-              </p>
-            </div>
-          ) : !hasValidLocation ? (
-            <div className="relative flex h-full w-full flex-col items-center justify-center p-6 text-center bg-radial from-card/80 via-background/95 to-background overflow-y-auto">
-              {/* Radar pulse animation */}
-              <div className="relative mb-5">
-                <div className="absolute -inset-4 rounded-full bg-primary/15 animate-ping opacity-60" />
-                <div className="absolute -inset-8 rounded-full border border-primary/20 animate-pulse" />
-                <div className="relative flex size-20 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary shadow-xl shadow-primary/10">
-                  <Radio className="size-10 animate-pulse text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Consultando última localização...
+                </p>
+              </div>
+            ) : !hasValidLocation ? (
+              <div className="relative flex h-full w-full flex-col items-center justify-center p-6 text-center bg-card/40 overflow-y-auto">
+                <div className="relative mb-4 flex size-16 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary">
+                  <MapPinOff className="size-8" />
+                </div>
+                <h3 className="text-lg font-bold uppercase text-foreground">
+                  Rastreador aguardando sinal GPS
+                </h3>
+                <p className="mt-2 max-w-md text-xs text-muted-foreground">
+                  Assim que o equipamento enviar coordenadas ao ar livre, o mapa e as cercas aparecerão aqui em tempo real.
+                </p>
+                <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-[11px] text-muted-foreground">
+                  <Info className="size-4 text-primary shrink-0" />
+                  <span>Os comandos e compartilhamento seguem disponíveis no painel ao lado.</span>
                 </div>
               </div>
+            ) : (
+              <>
+                <GoogleMapView
+                  position={telemetry.position}
+                  heading={currentHeading}
+                  history={history}
+                  geofences={geofences}
+                  pulseMode={pulseMode}
+                />
 
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-xs font-semibold text-amber-400 mb-3 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                  <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
-                </span>
-                Aguardando primeira transmissão do rastreador
-              </div>
-
-              <h3 className="text-xl md:text-2xl font-bold uppercase tracking-wide text-foreground">
-                Rastreador ainda não comunicou
-              </h3>
-
-              <p className="mt-2.5 max-w-lg text-sm text-muted-foreground leading-relaxed">
-                Este veículo ainda não enviou coordenadas GPS para o sistema. O mapa com a rota em tempo real será carregado aqui automaticamente assim que a primeira transmissão for detectada.
-              </p>
-
-              {/* Informational Status Card */}
-              <div className="mt-6 w-full max-w-md rounded-2xl border border-border bg-card/90 p-4 text-left shadow-lg backdrop-blur-sm space-y-3">
-                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <MapPinOff className="size-3.5 text-muted-foreground" />
-                    Sinal GPS do Veículo
-                  </span>
-                  <span className="font-semibold text-amber-400">
-                    Nenhuma coordenada recebida
-                  </span>
+                {/* Bottom Coordinates Pill */}
+                <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card/90 px-3 py-2 backdrop-blur-md text-xs">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="size-3.5 text-primary" />
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {telemetry.position.latitude.toFixed(6)}, {telemetry.position.longitude.toFixed(6)}
+                    </span>
+                  </div>
+                  {telemetry.timestamp && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Atualizado:{" "}
+                      <strong className="text-foreground">
+                        {new Date(telemetry.timestamp).toLocaleTimeString("pt-BR")}
+                      </strong>
+                    </span>
+                  )}
                 </div>
+              </>
+            )}
+          </div>
 
-                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Wifi className="size-3.5 text-muted-foreground" />
-                    Canal em Tempo Real
-                  </span>
-                  <span
-                    className={`font-semibold flex items-center gap-1.5 ${
-                      connectionStatus === "connected"
-                        ? "text-emerald-400"
-                        : connectionStatus === "connecting"
-                          ? "text-amber-400"
-                          : "text-red-400"
+          {/* Tactical Side Panel */}
+          {panelOpen && (
+            <aside className="w-full lg:w-[390px] shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-card flex flex-col max-h-[48vh] lg:max-h-none">
+              {/* Tabs */}
+              <div className="grid grid-cols-4 border-b border-border bg-background/40 p-1.5 gap-1">
+                {(
+                  [
+                    { id: "telemetry", label: "Ao Vivo", icon: Activity },
+                    { id: "geofences", label: "Cercas", icon: Radar },
+                    { id: "commands", label: "Comandos", icon: ShieldAlert },
+                    { id: "share", label: "Enviar", icon: Share2 },
+                  ] as const
+                ).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-bold transition cursor-pointer ${
+                      activeTab === id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     }`}
                   >
-                    <span
-                      className={`size-1.5 rounded-full ${
-                        connectionStatus === "connected"
-                          ? "bg-emerald-400 animate-pulse"
-                          : connectionStatus === "connecting"
-                            ? "bg-amber-400 animate-spin"
-                            : "bg-red-400"
-                      }`}
-                    />
-                    {connectionStatus === "connected"
-                      ? "Conectado (escutando transmissões)"
-                      : connectionStatus === "connecting"
-                        ? "Conectando..."
-                        : "Desconectado"}
-                  </span>
-                </div>
+                    <Icon className="size-3.5" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
 
-                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
-                  <span className="text-muted-foreground">Veículo Vinculado</span>
-                  <span className="font-semibold text-foreground">
-                    {motorcycleInfo.model} • <span className="font-mono text-muted-foreground">{motorcycleInfo.licensePlate}</span>
-                  </span>
-                </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {activeTab === "telemetry" && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="rounded-xl border border-border bg-background/50 p-3">
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-muted-foreground">
+                          <Activity className="size-3.5 text-primary" /> Velocidade
+                        </span>
+                        <p className="mt-1 text-xl font-bold text-foreground">
+                          {currentSpeed.toFixed(0)} <span className="text-xs font-normal text-muted-foreground">km/h</span>
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-background/50 p-3">
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-muted-foreground">
+                          <BatteryCharging className="size-3.5 text-emerald-400" /> Bateria
+                        </span>
+                        <p className="mt-1 text-xl font-bold text-emerald-400">
+                          {currentBattery}%
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-background/50 p-3">
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-muted-foreground">
+                          <Radio className="size-3.5 text-sky-400" /> Sinal GPRS
+                        </span>
+                        <p className="mt-1 text-xl font-bold text-foreground">
+                          {currentSignal} <span className="text-xs font-normal text-muted-foreground">/ 5</span>
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-background/50 p-3">
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-muted-foreground">
+                          <Compass className="size-3.5 text-amber-400" /> Direção
+                        </span>
+                        <p className="mt-1 text-xl font-bold text-foreground">
+                          {currentHeading.toFixed(0)}°
+                        </p>
+                      </div>
+                    </div>
 
-                {telemetry.imei && (
-                  <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2.5">
-                    <span className="text-muted-foreground">IMEI do Rastreador</span>
-                    <span className="font-mono text-foreground font-semibold">
-                      {telemetry.imei}
-                    </span>
+                    <div className="rounded-xl border border-border bg-background/50 p-3 text-xs space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Ignição (ACC)</span>
+                        <strong className={telemetry.device?.ignition ? "text-emerald-400" : "text-amber-400"}>
+                          {telemetry.device?.ignition == null ? "--" : telemetry.device.ignition ? "Ligada" : "Desligada"}
+                        </strong>
+                      </div>
+                      {telemetry.imei && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">IMEI</span>
+                          <span className="font-mono text-foreground">{telemetry.imei}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Cercas ativas</span>
+                        <strong className="text-foreground">
+                          {geofences.filter((g) => g.active).length}
+                        </strong>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div className="flex items-start gap-2.5 pt-1 text-[11px] text-muted-foreground leading-relaxed">
-                  <Info className="size-4 text-primary shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Dica:</strong> Para que o dispositivo sincronize com os satélites, ligue a ignição da moto e certifique-se de que o veículo esteja ao ar livre (fora de subsolos ou garagens fechadas).
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <GoogleMapView
-                position={telemetry.position}
-                heading={currentHeading}
-                history={history}
-              />
+                {activeTab === "geofences" && (
+                  <GeofenceQuickPanel
+                    geofences={geofences}
+                    events={events}
+                    anchorBusy={anchorBusy}
+                    onToggleAnchor={handleToggleAnchor}
+                    onToggleFenceActive={handleToggleFenceActive}
+                  />
+                )}
 
-              {/* Floating Live Telemetry Cards */}
-              <div className="absolute top-4 left-4 right-4 z-10 grid grid-cols-2 gap-2 sm:grid-cols-4 md:w-auto md:max-w-xl">
-                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-                  <div className="flex items-center gap-2 text-primary">
-                    <Activity className="size-4" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                      Velocidade
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                    {currentSpeed.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">km/h</span>
-                  </p>
-                </div>
+                {activeTab === "commands" && motorcycleId && (
+                  <CommandControlPanel
+                    motorcycleId={motorcycleId}
+                    currentSpeedKmh={currentSpeed}
+                    isAdmin={isAdmin}
+                    compact
+                  />
+                )}
 
-                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-                  <div className="flex items-center gap-2 text-primary">
-                    <BatteryCharging className="size-4" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                      Bateria
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                    {currentBattery}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">%</span>
-                  </p>
-                </div>
-
-                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-                  <div className="flex items-center gap-2 text-primary">
-                    <Radio className="size-4" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                      Sinal GPRS
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                    {currentSignal}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">/ 5</span>
-                  </p>
-                </div>
-
-                <div className="flex flex-col border border-border bg-card/90 p-3 backdrop-blur-md">
-                  <div className="flex items-center gap-2 text-primary">
-                    <Compass className="size-4" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                      Direção
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                    {currentHeading.toFixed(0)}°
-                  </p>
-                </div>
-              </div>
-
-              {/* Bottom Floating Coordinates Bar */}
-              <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-3 border border-border bg-card/90 p-3 backdrop-blur-md text-xs">
-                <div className="flex items-center gap-2">
-                  <MapPin className="size-4 text-primary" />
-                  <span className="font-mono text-muted-foreground">
-                    Lat: <strong className="text-foreground">{telemetry.position.latitude.toFixed(6)}</strong> | Lng:{" "}
-                    <strong className="text-foreground">{telemetry.position.longitude.toFixed(6)}</strong>
-                  </span>
-                </div>
-                {telemetry.timestamp && (
-                  <span className="text-[11px] text-muted-foreground">
-                    Última atualização:{" "}
-                    <span className="font-semibold text-foreground">
-                      {new Date(telemetry.timestamp).toLocaleTimeString()}
-                    </span>
-                  </span>
+                {activeTab === "share" && motorcycleId && (
+                  <ShareLinkPanel motorcycleId={motorcycleId} compact />
                 )}
               </div>
-            </>
+            </aside>
           )}
         </div>
       </div>
