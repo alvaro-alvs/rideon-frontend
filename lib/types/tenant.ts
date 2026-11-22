@@ -64,7 +64,7 @@ export interface ModuleDefinition {
 export const AVAILABLE_MODULES: ModuleDefinition[] = [
   { id: 'telemetry', name: 'Telemetria & Rastreamento', description: 'Transmissão de posições, ignição e velocidade', category: 'core', icon: 'Radio' },
   { id: 'devices', name: 'Rastreadores & Hardware', description: 'Gestão de seriais, status de conexão e firmwares', category: 'core', icon: 'Cpu' },
-  { id: 'motorcycles', name: 'Gestão de Veículos', description: 'Inventário de motocicletas e associação com condutores', category: 'core', icon: 'Bike' },
+  { id: 'motorcycles', name: 'Gestão de Veículos', description: 'Inventário de veículos e associação com condutores', category: 'core', icon: 'Bike' },
   { id: 'fleet', name: 'Frotas Corporativas', description: 'Gestão avançada de frotas, manutenções e checklists', category: 'premium', icon: 'Layers' },
   { id: 'risk_ai', name: 'Inteligência de Risco IA', description: 'Telemetria preditiva e pontuação comportamental', category: 'premium', icon: 'Brain' },
   { id: 'geofence', name: 'Cercas Virtuais (Geofence)', description: 'Polígonos geográficos e alertas de perímetro', category: 'premium', icon: 'ShieldAlert' },

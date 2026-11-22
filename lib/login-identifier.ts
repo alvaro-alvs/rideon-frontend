@@ -1,12 +1,16 @@
-export type LoginIdentifierMode = "auto" | "email" | "plate" | "imei";
-export type DetectedIdentifierKind = "email" | "plate" | "imei" | "unknown";
+import { formatPhone } from "@/lib/phone";
+
+export type LoginIdentifierMode = "auto" | "email" | "phone" | "plate" | "imei";
+export type DetectedIdentifierKind = "email" | "phone" | "plate" | "imei" | "unknown";
 export type PlateStandard = "mercosul" | "antiga" | "partial";
+export type PhoneKind = "mobile" | "landline" | "partial";
 
 export interface FormattedLoginIdentifier {
   displayValue: string;
   apiValue: string;
   detectedKind: DetectedIdentifierKind;
   plateStandard?: PlateStandard;
+  phoneType?: PhoneKind;
   isComplete: boolean;
 }
 
@@ -14,6 +18,114 @@ const MERCOSUL_PLATE_RE = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
 const OLD_PLATE_RE = /^[A-Z]{3}[0-9]{4}$/;
 const PLATE_TYPING_RE = /^[A-Z]{3}[0-9][A-Z0-9]{0,3}$/;
 const EMAIL_BASIC_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidDDD(twoDigits: string): boolean {
+  if (twoDigits.length < 2) return false;
+  const ddd = parseInt(twoDigits, 10);
+  return ddd >= 11 && ddd <= 99;
+}
+
+function isBrazilianPhoneDigits(digits: string): boolean {
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
+    return isValidDDD(digits.slice(2, 4));
+  }
+  if ((digits.length === 11 || digits.length === 12) && digits.startsWith("0")) {
+    return isValidDDD(digits.slice(1, 3));
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return isValidDDD(digits.slice(0, 2));
+  }
+  return false;
+}
+
+/**
+ * Formats a phone/cellphone login identifier in real time while returning
+ * normalized digits (or E.164 for international numbers) for the API.
+ */
+export function formatPhoneLoginSmart(raw: string): {
+  formatted: string;
+  clean: string;
+  phoneType: PhoneKind;
+  isComplete: boolean;
+} {
+  const trimmed = raw.trimStart();
+  const hasPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (hasPlus) {
+    if (digits.startsWith("55")) {
+      const local = digits.slice(2, 13);
+      const formatted =
+        local.length === 0 ? "+55" : `+55 ${formatPhone(local)}`;
+      const isComplete =
+        (local.length === 10 || local.length === 11) &&
+        isValidDDD(local.slice(0, 2));
+      return {
+        formatted,
+        clean: isComplete ? local : `+55${local}`,
+        phoneType:
+          local.length === 11
+            ? "mobile"
+            : local.length === 10
+              ? "landline"
+              : "partial",
+        isComplete,
+      };
+    }
+
+    const intl = digits.slice(0, 15);
+    return {
+      formatted: `+${intl}`,
+      clean: `+${intl}`,
+      phoneType: intl.length >= 10 ? "mobile" : "partial",
+      isComplete: intl.length >= 10 && intl.length <= 15,
+    };
+  }
+
+  if (
+    (digits.length === 12 || digits.length === 13) &&
+    digits.startsWith("55") &&
+    isValidDDD(digits.slice(2, 4))
+  ) {
+    const local = digits.slice(2);
+    return {
+      formatted: `+55 ${formatPhone(local)}`,
+      clean: local,
+      phoneType: local.length === 11 ? "mobile" : "landline",
+      isComplete: true,
+    };
+  }
+
+  if (
+    (digits.length === 11 || digits.length === 12) &&
+    digits.startsWith("0") &&
+    isValidDDD(digits.slice(1, 3))
+  ) {
+    const local = digits.slice(1);
+    return {
+      formatted: formatPhone(local),
+      clean: local,
+      phoneType: local.length === 11 ? "mobile" : "landline",
+      isComplete: true,
+    };
+  }
+
+  const local = digits.slice(0, 11);
+  const isComplete =
+    (local.length === 10 || local.length === 11) &&
+    isValidDDD(local.slice(0, 2));
+  return {
+    formatted: formatPhone(local),
+    clean: local,
+    phoneType:
+      local.length === 11
+        ? "mobile"
+        : local.length === 10
+          ? "landline"
+          : "partial",
+    isComplete,
+  };
+}
 
 /**
  * Formats a Brazilian license plate in real time:
@@ -97,6 +209,17 @@ export function resolveLoginIdentifier(
     };
   }
 
+  if (mode === "phone") {
+    const phone = formatPhoneLoginSmart(raw);
+    return {
+      displayValue: phone.formatted,
+      apiValue: phone.clean,
+      detectedKind: "phone",
+      phoneType: phone.phoneType,
+      isComplete: phone.isComplete,
+    };
+  }
+
   if (mode === "plate") {
     const plate = formatPlateSmart(raw);
     return {
@@ -120,7 +243,7 @@ export function resolveLoginIdentifier(
 
   // Auto mode: detect deterministically without mangling emails.
   const trimmed = raw.trimStart();
-  if (trimmed.includes("@") || trimmed.includes(".")) {
+  if (trimmed.includes("@") || (trimmed.includes(".") && /[a-zA-Z]/.test(trimmed))) {
     const lower = trimmed.toLowerCase();
     return {
       displayValue: lower,
@@ -130,14 +253,45 @@ export function resolveLoginIdentifier(
     };
   }
 
-  const noSep = trimmed.replace(/[\s-]/g, "");
-  if (noSep.length > 0 && /^\d+$/.test(noSep)) {
-    const imei = formatIMEISmart(trimmed);
+  if (/^[+(]/.test(trimmed) && !/[a-zA-Z]/.test(trimmed)) {
+    const phone = formatPhoneLoginSmart(trimmed);
     return {
-      displayValue: imei.formatted,
-      apiValue: imei.clean,
-      detectedKind: "imei",
-      isComplete: imei.isComplete,
+      displayValue: phone.formatted,
+      apiValue: phone.clean,
+      detectedKind: "phone",
+      phoneType: phone.phoneType,
+      isComplete: phone.isComplete,
+    };
+  }
+
+  const noSep = trimmed.replace(/[\s().-]/g, "");
+  if (noSep.length > 0 && /^\d+$/.test(noSep)) {
+    if (noSep.length < 14 && isBrazilianPhoneDigits(noSep)) {
+      const phone = formatPhoneLoginSmart(noSep);
+      return {
+        displayValue: phone.formatted,
+        apiValue: phone.clean,
+        detectedKind: "phone",
+        phoneType: phone.phoneType,
+        isComplete: phone.isComplete,
+      };
+    }
+
+    if (noSep.length >= 12) {
+      const imei = formatIMEISmart(noSep);
+      return {
+        displayValue: imei.formatted,
+        apiValue: imei.clean,
+        detectedKind: "imei",
+        isComplete: imei.isComplete,
+      };
+    }
+
+    return {
+      displayValue: noSep,
+      apiValue: noSep,
+      detectedKind: "unknown",
+      isComplete: false,
     };
   }
 

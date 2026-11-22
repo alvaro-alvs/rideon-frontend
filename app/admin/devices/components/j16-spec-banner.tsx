@@ -51,7 +51,7 @@ export function J16SpecBanner() {
               Rastreador GPS J16 4G LTE
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Dispositivo homologado para rastreamento de motocicletas com leitura de pós-chave (ACC), telemetria contínua e corte remoto de ignição.
+              Dispositivo homologado para rastreamento veicular com leitura de pós-chave (ACC), telemetria contínua e corte remoto de ignição.
             </p>
           </div>
         </div>

@@ -6,6 +6,7 @@ export type Motorcycle = {
   id?: string;
   brand?: string;
   model?: string;
+  nickname?: string;
   year?: number;
   color?: string;
   license_plate?: string;

@@ -28,6 +28,7 @@ import {
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { useTenant } from "@/app/components/tenant-provider";
 import { DeviceCard } from "@/app/admin/devices/components/device-card";
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import {
   canManageDeviceTransfers,
   isMasterAdmin,
@@ -105,7 +106,7 @@ export default function AdminDevicesPage() {
 
   const handleUnlink = async (device: Device) => {
     const label = device.motorcycle?.license_plate
-      ? `da moto ${device.motorcycle.license_plate}`
+      ? `do veículo ${device.motorcycle.license_plate}`
       : "do veículo";
     if (
       !confirm(
@@ -164,8 +165,8 @@ export default function AdminDevicesPage() {
 
               <p className="max-w-2xl text-sm text-muted-foreground">
                 {isMaster
-                  ? "Visão unificada dos rastreadores da plataforma, vínculos com motocicletas, telemetria e repasses."
-                  : "Visão unificada dos equipamentos da sua frota, vínculos com motocicletas e telemetria em tempo real."}
+                  ? "Visão unificada dos rastreadores da plataforma, vínculos com veículos, telemetria e repasses."
+                  : "Visão unificada dos equipamentos da sua frota, vínculos com veículos e telemetria em tempo real."}
               </p>
             </div>
 
@@ -537,7 +538,7 @@ export default function AdminDevicesPage() {
                                   {moto.license_plate}
                                 </span>
                                 <span className="font-bold text-foreground truncate max-w-[160px]">
-                                  {moto.brand} {moto.model}
+                                  {formatVehicleDisplayName(moto)}
                                 </span>
                               </div>
                               {moto.rider?.name && (
@@ -624,7 +625,7 @@ export default function AdminDevicesPage() {
                               type="button"
                               onClick={() => setSelectedDeviceForLink(device)}
                               className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
-                              title="Vincular ou gerenciar motocicleta"
+                              title="Vincular ou gerenciar veículo"
                             >
                               <Link2 className="size-3 text-primary" />
                               <span className="hidden lg:inline">

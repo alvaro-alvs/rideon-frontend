@@ -25,6 +25,7 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { VehicleNicknameModal } from "@/app/components/vehicle-nickname-modal";
 import { OwnerSelect } from "@/app/components/owner-select";
 import { TrackerSelect } from "@/app/components/tracker-select";
 import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
@@ -32,6 +33,10 @@ import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useTenant } from "@/app/components/tenant-provider";
 import { isPlatformOrTenantAdmin, isMasterAdmin } from "@/lib/auth";
+import {
+  formatVehicleDisplayName,
+  formatVehicleModel,
+} from "@/lib/vehicle-display";
 import type { Customer, CustomerMotorcycle } from "@/lib/types/customer";
 import type { Device } from "@/lib/types/device";
 
@@ -60,11 +65,13 @@ export default function AdminVehiclesPage() {
   const [selectedVehicleForLink, setSelectedVehicleForLink] = useState<CustomerMotorcycle | null>(null);
   const [selectedDeviceToLink, setSelectedDeviceToLink] = useState<string>("");
   const [selectedTelemetryVehicle, setSelectedTelemetryVehicle] = useState<CustomerMotorcycle | null>(null);
+  const [renamingVehicle, setRenamingVehicle] = useState<CustomerMotorcycle | null>(null);
 
   // Form State for New Vehicle
   const [formRiderId, setFormRiderId] = useState("");
   const [formBrand, setFormBrand] = useState("");
   const [formModel, setFormModel] = useState("");
+  const [formNickname, setFormNickname] = useState("");
   const [formPlate, setFormPlate] = useState("");
   const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
   const [formColor, setFormColor] = useState("");
@@ -158,6 +165,7 @@ export default function AdminVehiclesPage() {
           rider_id: formRiderId,
           brand: formBrand.trim(),
           model: formModel.trim(),
+          ...(formNickname.trim() ? { nickname: formNickname.trim() } : {}),
           license_plate: formPlate.trim().toUpperCase(),
           year: parseInt(formYear, 10),
           color: formColor.trim(),
@@ -177,6 +185,7 @@ export default function AdminVehiclesPage() {
       setFormRiderId("");
       setFormBrand("");
       setFormModel("");
+      setFormNickname("");
       setFormPlate("");
       setFormColor("");
       setFormRenavam("");
@@ -255,6 +264,7 @@ export default function AdminVehiclesPage() {
         v.license_plate.toLowerCase().includes(q) ||
         v.model.toLowerCase().includes(q) ||
         v.brand.toLowerCase().includes(q) ||
+        (v.nickname && v.nickname.toLowerCase().includes(q)) ||
         (v.rider_name && v.rider_name.toLowerCase().includes(q)) ||
         (v.device?.serial_number && v.device.serial_number.toLowerCase().includes(q));
 
@@ -351,7 +361,7 @@ export default function AdminVehiclesPage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             <div className="py-1">
               <p className="text-xs font-medium text-muted-foreground">
-                Total de Motos
+                Total de Veículos
               </p>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.total}</span>
@@ -458,7 +468,7 @@ export default function AdminVehiclesPage() {
               <Bike className="size-10 text-muted-foreground/60" />
               <h3 className="font-display text-base font-bold text-foreground">Nenhum veículo encontrado</h3>
               <p className="max-w-md text-xs text-muted-foreground">
-                Nenhuma motocicleta corresponde aos filtros aplicados. Cadastre novos veículos ou ajuste os termos de busca.
+                Nenhum veículo corresponde aos filtros aplicados. Cadastre novos veículos ou ajuste os termos de busca.
               </p>
             </div>
           ) : (
@@ -479,8 +489,13 @@ export default function AdminVehiclesPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-display text-sm font-bold text-foreground">
-                            {v.brand} {v.model}
+                            {formatVehicleDisplayName(v)}
                           </h3>
+                          {v.nickname?.trim() && (
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              ({formatVehicleModel(v)})
+                            </span>
+                          )}
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                               v.status === "active"
@@ -539,6 +554,16 @@ export default function AdminVehiclesPage() {
                       </div>
 
                       <button
+                        type="button"
+                        onClick={() => setRenamingVehicle(v)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-secondary/40 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors cursor-pointer"
+                        title="Definir ou alterar apelido do veículo"
+                      >
+                        <Tag className="size-3.5" />
+                        <span>{v.nickname?.trim() ? "Apelido" : "Apelidar"}</span>
+                      </button>
+
+                      <button
                         onClick={() => setSelectedTelemetryVehicle(v)}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
                       >
@@ -568,7 +593,7 @@ export default function AdminVehiclesPage() {
                   </div>
                   <div>
                     <h2 className="text-base font-black uppercase text-foreground">Cadastrar Veículo</h2>
-                    <p className="text-xs text-muted-foreground">Adicione uma moto e vincule a um cliente</p>
+                    <p className="text-xs text-muted-foreground">Adicione um veículo e vincule a um cliente</p>
                   </div>
                 </div>
                 <button
@@ -623,6 +648,20 @@ export default function AdminVehiclesPage() {
                       className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Apelido Personalizado (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={60}
+                    value={formNickname}
+                    onChange={(e) => setFormNickname(e.target.value)}
+                    placeholder="Ex: Frota 01, Veículo Entrega Sul (substitui o modelo na exibição)"
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -754,7 +793,7 @@ export default function AdminVehiclesPage() {
                   <div>
                     <h2 className="text-base font-black uppercase text-foreground">Vincular Rastreador</h2>
                     <p className="text-xs text-muted-foreground">
-                      Moto: {selectedVehicleForLink.brand} {selectedVehicleForLink.model} ({selectedVehicleForLink.license_plate})
+                      Veículo: {formatVehicleDisplayName(selectedVehicleForLink)} ({selectedVehicleForLink.license_plate})
                     </p>
                   </div>
                 </div>
@@ -819,11 +858,34 @@ export default function AdminVehiclesPage() {
           <LiveTelemetryModal
             motorcycleId={selectedTelemetryVehicle.id}
             motorcycleInfo={{
-              model: `${selectedTelemetryVehicle.brand} ${selectedTelemetryVehicle.model}`,
+              model: formatVehicleDisplayName(selectedTelemetryVehicle),
               licensePlate: selectedTelemetryVehicle.license_plate,
             }}
             isOpen={Boolean(selectedTelemetryVehicle)}
             onClose={() => setSelectedTelemetryVehicle(null)}
+          />
+        )}
+
+        {/* Rename Nickname Modal */}
+        {renamingVehicle && (
+          <VehicleNicknameModal
+            vehicle={renamingVehicle}
+            onClose={() => setRenamingVehicle(null)}
+            onSaved={(updatedNickname) => {
+              setVehicles((prev) =>
+                prev.map((item) =>
+                  item.id === renamingVehicle.id
+                    ? { ...item, nickname: updatedNickname }
+                    : item,
+                ),
+              );
+              setFeedback({
+                type: "success",
+                text: updatedNickname
+                  ? `Apelido "${updatedNickname}" salvo com sucesso!`
+                  : "Apelido removido com sucesso.",
+              });
+            }}
           />
         )}
       </div>

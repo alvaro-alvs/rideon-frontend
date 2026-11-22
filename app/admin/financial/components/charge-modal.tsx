@@ -4,45 +4,31 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AlertCircle,
-  Banknote,
   Calendar,
   CheckCircle2,
   Clock,
-  CreditCard,
   FileText,
-  QrCode,
   Sparkles,
   X,
 } from "lucide-react";
 
+import { PaymentMethodsPicker } from "@/app/admin/financial/components/payment-methods-picker";
+import { PlanCombobox } from "@/app/admin/financial/components/plan-combobox";
+import {
+  formatCurrencyCents,
+  formatPriceInputFromDigits,
+  normalizeSelectedMethods,
+  parsePriceInputToCents,
+  PAYMENT_METHOD_LABELS,
+} from "@/lib/financial-format";
 import type {
   BillingCycle,
+  BillingPlan,
   ComplianceStatus,
   CustomerBillingSummary,
   InvoiceItem,
   PaymentMethod,
 } from "@/lib/types/financial";
-
-function formatCurrencyCents(cents?: number) {
-  if (!cents) return "R$ 0,00";
-  return (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
-
-function formatPriceInputFromDigits(raw: string) {
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "R$ 0,00";
-  const cents = Number.parseInt(digits, 10);
-  return formatCurrencyCents(cents);
-}
-
-function parsePriceInputToCents(formatted: string) {
-  const digits = formatted.replace(/\D/g, "");
-  if (!digits) return 0;
-  return Number.parseInt(digits, 10);
-}
 
 function formatLocalDateISO(date: Date): string {
   const y = date.getFullYear();
@@ -89,39 +75,6 @@ function getRelativeDueLabel(iso: string): { text: string; isPast: boolean } | n
   };
 }
 
-const PAYMENT_METHOD_OPTIONS: Array<{
-  id: PaymentMethod;
-  label: string;
-  description: string;
-  icon: typeof QrCode;
-}> = [
-  {
-    id: "pix",
-    label: "PIX",
-    description: "QR Code e Copia e Cola instantâneo",
-    icon: QrCode,
-  },
-  {
-    id: "card",
-    label: "Cartão de Crédito",
-    description: "Pagamento online com cartão de crédito",
-    icon: CreditCard,
-  },
-  {
-    id: "manual",
-    label: "Manual / Dinheiro",
-    description: "Pagamento direto fora do app (dinheiro, transferência)",
-    icon: Banknote,
-  },
-];
-
-const PAYMENT_METHOD_ORDER: PaymentMethod[] = ["pix", "card", "manual"];
-
-function normalizeSelectedMethods(methods: PaymentMethod[]): PaymentMethod[] {
-  const set = new Set(methods);
-  return PAYMENT_METHOD_ORDER.filter((m) => set.has(m));
-}
-
 function StatusPill({ status }: { status: ComplianceStatus }) {
   if (status === "compliant") {
     return (
@@ -150,6 +103,9 @@ function StatusPill({ status }: { status: ComplianceStatus }) {
 export interface ChargeModalProps {
   customer: CustomerBillingSummary | null;
   editingInvoice: InvoiceItem | null;
+  plans?: BillingPlan[];
+  plansLoading?: boolean;
+  onManagePlans?: () => void;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -157,6 +113,9 @@ export interface ChargeModalProps {
 export function ChargeModal({
   customer,
   editingInvoice,
+  plans = [],
+  plansLoading = false,
+  onManagePlans,
   onClose,
   onSaved,
 }: ChargeModalProps) {
@@ -167,6 +126,9 @@ export function ChargeModal({
       key={modalKey}
       customer={customer}
       editingInvoice={editingInvoice}
+      plans={plans}
+      plansLoading={plansLoading}
+      onManagePlans={onManagePlans}
       onClose={onClose}
       onSaved={onSaved}
     />
@@ -176,6 +138,9 @@ export function ChargeModal({
 interface ChargeModalDialogProps {
   customer: CustomerBillingSummary;
   editingInvoice: InvoiceItem | null;
+  plans: BillingPlan[];
+  plansLoading: boolean;
+  onManagePlans?: () => void;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -233,6 +198,9 @@ function getInitialFormState(
 function ChargeModalDialog({
   customer,
   editingInvoice,
+  plans,
+  plansLoading,
+  onManagePlans,
   onClose,
   onSaved,
 }: ChargeModalDialogProps) {
@@ -241,6 +209,7 @@ function ChargeModalDialog({
     [customer, editingInvoice],
   );
 
+  const [selectedPlanId, setSelectedPlanId] = useState("");
   const [chargeMode, setChargeMode] = useState<"paid" | "pending">(initial.chargeMode);
   const [planName, setPlanName] = useState(initial.planName);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(initial.billingCycle);
@@ -296,12 +265,23 @@ function ChargeModalDialog({
     ];
   }, []);
 
-  const toggleMethod = (method: PaymentMethod) => {
-    setAllowedMethods((prev) => {
-      const exists = prev.includes(method);
-      const next = exists ? prev.filter((m) => m !== method) : [...prev, method];
-      return normalizeSelectedMethods(next);
-    });
+  const handleSelectPlan = (plan: BillingPlan | null) => {
+    if (!plan) {
+      setSelectedPlanId("");
+      return;
+    }
+    setSelectedPlanId(plan.id);
+    setPlanName(plan.name);
+    setAmountReais(formatCurrencyCents(plan.amount_cents));
+    const cycle = plan.billing_cycle || "monthly";
+    setBillingCycle(cycle);
+    setAllowInstallments(
+      cycle === "yearly" ? Boolean(plan.allow_installments) : false,
+    );
+    const methods = plan.allowed_payment_methods?.length
+      ? normalizeSelectedMethods(plan.allowed_payment_methods)
+      : (["pix", "card"] as PaymentMethod[]);
+    setAllowedMethods(methods);
   };
 
   const handleCycleChange = (nextCycle: BillingCycle) => {
@@ -313,12 +293,7 @@ function ChargeModalDialog({
 
   const summaryMethodsText = useMemo(() => {
     if (allowedMethods.length === 0) return "Nenhum meio ativo";
-    const labels: Record<PaymentMethod, string> = {
-      pix: "PIX",
-      card: "Cartão",
-      manual: "Manual",
-    };
-    return allowedMethods.map((m) => labels[m]).join(", ");
+    return allowedMethods.map((m) => PAYMENT_METHOD_LABELS[m]).join(", ");
   }, [allowedMethods]);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -466,6 +441,17 @@ function ChargeModalDialog({
               </p>
             </div>
 
+            {/* Plan Template Combobox (New Charge) */}
+            {!editingInvoice && (
+              <PlanCombobox
+                plans={plans}
+                loading={plansLoading}
+                selectedPlanId={selectedPlanId}
+                onSelect={handleSelectPlan}
+                onManagePlans={onManagePlans}
+              />
+            )}
+
             {/* Plan & Amount */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
               <div className="sm:col-span-7">
@@ -576,88 +562,17 @@ function ChargeModalDialog({
             )}
 
             {/* Payment Methods Switches */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="font-semibold text-muted-foreground">
-                  {chargeMode === "pending"
-                    ? "Meios de pagamento permitidos"
-                    : "Meios de pagamento aceitos"}
-                </label>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    allowedMethods.length > 0
-                      ? "bg-secondary text-muted-foreground"
-                      : "bg-rose-500/15 text-rose-400"
-                  }`}
-                >
-                  {allowedMethods.length}{" "}
-                  {allowedMethods.length === 1 ? "ativo" : "ativos"}
-                </span>
-              </div>
-
-              <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border bg-background/60">
-                {PAYMENT_METHOD_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  const enabled = allowedMethods.includes(opt.id);
-                  const subtitle =
-                    opt.id === "card" && billingCycle === "yearly" && allowInstallments
-                      ? `${opt.description} • até 12x`
-                      : opt.description;
-
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      role="switch"
-                      aria-checked={enabled}
-                      onClick={() => toggleMethod(opt.id)}
-                      className={`flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition cursor-pointer ${
-                        enabled ? "bg-secondary/35" : "hover:bg-secondary/20"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div
-                          className={`flex size-8 shrink-0 items-center justify-center rounded-lg border transition ${
-                            enabled
-                              ? "border-primary/40 bg-primary/15 text-primary"
-                              : "border-border bg-secondary/50 text-muted-foreground"
-                          }`}
-                        >
-                          <Icon className="size-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-foreground">{opt.label}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">
-                            {subtitle}
-                          </div>
-                        </div>
-                      </div>
-
-                      <span
-                        aria-hidden="true"
-                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
-                          enabled
-                            ? "border-primary bg-primary"
-                            : "border-border bg-secondary"
-                        }`}
-                      >
-                        <span
-                          className={`inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                            enabled ? "translate-x-4.5" : "translate-x-0.5"
-                          }`}
-                        />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {allowedMethods.length === 0 && (
-                <p className="text-[11px] font-medium text-rose-400">
-                  Ative pelo menos um meio de pagamento para continuar.
-                </p>
-              )}
-            </div>
+            <PaymentMethodsPicker
+              label={
+                chargeMode === "pending"
+                  ? "Meios de pagamento permitidos"
+                  : "Meios de pagamento aceitos"
+              }
+              selectedMethods={allowedMethods}
+              onChange={setAllowedMethods}
+              billingCycle={billingCycle}
+              allowInstallments={allowInstallments}
+            />
 
             {/* Due Date / Paid Date */}
             <div className="space-y-2">

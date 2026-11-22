@@ -138,7 +138,7 @@ export type MatchCorrespondence = {
 type AuthPayload = {
   identifier?: string;
   email?: string;
-  type?: "email" | "plate" | "imei" | string;
+  type?: "email" | "phone" | "plate" | "imei" | string;
   password?: string;
   name?: string;
   user_id?: string;
@@ -194,6 +194,7 @@ export function isValidCredentials(payload: unknown): payload is AuthPayload {
     type !== undefined &&
     type !== "" &&
     type !== "email" &&
+    type !== "phone" &&
     type !== "plate" &&
     type !== "imei"
   ) {

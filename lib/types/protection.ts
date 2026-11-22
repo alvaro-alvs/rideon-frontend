@@ -150,6 +150,7 @@ export interface PublicShareSnapshot {
   vehicle: {
     brand: string;
     model: string;
+    nickname?: string;
     year?: number;
     color?: string;
     license_plate?: string;

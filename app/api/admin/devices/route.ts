@@ -386,6 +386,7 @@ function normalizeMoto(raw: Record<string, unknown>): AssociatedMotorcycle {
     id: String(raw.id || ""),
     brand: String(raw.brand || ""),
     model: String(raw.model || ""),
+    nickname: raw.nickname ? String(raw.nickname) : undefined,
     year: Number(raw.year || 0),
     color: String(raw.color || ""),
     license_plate: String(

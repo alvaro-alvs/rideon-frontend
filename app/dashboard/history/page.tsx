@@ -33,6 +33,7 @@ import {
 } from "@/lib/alert-meta";
 import { isPlatformOrTenantAdmin } from "@/lib/auth";
 import { isValidCoordinate } from "@/lib/geo";
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import { consumeNdjsonStream } from "@/lib/ndjson-stream";
 import {
   formatConciseDate,
@@ -303,7 +304,7 @@ export default function HistoryPage() {
 
     const moto = motorcycles.find((m) => m.id === targetId);
     const label = moto
-      ? `Stream de Posições • ${moto.license_plate || moto.model}`
+      ? `Stream de Posições • ${moto.nickname?.trim() || moto.license_plate || formatVehicleDisplayName(moto)}`
       : "Stream de Posições do Veículo";
 
     void runProgressiveStream(
@@ -509,7 +510,9 @@ export default function HistoryPage() {
                     }`}
                   >
                     <Bike className="size-3.5" />
-                    <span className="font-mono">{bike.license_plate || bike.model}</span>
+                    <span className="font-mono">
+                      {bike.nickname?.trim() || bike.license_plate || bike.model}
+                    </span>
                   </button>
                 );
               })}

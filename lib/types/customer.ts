@@ -5,6 +5,7 @@ export type CustomerMotorcycle = {
   rider_name?: string;
   brand: string;
   model: string;
+  nickname?: string;
   year: number;
   color: string;
   license_plate: string;

@@ -13,6 +13,7 @@ import {
 
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
 import { isValidCoordinate } from "@/lib/geo";
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { PublicShareSnapshot } from "@/lib/types/protection";
 
 export default function PublicShareTrackingPage({
@@ -123,7 +124,7 @@ export default function PublicShareTrackingPage({
               )}
             </div>
             <h1 className="font-display text-sm sm:text-base font-bold text-foreground">
-              {snapshot.vehicle.brand} {snapshot.vehicle.model}
+              {formatVehicleDisplayName(snapshot.vehicle)}
               {snapshot.vehicle.license_plate && (
                 <span className="ml-2 rounded bg-secondary px-2 py-0.5 font-mono text-xs text-foreground">
                   {snapshot.vehicle.license_plate}

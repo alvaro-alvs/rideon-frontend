@@ -217,7 +217,7 @@ function resolveAlertTitle(item: BackendAlert): string {
     case "speeding":
       return "Excesso de Velocidade";
     case "fall_down":
-      return "Queda da Motocicleta";
+      return "Queda / Tombamento do Veículo";
     case "tamper":
       return "Violação do Rastreador";
     case "possible_crash":
@@ -237,7 +237,7 @@ function resolveAlertTitle(item: BackendAlert): string {
     case "low_battery":
       return "Bateria do Rastreador Fraca";
     case "low_external_power":
-      return "Bateria da Moto Fraca";
+      return "Bateria do Veículo Fraca";
     case "gps_blind_enter":
       return "Entrada em Ponto Cego GPS";
     case "gps_blind_exit":

@@ -28,6 +28,7 @@ import { FirstLoginPasswordModal } from "@/app/dashboard/components/first-login-
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import { useTenant } from "@/app/components/tenant-provider";
 import { isMasterAdmin, isManager } from "@/lib/auth";
 import { isValidCoordinate } from "@/lib/geo";
@@ -93,9 +94,7 @@ export default function DashboardPage() {
   const activeAnchor = geofences.find((g) => g.kind === "anchor" && g.active);
 
   const motorcycleModel = motorcycle
-    ? `${motorcycle.brand ?? ""} ${motorcycle.model ?? ""}`.trim() ||
-      motorcycle.model ||
-      "Motocicleta"
+    ? formatVehicleDisplayName(motorcycle)
     : "";
   const motorcyclePlate = motorcycle?.license_plate || "";
 
@@ -213,8 +212,8 @@ export default function DashboardPage() {
                     {isFleetUser
                       ? `Frota Ativa • ${motorcycles.length} Veículo${motorcycles.length === 1 ? "" : "s"}`
                       : isMultiVehiclePlan
-                        ? `Plano Multi-Veículos • ${motorcycles.length} Motos`
-                        : "Plano Individual • 1 Moto"}
+                        ? `Plano Multi-Veículos • ${motorcycles.length} Veículos`
+                        : "Plano Individual • 1 Veículo"}
                   </span>
                 )}
                 {hasVehicle && activeAnchor && (
@@ -231,7 +230,7 @@ export default function DashboardPage() {
                       ? `Frota Conectada • ${motorcycleModel}`
                       : "Nenhum veículo cadastrado na frota"
                     : hasVehicle
-                      ? "Sua moto está monitorada e protegida"
+                      ? "Seu veículo está monitorado e protegido"
                       : "Nenhum veículo cadastrado"}
               </h1>
             </div>
@@ -270,8 +269,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap gap-2">
                 {motorcycles.map((bike) => {
                   const isSelected = (bike.id ?? "") === (selectedVehicleId ?? "");
-                  const bikeName =
-                    `${bike.brand ?? ""} ${bike.model ?? ""}`.trim() || bike.model || "Motocicleta";
+                  const bikeName = formatVehicleDisplayName(bike);
                   return (
                     <button
                       key={bike.id ?? bike.license_plate}

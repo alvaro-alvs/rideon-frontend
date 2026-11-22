@@ -14,9 +14,14 @@ import {
   Radio,
   RadioOff,
   ShieldCheck,
+  Tag,
   Unlink,
   X,
 } from "lucide-react";
+import {
+  formatVehicleDisplayName,
+  formatVehicleModel,
+} from "@/lib/vehicle-display";
 import { VehiclePlatePreview } from "./vehicle-plate-preview";
 import { getColorHex } from "./brand-quick-select";
 
@@ -24,6 +29,7 @@ export type VehicleCardData = {
   id?: string;
   brand?: string;
   model?: string;
+  nickname?: string;
   year?: number;
   color?: string;
   license_plate?: string;
@@ -56,14 +62,17 @@ export function VehicleMiniCard({
   isAdmin = false,
   onOpenTelemetry,
   onUnlinkDevice,
+  onRenameNickname,
 }: {
   vehicle: VehicleCardData;
   isAdmin?: boolean;
   onOpenTelemetry?: (vehicle: VehicleCardData) => void;
   onUnlinkDevice?: (vehicle: VehicleCardData) => void;
+  onRenameNickname?: (vehicle: VehicleCardData) => void;
 }) {
-  const modelText =
-    `${vehicle.brand ?? ""} ${vehicle.model ?? ""}`.trim() || "Motocicleta";
+  const hasNickname = Boolean(vehicle.nickname?.trim());
+  const modelText = formatVehicleDisplayName(vehicle);
+  const originalModelText = formatVehicleModel(vehicle);
   const colorHex = getColorHex(vehicle.color);
 
   // Verificação de rastreador e posição reportada
@@ -252,13 +261,32 @@ export function VehicleMiniCard({
 
           {/* Model and Brand Name */}
           <div className="mt-4">
-            {vehicle.brand && (
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">
-                {vehicle.brand}
-              </p>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              {hasNickname ? (
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-primary truncate">
+                  {originalModelText}
+                </p>
+              ) : vehicle.brand ? (
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary truncate">
+                  {vehicle.brand}
+                </p>
+              ) : (
+                <span />
+              )}
+              {onRenameNickname && vehicle.id && (
+                <button
+                  type="button"
+                  onClick={() => onRenameNickname(vehicle)}
+                  className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border/70 bg-secondary/60 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  title="Definir ou alterar apelido do veículo"
+                >
+                  <Tag className="size-2.5" />
+                  <span>{hasNickname ? "Editar apelido" : "Apelidar"}</span>
+                </button>
+              )}
+            </div>
             <h3 className="truncate text-lg font-black uppercase tracking-tight text-foreground group-hover:text-primary transition-colors">
-              {vehicle.model || modelText}
+              {hasNickname ? modelText : vehicle.model || modelText}
             </h3>
 
             {/* Specs Chips: Year & Color */}
@@ -483,7 +511,7 @@ export function VehicleMiniCard({
 
             <div className="rounded-xl border border-border/70 bg-secondary/30 p-3.5 text-xs text-muted-foreground space-y-2">
               <p>
-                Esta motocicleta está cadastrada no sistema, mas ainda <strong>não possui nenhum equipamento rastreador (IMEI) vinculado</strong>.
+                Este veículo está cadastrado no sistema, mas ainda <strong>não possui nenhum equipamento rastreador (IMEI) vinculado</strong>.
               </p>
               <p>
                 Assim que a equipe técnica ou o administrador realizar a instalação e associação do dispositivo, o status mudará automaticamente para <strong>Protegido 24h</strong> e o monitoramento estará disponível.

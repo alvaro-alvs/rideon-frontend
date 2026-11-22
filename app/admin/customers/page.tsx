@@ -29,6 +29,7 @@ import { CalendarPicker } from "@/app/components/ui/calendar-picker";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isPlatformOrTenantAdmin, isMasterAdmin } from "@/lib/auth";
 import { formatPhone, validatePhone } from "@/lib/phone";
+import { formatVehicleDisplayName, formatVehicleModel } from "@/lib/vehicle-display";
 import type { Customer } from "@/lib/types/customer";
 import type { TenantItem } from "@/lib/types/tenant";
 import type { Manager } from "@/lib/types/manager";
@@ -637,7 +638,7 @@ export default function AdminCustomersPage() {
                                   : "bg-secondary text-muted-foreground"
                               }`}
                             >
-                              {cust.motorcycle_count} / {cust.vehicle_limit || 1} {(cust.vehicle_limit || 1) === 1 ? "Moto" : "Motos"}
+                              {cust.motorcycle_count} / {cust.vehicle_limit || 1} {(cust.vehicle_limit || 1) === 1 ? "Veículo" : "Veículos"}
                             </span>
                             {cust.motorcycle_count >= (cust.vehicle_limit || 1) && (
                               <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
@@ -743,8 +744,11 @@ export default function AdminCustomersPage() {
                             className="inline-flex items-center gap-2 rounded-lg bg-secondary/40 px-2.5 py-1 text-xs"
                           >
                             <Bike className="size-3 text-primary" />
-                            <span className="font-semibold text-foreground">
-                              {m.brand} {m.model}
+                            <span
+                              className="font-semibold text-foreground"
+                              title={formatVehicleModel(m)}
+                            >
+                              {formatVehicleDisplayName(m)}
                             </span>
                             <span className="font-mono text-[11px] text-muted-foreground uppercase">
                               {m.license_plate}

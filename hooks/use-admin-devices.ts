@@ -121,7 +121,9 @@ export function useAdminDevices(pollIntervalSeconds: number = 30) {
       const matchesSerial = device.serial_number.toLowerCase().includes(q);
       const matchesPlate = device.motorcycle?.license_plate.toLowerCase().includes(q);
       const matchesMotoModel = device.motorcycle
-        ? `${device.motorcycle.brand} ${device.motorcycle.model}`.toLowerCase().includes(q)
+        ? `${device.motorcycle.nickname || ""} ${device.motorcycle.brand} ${device.motorcycle.model}`
+            .toLowerCase()
+            .includes(q)
         : false;
       const matchesRider = device.motorcycle?.rider?.name.toLowerCase().includes(q);
       const matchesManager = device.manager_email?.toLowerCase().includes(q);

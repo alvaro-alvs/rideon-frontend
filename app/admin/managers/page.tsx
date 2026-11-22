@@ -441,7 +441,7 @@ export default function AdminManagersPage() {
                           <span className="font-display font-bold tabular-nums text-foreground">
                             {m.motorcycle_count || 0}
                           </span>
-                          <span className="text-muted-foreground">motos</span>
+                          <span className="text-muted-foreground">veículos</span>
                         </div>
                       </div>
 

@@ -5,13 +5,13 @@ import { Check } from "lucide-react";
 export const POPULAR_BRANDS = [
   { name: "Honda", color: "#E60012" },
   { name: "Yamaha", color: "#0C238A" },
+  { name: "Toyota", color: "#DC2626" },
+  { name: "Volkswagen", color: "#2563EB" },
+  { name: "Chevrolet", color: "#EAB308" },
+  { name: "Hyundai", color: "#0EA5E9" },
+  { name: "Fiat", color: "#EF4444" },
   { name: "BMW", color: "#0066B1" },
   { name: "Kawasaki", color: "#66CC00" },
-  { name: "Triumph", color: "#D12421" },
-  { name: "Suzuki", color: "#E31E24" },
-  { name: "Ducati", color: "#CC0000" },
-  { name: "Royal Enfield", color: "#C69214" },
-  { name: "Harley-Davidson", color: "#FF6600" },
 ] as const;
 
 export const POPULAR_COLORS = [

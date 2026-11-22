@@ -89,3 +89,18 @@ export type CustomerCurrentBillingResponse = {
   card_sdk?: TransparentSDKConfig;
 };
 
+export type BillingPlan = {
+  id: string;
+  tenant_id?: string | null;
+  manager_id?: string | null;
+  name: string;
+  description?: string;
+  billing_cycle: BillingCycle;
+  amount_cents: number;
+  allow_installments?: boolean;
+  allowed_payment_methods: PaymentMethod[];
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+

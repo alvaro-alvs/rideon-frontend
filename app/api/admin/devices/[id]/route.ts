@@ -122,7 +122,7 @@ export async function PATCH(
       body.unlink === true
         ? "Dispositivo desvinculado e retornado ao estoque com sucesso!"
         : payload.motorcycle_id
-        ? "Dispositivo vinculado à motocicleta com sucesso!"
+        ? "Dispositivo vinculado ao veículo com sucesso!"
         : "Dispositivo atualizado com sucesso!";
 
     return NextResponse.json({

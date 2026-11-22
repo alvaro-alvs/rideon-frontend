@@ -901,7 +901,7 @@ export default function SettingsPage() {
                       Notificação de Ignição
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Receber alerta push instantâneo sempre que a ignição da moto for acionada ou desligada.
+                      Receber alerta push instantâneo sempre que a ignição do veículo for acionada ou desligada.
                     </p>
                   </div>
                   <button

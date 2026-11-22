@@ -35,7 +35,7 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { message: "Nao foi possivel obter a localizacao da motocicleta." },
+        { message: "Nao foi possivel obter a localizacao do veiculo." },
         { status: response.status >= 500 ? 502 : response.status },
       );
     }

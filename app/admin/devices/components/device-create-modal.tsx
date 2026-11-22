@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { DeviceModelPreset } from "@/lib/types/device";
 
 const MODEL_PRESETS: DeviceModelPreset[] = [
@@ -508,7 +509,7 @@ export function DeviceCreateModal({
           <div className="space-y-2">
             <label className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-1.5">
               <Bike className="size-3.5 text-primary" />
-              3. Vincular a uma Motocicleta (Opcional)
+              3. Vincular a um Veículo (Opcional)
             </label>
 
             <select
@@ -522,13 +523,13 @@ export function DeviceCreateModal({
               </option>
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
-                  [{m.license_plate}] {m.brand} {m.model}{" "}
+                  [{m.license_plate}] {formatVehicleDisplayName(m)}{" "}
                   {m.rider?.name ? `• Piloto: ${m.rider.name}` : ""}
                 </option>
               ))}
             </select>
             <p className="text-[11px] text-muted-foreground">
-              Você pode cadastrar o rastreador no estoque agora e vinculá-lo a uma moto posteriormente.
+              Você pode cadastrar o rastreador no estoque agora e vinculá-lo a um veículo posteriormente.
             </p>
           </div>
 

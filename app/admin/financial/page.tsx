@@ -8,6 +8,7 @@ import {
   Clock,
   CreditCard,
   FileText,
+  Layers,
   Pencil,
   Plus,
   RefreshCw,
@@ -19,22 +20,21 @@ import {
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { ChargeModal } from "@/app/admin/financial/components/charge-modal";
+import { PlansTab } from "@/app/admin/financial/components/plans-tab";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { isPlatformOrTenantAdmin } from "@/lib/auth";
+import { isMasterAdmin, isPlatformOrTenantAdmin } from "@/lib/auth";
+import {
+  formatBillingCycleLabel,
+  formatCurrencyCents,
+} from "@/lib/financial-format";
 import type {
+  BillingPlan,
   ComplianceStatus,
   CustomerBillingSummary,
   InvoiceItem,
   ManagerCustomersBillingResponse,
 } from "@/lib/types/financial";
-
-function formatCurrencyCents(cents?: number) {
-  if (!cents) return "R$ 0,00";
-  return (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
+import type { TenantItem } from "@/lib/types/tenant";
 
 function formatDate(iso?: string) {
   if (!iso) return "—";
@@ -72,8 +72,12 @@ export default function AdminFinancialPage() {
   const router = useRouter();
   const currentUser = useCurrentUser();
 
+  const [activeTab, setActiveTab] = useState<"customers" | "plans">("customers");
   const [data, setData] = useState<ManagerCustomersBillingResponse | null>(null);
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [plansLoading, setPlansLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,6 +95,9 @@ export default function AdminFinancialPage() {
 
   const userRole =
     currentUser.status === "authenticated" ? currentUser.user.role : undefined;
+  const currentUserId =
+    currentUser.status === "authenticated" ? currentUser.user.id : null;
+  const isMaster = isMasterAdmin(userRole);
 
   useEffect(() => {
     if (
@@ -100,6 +107,21 @@ export default function AdminFinancialPage() {
       router.replace("/dashboard/financial");
     }
   }, [currentUser.status, userRole, router]);
+
+  const loadPlans = useCallback(async () => {
+    setPlansLoading(true);
+    try {
+      const res = await fetch("/api/admin/financial/plans", { cache: "no-store" });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        setPlans(Array.isArray(body?.plans) ? body.plans : []);
+      }
+    } catch {
+      // Keep existing plans on transient failure
+    } finally {
+      setPlansLoading(false);
+    }
+  }, []);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -123,12 +145,58 @@ export default function AdminFinancialPage() {
 
   useEffect(() => {
     if (
-      currentUser.status === "authenticated" &&
-      isPlatformOrTenantAdmin(userRole)
+      currentUser.status !== "authenticated" ||
+      !isPlatformOrTenantAdmin(userRole)
     ) {
-      loadData();
+      return;
     }
-  }, [currentUser.status, userRole, loadData]);
+
+    let active = true;
+
+    fetch("/api/admin/financial/customers", { cache: "no-store" })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!active) return;
+        if (!res.ok) {
+          setError(body?.error?.message || body?.message || "Erro ao carregar financeiro.");
+          return;
+        }
+        setData(body);
+      })
+      .catch(() => {
+        if (active) setError("Erro de conexão ao carregar dados financeiros.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    fetch("/api/admin/financial/plans", { cache: "no-store" })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (active && res.ok) {
+          setPlans(Array.isArray(body?.plans) ? body.plans : []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setPlansLoading(false);
+      });
+
+    if (isMasterAdmin(userRole)) {
+      fetch("/api/admin/tenants", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : []))
+        .then((list) => {
+          if (!active) return;
+          if (Array.isArray(list)) setTenants(list);
+          else if (Array.isArray(list?.data)) setTenants(list.data);
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser.status, userRole]);
 
   const filteredCustomers = useMemo(() => {
     const list = data?.customers ?? [];
@@ -215,12 +283,17 @@ export default function AdminFinancialPage() {
                 Financeiro
               </h1>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Situação cadastral, adimplência e última mensalidade dos clientes.
+                {activeTab === "customers"
+                  ? "Situação cadastral, adimplência e última mensalidade dos clientes."
+                  : "Crie e administre templates de planos para agilizar novas cobranças."}
               </p>
             </div>
             <button
               type="button"
-              onClick={() => loadData(true)}
+              onClick={() => {
+                void loadData(true);
+                void loadPlans();
+              }}
               disabled={refreshing}
               className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
             >
@@ -229,7 +302,76 @@ export default function AdminFinancialPage() {
             </button>
           </div>
 
-          {/* Summary KPIs (Clean, borderless on card surface) */}
+          {/* Section Tabs */}
+          <div
+            role="tablist"
+            aria-label="Módulos do Financeiro"
+            className="flex flex-wrap items-center gap-1.5 border-b border-border/60 pb-3"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "customers"}
+              onClick={() => setActiveTab("customers")}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+                activeTab === "customers"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-background/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <Users className="size-3.5" />
+              Clientes & Cobranças
+              {data ? (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    activeTab === "customers"
+                      ? "bg-black/20 text-white"
+                      : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {data.total}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "plans"}
+              onClick={() => setActiveTab("plans")}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+                activeTab === "plans"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-background/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <Layers className="size-3.5" />
+              Planos
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  activeTab === "plans"
+                    ? "bg-black/20 text-white"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {plans.length}
+              </span>
+            </button>
+          </div>
+
+          {activeTab === "plans" ? (
+            <PlansTab
+              plans={plans}
+              loading={plansLoading}
+              isMaster={isMaster}
+              userRole={userRole}
+              currentUserId={currentUserId}
+              tenants={tenants}
+              onRefresh={loadPlans}
+            />
+          ) : (
+            <>
+              {/* Summary KPIs (Clean, borderless on card surface) */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             <div className="py-1">
               <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -352,13 +494,7 @@ export default function AdminFinancialPage() {
                           {c.last_paid_amount_cents ? (
                             <div className="text-[11px] text-muted-foreground">
                               {formatCurrencyCents(c.last_paid_amount_cents)} •{" "}
-                              {c.billing_cycle === "yearly"
-                                ? c.allow_installments
-                                  ? "Anual (12x)"
-                                  : "Anual"
-                                : c.billing_cycle === "one_time"
-                                  ? "Única"
-                                  : "Mensal"}
+                              {formatBillingCycleLabel(c.billing_cycle, c.allow_installments)}
                             </div>
                           ) : null}
                         </td>
@@ -389,6 +525,8 @@ export default function AdminFinancialPage() {
               </tbody>
             </table>
           </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -396,6 +534,13 @@ export default function AdminFinancialPage() {
       <ChargeModal
         customer={selectedCustomer}
         editingInvoice={editingInvoice}
+        plans={plans}
+        plansLoading={plansLoading}
+        onManagePlans={() => {
+          setSelectedCustomer(null);
+          setEditingInvoice(null);
+          setActiveTab("plans");
+        }}
         onClose={() => {
           setSelectedCustomer(null);
           setEditingInvoice(null);
@@ -462,13 +607,7 @@ export default function AdminFinancialPage() {
                       <div className="text-[11px] text-muted-foreground">
                         {isPaid ? "Pago em " : "Vencimento "}
                         {formatDate(isPaid ? (inv.paid_at || inv.due_date) : inv.due_date)} •{" "}
-                        {inv.billing_cycle === "yearly"
-                          ? inv.allow_installments
-                            ? "Anual (12x)"
-                            : "Anual"
-                          : inv.billing_cycle === "one_time"
-                            ? "Única"
-                            : "Mensal"} •{" "}
+                        {formatBillingCycleLabel(inv.billing_cycle, inv.allow_installments)} •{" "}
                         <span className={`font-semibold ${statusColor}`}>
                           {statusLabel}
                         </span>

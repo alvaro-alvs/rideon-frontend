@@ -622,13 +622,13 @@ function AuthPortalContent({ initialTab }: { initialTab: AuthTab }) {
                     htmlFor="login-identifier"
                     className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
                   >
-                    E-mail, Placa ou IMEI
+                    E-mail, Celular, Placa ou IMEI
                   </label>
                   <AnimatePresence mode="wait">
                     {identifierInput.trim().length > 0 &&
                       resolvedIdentifier.detectedKind !== "unknown" && (
                         <motion.span
-                          key={`${resolvedIdentifier.detectedKind}-${resolvedIdentifier.plateStandard ?? ""}`}
+                          key={`${resolvedIdentifier.detectedKind}-${resolvedIdentifier.plateStandard ?? resolvedIdentifier.phoneType ?? ""}`}
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.9 }}
@@ -636,6 +636,10 @@ function AuthPortalContent({ initialTab }: { initialTab: AuthTab }) {
                           className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
                         >
                           {resolvedIdentifier.detectedKind === "email" && "E-mail"}
+                          {resolvedIdentifier.detectedKind === "phone" &&
+                            (resolvedIdentifier.phoneType === "landline"
+                              ? "Telefone"
+                              : "Celular")}
                           {resolvedIdentifier.detectedKind === "plate" &&
                             (resolvedIdentifier.plateStandard === "mercosul"
                               ? "Placa Mercosul"
@@ -654,6 +658,8 @@ function AuthPortalContent({ initialTab }: { initialTab: AuthTab }) {
                     <Bike className="size-4 shrink-0 text-muted-foreground group-focus-within:text-primary" />
                   ) : resolvedIdentifier.detectedKind === "imei" ? (
                     <Cpu className="size-4 shrink-0 text-muted-foreground group-focus-within:text-primary" />
+                  ) : resolvedIdentifier.detectedKind === "phone" ? (
+                    <Phone className="size-4 shrink-0 text-muted-foreground group-focus-within:text-primary" />
                   ) : (
                     <Mail className="size-4 shrink-0 text-muted-foreground group-focus-within:text-primary" />
                   )}
@@ -662,12 +668,16 @@ function AuthPortalContent({ initialTab }: { initialTab: AuthTab }) {
                     required
                     name="identifier"
                     autoComplete={
-                      resolvedIdentifier.detectedKind === "email" ? "email" : "username"
+                      resolvedIdentifier.detectedKind === "email"
+                        ? "email"
+                        : resolvedIdentifier.detectedKind === "phone"
+                          ? "tel"
+                          : "username"
                     }
                     type="text"
                     value={identifierInput}
                     onChange={(e) => handleIdentifierChange(e.target.value)}
-                    placeholder="seu@email.com, ABC1D23 ou IMEI"
+                    placeholder="seu@email.com, (11) 99999-9999, ABC1D23 ou IMEI"
                     className={`w-full min-w-0 bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 ${
                       resolvedIdentifier.detectedKind === "plate" ||
                       resolvedIdentifier.detectedKind === "imei"

@@ -31,7 +31,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   {
     id: "dash",
     title: "Visão Geral",
-    subtitle: "Status em tempo real da motocicleta e métricas",
+    subtitle: "Status em tempo real do veículo e métricas",
     href: "/dashboard",
     category: "Páginas",
     icon: LayoutDashboard,
@@ -39,7 +39,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   {
     id: "vehicles",
     title: "Meus Veículos",
-    subtitle: "Garagem, cadastro de motos e documentos",
+    subtitle: "Garagem, cadastro de veículos e documentos",
     href: "/dashboard/vehicles",
     category: "Páginas",
     icon: Bike,
@@ -80,8 +80,8 @@ const SEARCH_ITEMS: SearchItem[] = [
   },
   {
     id: "add-vehicle",
-    title: "Cadastrar Nova Moto",
-    subtitle: "Adicione uma nova motocicleta ao rastreamento",
+    title: "Cadastrar Novo Veículo",
+    subtitle: "Adicione um novo veículo ao rastreamento",
     href: "/dashboard/vehicles?action=new",
     category: "Ações Rápidas",
     icon: Bike,

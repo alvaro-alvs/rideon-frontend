@@ -96,7 +96,7 @@ export function NotificationPermissionToast() {
 
         // Send confirmation welcome notification
         await sendBrowserNotification("RideOn • Notificações Ativadas", {
-          body: "Você receberá alertas instantâneos de ignição e segurança da sua moto.",
+          body: "Você receberá alertas instantâneos de ignição e segurança do seu veículo.",
         });
 
         setTimeout(() => {

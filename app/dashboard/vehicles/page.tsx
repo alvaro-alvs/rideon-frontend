@@ -30,11 +30,16 @@ import { DashboardShell } from "@/app/components/dashboard-shell";
 import { Button } from "@/app/components/ui/button";
 import { CalendarPicker } from "@/app/components/ui/calendar-picker";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
+import { VehicleNicknameModal } from "@/app/components/vehicle-nickname-modal";
 import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
 import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isMasterAdmin, isManager } from "@/lib/auth";
 import { formatPhone } from "@/lib/phone";
+import {
+  formatVehicleDisplayName,
+  formatVehicleModel,
+} from "@/lib/vehicle-display";
 import {
   VehicleMiniCard,
   type VehicleCardData,
@@ -84,6 +89,7 @@ export default function VehiclesPage() {
   // Live Telemetry Modal
   const [selectedTelemetryMoto, setSelectedTelemetryMoto] =
     useState<VehicleCardData | null>(null);
+  const [renamingMoto, setRenamingMoto] = useState<VehicleCardData | null>(null);
 
   // Form interactive state - Piloto
   const [formRiderName, setFormRiderName] = useState("");
@@ -93,6 +99,7 @@ export default function VehiclesPage() {
   // Form interactive state - Motocicleta
   const [formBrand, setFormBrand] = useState("");
   const [formModel, setFormModel] = useState("");
+  const [formNickname, setFormNickname] = useState("");
   const [formPlate, setFormPlate] = useState("");
   const [formYear, setFormYear] = useState(new Date().getFullYear().toString());
   const [formColor, setFormColor] = useState("");
@@ -310,6 +317,7 @@ export default function VehiclesPage() {
           motorcycle: {
             brand,
             model,
+            ...(formNickname.trim() ? { nickname: formNickname.trim() } : {}),
             year,
             color,
             license_plate,
@@ -380,7 +388,7 @@ export default function VehiclesPage() {
     if (!deviceId) return;
 
     const label = v.license_plate
-      ? `da moto ${v.license_plate}`
+      ? `do veículo ${v.license_plate}`
       : v.model
         ? `do veículo ${v.model}`
         : "do veículo";
@@ -414,11 +422,13 @@ export default function VehiclesPage() {
     const plate = (moto.license_plate ?? "").toLowerCase();
     const brand = (moto.brand ?? "").toLowerCase();
     const model = (moto.model ?? "").toLowerCase();
+    const nickname = (moto.nickname ?? "").toLowerCase();
     const riderName = (moto.rider?.name ?? "").toLowerCase();
     return (
       plate.includes(query) ||
       brand.includes(query) ||
       model.includes(query) ||
+      nickname.includes(query) ||
       riderName.includes(query)
     );
   });
@@ -520,7 +530,7 @@ export default function VehiclesPage() {
                   </span>
                 ) : (
                   <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
-                    {motorcycles.length > 0 ? "1 Moto Ativa" : "Pronto para Conectar"}
+                    {motorcycles.length > 0 ? "1 Veículo Ativo" : "Pronto para Conectar"}
                   </span>
                 )}
               </div>
@@ -538,7 +548,7 @@ export default function VehiclesPage() {
                   ? "Monitore todos os veículos cadastrados na central com telemetria GPS e controle administrativo."
                   : isMgr
                     ? "Monitore e gerencie todos os veículos da sua empresa com telemetria GPS e controle operacional."
-                    : "Acompanhe os dados da sua motocicleta vinculada, verifique a proteção em tempo real ou conclua o cadastro."}
+                    : "Acompanhe os dados do seu veículo vinculado, verifique a proteção em tempo real ou conclua o cadastro."}
               </p>
             </div>
 
@@ -645,8 +655,9 @@ export default function VehiclesPage() {
                   const hasGps = Boolean(
                     moto.device && (moto.has_position || moto.last_position),
                   );
-                  const modelText =
-                    `${moto.brand ?? ""} ${moto.model ?? ""}`.trim() || "Motocicleta";
+                  const hasNickname = Boolean(moto.nickname?.trim());
+                  const modelText = formatVehicleDisplayName(moto);
+                  const originalModelText = formatVehicleModel(moto);
                   const colorHex = getColorHex(moto.color);
 
                   return (
@@ -671,9 +682,27 @@ export default function VehiclesPage() {
 
                         {/* Modelo e Mínimos Detalhes */}
                         <div>
-                          <h3 className="text-base font-black uppercase tracking-tight text-foreground truncate">
-                            {modelText}
-                          </h3>
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-base font-black uppercase tracking-tight text-foreground truncate">
+                              {modelText}
+                            </h3>
+                            {moto.id && (
+                              <button
+                                type="button"
+                                onClick={() => setRenamingMoto(moto)}
+                                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border/70 bg-secondary/60 px-2 py-0.5 text-[10px] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                                title="Definir ou alterar apelido do veículo"
+                              >
+                                <Tag className="size-2.5" />
+                                <span>{hasNickname ? "Editar apelido" : "Apelidar"}</span>
+                              </button>
+                            )}
+                          </div>
+                          {hasNickname && (
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
+                              {originalModelText}
+                            </p>
+                          )}
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground font-medium">
                             {moto.year && <span>Ano {moto.year}</span>}
                             {moto.color && (
@@ -788,8 +817,8 @@ export default function VehiclesPage() {
                     {isAdmin
                       ? "Veículos Cadastrados na Frota"
                       : motorcycles.some((m) => m.device)
-                        ? "Sua Motocicleta Conectada"
-                        : "Sua Motocicleta Cadastrada"}
+                        ? "Seu Veículo Conectado"
+                        : "Seu Veículo Cadastrado"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
                     {(() => {
@@ -847,6 +876,7 @@ export default function VehiclesPage() {
                     isAdmin={isAdmin}
                     onOpenTelemetry={(m) => setSelectedTelemetryMoto(m)}
                     onUnlinkDevice={isAdmin ? handleUnlinkDevice : undefined}
+                    onRenameNickname={(m) => setRenamingMoto(m)}
                   />
                 ))}
               </div>
@@ -912,16 +942,16 @@ export default function VehiclesPage() {
                   Etapa 2 de 2 • Finalizar Cadastro
                 </span>
                 <h2 className="text-2xl font-black uppercase tracking-tight text-foreground">
-                  Piloto Registrado, Moto Pendente
+                  Condutor Registrado, Veículo Pendente
                 </h2>
               </div>
               <span className="rounded-full bg-primary/20 px-3 py-1 text-xs font-bold text-primary border border-primary/30">
-                Aguardando Motocicleta
+                Aguardando Veículo
               </span>
             </div>
 
             <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              Você já registrou os dados do piloto responsável. Agora basta adicionar as especificações da motocicleta para concluir o vínculo com o rastreador.
+              Você já registrou os dados do responsável. Agora basta adicionar as especificações do veículo para concluir o vínculo com o rastreador.
             </p>
 
             <button
@@ -946,7 +976,7 @@ export default function VehiclesPage() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-primary group-hover:bg-primary group-hover:text-white transition-all">
-                <span>Vincular Moto</span>
+                <span>Vincular Veículo</span>
                 <ChevronRight className="size-4" />
               </div>
             </button>
@@ -970,7 +1000,7 @@ export default function VehiclesPage() {
                   Veículo Cadastrado com Sucesso!
                 </h2>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  O piloto e a motocicleta foram conectados com sucesso à central RideOn. A telemetria já está ativa e pronta para acompanhamento em tempo real.
+                  O condutor e o veículo foram conectados com sucesso à central RideOn. A telemetria já está ativa e pronta para acompanhamento em tempo real.
                 </p>
               </div>
             </div>
@@ -1012,7 +1042,7 @@ export default function VehiclesPage() {
                   <span>
                     {isAdmin
                       ? "Cadastro Administrativo de Novo Veículo na Frota"
-                      : "Cadastro de Nova Motocicleta na Central"}
+                      : "Cadastro de Novo Veículo na Central"}
                   </span>
                 </div>
                 <button
@@ -1040,7 +1070,7 @@ export default function VehiclesPage() {
                       </div>
                       <div>
                         <h2 className="text-lg font-black uppercase tracking-tight text-foreground">
-                          Dados da Motocicleta
+                          Dados do Veículo
                         </h2>
                         <p className="text-xs text-muted-foreground">
                           Especifique a marca, modelo, ano, cor e placa do veículo
@@ -1070,7 +1100,7 @@ export default function VehiclesPage() {
                         value={formBrand}
                         onChange={(e) => setFormBrand(e.target.value)}
                         icon={Bike}
-                        placeholder="Ex: Yamaha, Honda, BMW"
+                        placeholder="Ex: Honda, Toyota, Volkswagen, Yamaha"
                       />
                       <FormField
                         label="Modelo"
@@ -1078,7 +1108,17 @@ export default function VehiclesPage() {
                         value={formModel}
                         onChange={(e) => setFormModel(e.target.value)}
                         icon={Tag}
-                        placeholder="Ex: MT-07, CB 500F, F 850 GS"
+                        placeholder="Ex: Civic, Onix, MT-07, CB 500F"
+                      />
+                      <FormField
+                        label="Apelido do Veículo (opcional)"
+                        name="nickname"
+                        value={formNickname}
+                        onChange={(e) => setFormNickname(e.target.value)}
+                        icon={Tag}
+                        required={false}
+                        maxLength={60}
+                        placeholder="Ex: Frota 01, Meu Carro, Trabalho"
                       />
                       <FormField
                         label="Ano de Fabricação"
@@ -1403,7 +1443,7 @@ export default function VehiclesPage() {
               <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover:scale-110">
                 <Plus className="size-4" />
               </div>
-              <span>{isAdmin ? "Cadastrar Novo Veículo na Frota RideOn" : "Cadastrar Nova Motocicleta na Central"}</span>
+              <span>{isAdmin ? "Cadastrar Novo Veículo na Frota RideOn" : "Cadastrar Novo Veículo na Central"}</span>
             </button>
           </div>
         )}
@@ -1419,10 +1459,29 @@ export default function VehiclesPage() {
           onClose={() => setSelectedTelemetryMoto(null)}
           motorcycleId={selectedTelemetryMoto.id}
           motorcycleInfo={{
-            model:
-              `${selectedTelemetryMoto.brand ?? ""} ${selectedTelemetryMoto.model ?? ""}`.trim() ||
-              "Motocicleta",
+            model: formatVehicleDisplayName(selectedTelemetryMoto),
             licensePlate: selectedTelemetryMoto.license_plate || "SEM PLACA",
+          }}
+        />
+      )}
+
+      {renamingMoto && renamingMoto.id && (
+        <VehicleNicknameModal
+          vehicle={{
+            id: renamingMoto.id,
+            brand: renamingMoto.brand,
+            model: renamingMoto.model,
+            nickname: renamingMoto.nickname,
+            license_plate: renamingMoto.license_plate,
+          }}
+          onClose={() => setRenamingMoto(null)}
+          onSaved={(updatedNickname) => {
+            setMotorcycles((prev) =>
+              prev.map((m) =>
+                m.id === renamingMoto.id ? { ...m, nickname: updatedNickname } : m,
+              ),
+            );
+            setReloadTrigger((t) => t + 1);
           }}
         />
       )}

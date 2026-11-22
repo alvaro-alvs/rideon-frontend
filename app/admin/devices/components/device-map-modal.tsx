@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { Device, DeviceLastPosition } from "@/lib/types/device";
 
 interface DeviceMapModalProps {
@@ -574,13 +575,13 @@ function DeviceMapModalContent({
             <div className="rounded-2xl border border-border bg-secondary/50 p-4">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.1em] text-primary">
                 <Bike className="size-4" />
-                <span>Motocicleta Vinculada</span>
+                <span>Veículo Vinculado</span>
               </div>
               {moto ? (
                 <div className="mt-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-foreground">
-                      {moto.brand} {moto.model}
+                      {formatVehicleDisplayName(moto)}
                     </span>
                     {/* Mercosul plate badge */}
                     <div className="inline-flex items-center overflow-hidden rounded-lg border border-blue-500/60 bg-neutral-900 text-[11px] font-bold shadow">
@@ -618,7 +619,7 @@ function DeviceMapModalContent({
                 </div>
               ) : (
                 <p className="mt-2 text-xs italic text-muted-foreground">
-                  Nenhuma motocicleta associada a este dispositivo.
+                  Nenhum veículo associado a este dispositivo.
                 </p>
               )}
             </div>

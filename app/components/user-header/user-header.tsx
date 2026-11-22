@@ -143,7 +143,7 @@ export function UserHeader({ onMenuClick, className = "" }: UserHeaderProps) {
             className="group flex items-center gap-3 rounded-xl border border-border/70 bg-secondary/50 px-3.5 py-2 text-xs text-muted-foreground hover:border-primary/40 hover:bg-secondary/80 hover:text-foreground transition-all duration-200"
           >
             <Search className="size-4 text-primary group-hover:scale-110 transition-transform" />
-            <span className="font-medium">Buscar páginas, motos ou atalhos...</span>
+            <span className="font-medium">Buscar páginas, veículos ou atalhos...</span>
             <div className="flex items-center gap-0.5 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground border border-border/60">
               <Command className="size-2.5" />
               <span>K</span>

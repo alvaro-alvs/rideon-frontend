@@ -116,7 +116,7 @@ export function GoogleMapView({
           ? new google.maps.Marker({
               position: center,
               map,
-              title: markerType === "pin" ? "Última posição do veículo" : "Moto em tempo real",
+              title: markerType === "pin" ? "Última posição do veículo" : "Veículo em tempo real",
               icon: getMarkerIcon(markerType, heading),
             })
           : null;
@@ -212,7 +212,7 @@ export function GoogleMapView({
       markerInstance.current = new google.maps.Marker({
         position: latLng,
         map: googleMapInstance.current,
-        title: markerType === "pin" ? "Última posição do veículo" : "Moto em tempo real",
+        title: markerType === "pin" ? "Última posição do veículo" : "Veículo em tempo real",
         icon: getMarkerIcon(markerType, heading),
       });
       googleMapInstance.current.setZoom(zoom ?? 16);

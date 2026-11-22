@@ -18,6 +18,7 @@ import {
   User,
 } from "lucide-react";
 
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { Device } from "@/lib/types/device";
 
 interface DeviceCardProps {
@@ -181,7 +182,7 @@ export function DeviceCard({
 
               <div className="min-w-0 flex-1 text-right">
                 <p className="text-xs font-bold text-foreground truncate">
-                  {moto.brand} {moto.model}
+                  {formatVehicleDisplayName(moto)}
                 </p>
                 <p className="text-[10px] text-muted-foreground truncate">
                   {moto.rider?.name ? (

@@ -17,12 +17,14 @@ import {
   X,
 } from "lucide-react";
 
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { Device } from "@/lib/types/device";
 
 type MotorcycleOption = {
   id: string;
   brand: string;
   model: string;
+  nickname?: string;
   year?: number;
   color?: string;
   license_plate: string;
@@ -127,11 +129,13 @@ function DeviceLinkModalInner({
     const plate = (m.license_plate || "").toLowerCase();
     const brand = (m.brand || "").toLowerCase();
     const model = (m.model || "").toLowerCase();
+    const nickname = (m.nickname || "").toLowerCase();
     const rider = (m.rider?.name || "").toLowerCase();
     return (
       plate.includes(q) ||
       brand.includes(q) ||
       model.includes(q) ||
+      nickname.includes(q) ||
       rider.includes(q)
     );
   });
@@ -144,7 +148,7 @@ function DeviceLinkModalInner({
   // Vincular à motocicleta selecionada
   const handleLink = async () => {
     if (!selectedMotoId) {
-      setError("Selecione uma motocicleta da lista para vincular.");
+      setError("Selecione um veículo da lista para vincular.");
       return;
     }
 
@@ -352,7 +356,7 @@ function DeviceLinkModalInner({
 
                 <div className="min-w-0 flex-1 text-right">
                   <p className="text-xs font-bold text-foreground truncate">
-                    {currentMoto.brand} {currentMoto.model}
+                    {formatVehicleDisplayName(currentMoto)}
                   </p>
                   {currentMoto.rider?.name && (
                     <p className="text-[11px] text-muted-foreground flex items-center justify-end gap-1 truncate">
@@ -367,7 +371,7 @@ function DeviceLinkModalInner({
             <div className="rounded-2xl border border-amber-500/30 bg-amber-950/10 p-3.5 text-xs text-amber-300/90 flex items-center gap-2.5">
               <Radio className="size-4 shrink-0 text-amber-400 animate-pulse" />
               <span>
-                Este rastreador está <b>em estoque (standby)</b>. Selecione uma motocicleta abaixo para vinculá-lo e ativar o rastreamento em tempo real.
+                Este rastreador está <b>em estoque (standby)</b>. Selecione um veículo abaixo para vinculá-lo e ativar o rastreamento em tempo real.
               </span>
             </div>
           )}
@@ -378,11 +382,11 @@ function DeviceLinkModalInner({
               <label className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-1.5">
                 <Bike className="size-3.5 text-primary" />
                 {currentMoto
-                  ? "Transferir / Selecionar Nova Motocicleta"
-                  : "Selecione a Motocicleta para Vinculação"}
+                  ? "Transferir / Selecionar Novo Veículo"
+                  : "Selecione o Veículo para Vinculação"}
               </label>
               <span className="text-[11px] text-muted-foreground font-mono">
-                {filteredMotos.length} motos disponíveis
+                {filteredMotos.length} veículos disponíveis
               </span>
             </div>
 
@@ -393,7 +397,7 @@ function DeviceLinkModalInner({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar moto por placa, marca, modelo ou piloto..."
+                placeholder="Buscar veículo por placa, marca, modelo ou condutor..."
                 className="w-full rounded-2xl border border-border/80 bg-secondary/80 py-2.5 pl-10 pr-8 text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
               />
               {searchQuery && (
@@ -412,11 +416,11 @@ function DeviceLinkModalInner({
               {loadingMotos ? (
                 <div className="py-8 text-center text-xs text-muted-foreground flex flex-col items-center gap-2">
                   <span className="size-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <span>Carregando frota de motocicletas...</span>
+                  <span>Carregando frota de veículos...</span>
                 </div>
               ) : filteredMotos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
-                  Nenhuma motocicleta encontrada para &quot;{searchQuery}&quot;.
+                  Nenhum veículo encontrado para &quot;{searchQuery}&quot;.
                 </div>
               ) : (
                 filteredMotos.map((m) => {
@@ -447,7 +451,7 @@ function DeviceLinkModalInner({
 
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-foreground truncate">
-                            {m.brand} {m.model}
+                            {formatVehicleDisplayName(m)}
                             {m.year ? ` • ${m.year}` : ""}
                           </p>
                           {m.rider?.name && (

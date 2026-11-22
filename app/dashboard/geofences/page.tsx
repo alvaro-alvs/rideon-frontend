@@ -22,6 +22,7 @@ import { DashboardShell } from "@/app/components/dashboard-shell";
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
+import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import {
   evaluateGeofenceLiveMetrics,
   formatArea,
@@ -419,7 +420,7 @@ export default function GeofencesPage() {
             >
               {motorcycles.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.brand} {m.model} ({m.license_plate || "sem placa"})
+                  {formatVehicleDisplayName(m)} ({m.license_plate || "sem placa"})
                 </option>
               ))}
             </select>
