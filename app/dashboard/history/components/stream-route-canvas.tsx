@@ -3,11 +3,16 @@
 import { useMemo } from "react";
 import { motion } from "motion/react";
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
-import type { TripPoint } from "@/lib/trip-format";
+import {
+  formatSpeedLabel,
+  formatTimeWithSeconds,
+  type TripPoint,
+} from "@/lib/trip-format";
 
 interface StreamRouteCanvasProps {
   points: TripPoint[];
   focusedPoint: TripPoint | null;
+  focusedPointNumber?: number | null;
   isStreaming: boolean;
   hasGoogleMapsKey?: boolean;
 }
@@ -15,12 +20,34 @@ interface StreamRouteCanvasProps {
 export function StreamRouteCanvas({
   points,
   focusedPoint,
+  focusedPointNumber = null,
   isStreaming,
   hasGoogleMapsKey = Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
 }: StreamRouteCanvasProps) {
   const activePoint =
     focusedPoint ??
     (points.length > 0 ? points[points.length - 1] : null);
+
+  const resolvedPointNumber = useMemo(() => {
+    if (points.length === 0 || !activePoint) return null;
+    if (focusedPointNumber && focusedPointNumber >= 1) return focusedPointNumber;
+    const idx = points.findIndex(
+      (p) =>
+        p.timestamp === activePoint.timestamp &&
+        p.latitude === activePoint.latitude &&
+        p.longitude === activePoint.longitude,
+    );
+    return idx >= 0 ? idx + 1 : points.length;
+  }, [points, activePoint, focusedPointNumber]);
+
+  const activeMarkerTitle = activePoint
+    ? `Ponto #${resolvedPointNumber ?? points.length} • ${formatTimeWithSeconds(activePoint.timestamp)} • ${formatSpeedLabel(activePoint.speed)}`
+    : undefined;
+
+  const originPoint = points.length > 1 ? points[0] : null;
+  const originMarkerTitle = originPoint
+    ? `Ponto #1 • Partida • ${formatTimeWithSeconds(originPoint.timestamp)}`
+    : undefined;
 
   // Normalized SVG path for instant animated vector feedback when Google Maps is not configured
   const svgData = useMemo(() => {
@@ -62,8 +89,15 @@ export function StreamRouteCanvas({
         <GoogleMapView
           position={{ latitude: activePoint.latitude, longitude: activePoint.longitude }}
           heading={activePoint.heading ?? 0}
+          originPosition={
+            originPoint
+              ? { latitude: originPoint.latitude, longitude: originPoint.longitude }
+              : null
+          }
+          originTitle={originMarkerTitle}
           history={points}
           markerType="pin"
+          markerTitle={activeMarkerTitle}
           showCircle={isStreaming}
           zoom={15}
         />
@@ -145,14 +179,14 @@ export function StreamRouteCanvas({
         </div>
       )}
 
-      {/* Live Coordinate HUD */}
+      {/* Live Point HUD (without raw coordinates) */}
       {activePoint && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-lg border border-border/80 bg-background/90 px-3 py-1.5 backdrop-blur-md">
           <p className="font-mono text-[11px] font-semibold text-foreground">
-            {activePoint.latitude.toFixed(6)}, {activePoint.longitude.toFixed(6)}
+            Ponto #{resolvedPointNumber ?? points.length} de {points.length}
           </p>
           <p className="text-[10px] text-muted-foreground">
-            {Math.round(activePoint.speed)} km/h • {points.length} ponto{points.length === 1 ? "" : "s"}
+            {formatTimeWithSeconds(activePoint.timestamp)} • {formatSpeedLabel(activePoint.speed)}
           </p>
         </div>
       )}

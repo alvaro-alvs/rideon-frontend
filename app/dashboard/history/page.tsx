@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
@@ -36,10 +36,14 @@ import { isValidCoordinate } from "@/lib/geo";
 import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import { consumeNdjsonStream } from "@/lib/ndjson-stream";
 import {
+  computeCumulativeDistances,
   formatConciseDate,
-  formatCoordinatePair,
+  formatDistance,
+  formatDuration,
   formatPlaceLabel,
+  formatSpeedLabel,
   formatTimeShort,
+  formatTimeWithSeconds,
   formatTripTimeRange,
   type TripItem,
   type TripPoint,
@@ -87,9 +91,14 @@ export default function HistoryPage() {
   const [focusedPoint, setFocusedPoint] = useState<TripPoint | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [visibleRows, setVisibleRows] = useState(INITIAL_VISIBLE_ROWS);
+  const [resolvedAddresses, setResolvedAddresses] = useState<{
+    origin?: string;
+    dest?: string;
+  }>({});
 
   const streamAbortRef = useRef<AbortController | null>(null);
   const userFocusedRef = useRef(false);
+  const geocodeCacheRef = useRef<Map<string, string>>(new Map());
 
   const effectiveMotoId =
     motorcycles.length === 1 && motorcycles[0]?.id ? motorcycles[0].id : filterMotoId;
@@ -188,6 +197,7 @@ export default function HistoryPage() {
     setStreamStatus("idle");
     setStreamError("");
     setFocusedPoint(null);
+    setResolvedAddresses({});
   }, []);
 
   const runProgressiveStream = useCallback(
@@ -205,6 +215,7 @@ export default function HistoryPage() {
       setStreamError("");
       setVisibleRows(INITIAL_VISIBLE_ROWS);
       setFocusedPoint(initialTrip?.origin ?? null);
+      setResolvedAddresses({});
 
       try {
         await consumeNdjsonStream(url, {
@@ -295,6 +306,7 @@ export default function HistoryPage() {
     setStreamError("");
     setVisibleRows(INITIAL_VISIBLE_ROWS);
     setFocusedPoint(pt);
+    setResolvedAddresses({});
   };
 
   const handleOpenRawTelemetryStream = () => {
@@ -357,6 +369,107 @@ export default function HistoryPage() {
     selectedTrip?.destination ??
     (streamCoords.length > 0 ? streamCoords[streamCoords.length - 1] : null);
 
+  const cumulativeDistances = useMemo(
+    () => computeCumulativeDistances(streamCoords),
+    [streamCoords],
+  );
+
+  const totalDistanceMeters = useMemo(() => {
+    if (selectedTrip && selectedTrip.distance_meters > 0) {
+      return selectedTrip.distance_meters;
+    }
+    return cumulativeDistances.length > 0
+      ? cumulativeDistances[cumulativeDistances.length - 1]
+      : 0;
+  }, [selectedTrip, cumulativeDistances]);
+
+  const focusedPointNumber = useMemo(() => {
+    if (!focusedPoint || streamCoords.length === 0) return null;
+    const idx = streamCoords.findIndex(
+      (pt) =>
+        pt.timestamp === focusedPoint.timestamp &&
+        pt.latitude === focusedPoint.latitude &&
+        pt.longitude === focusedPoint.longitude,
+    );
+    return idx >= 0 ? idx + 1 : null;
+  }, [focusedPoint, streamCoords]);
+
+  useEffect(() => {
+    if (!isModalOpen || streamStatus !== "done") return;
+
+    const controller = new AbortController();
+
+    const lookupAddress = async (pt: TripPoint): Promise<string | undefined> => {
+      if (!isValidCoordinate(pt.latitude, pt.longitude)) return undefined;
+      const key = `${pt.latitude.toFixed(4)},${pt.longitude.toFixed(4)}`;
+      const cached = geocodeCacheRef.current.get(key);
+      if (cached) return cached;
+
+      try {
+        const res = await fetch(
+          `/api/geocode/reverse?lat=${encodeURIComponent(pt.latitude)}&lon=${encodeURIComponent(pt.longitude)}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) return undefined;
+        const data = (await res.json()) as {
+          formatted_address?: string;
+          display_name?: string;
+        };
+        const label = data.formatted_address?.trim() || data.display_name?.trim();
+        if (label) {
+          geocodeCacheRef.current.set(key, label);
+          return label;
+        }
+      } catch {
+        // Ignore abort or transient reverse-geocode errors
+      }
+      return undefined;
+    };
+
+    const run = async () => {
+      const originNeeded = Boolean(displayOrigin && !selectedTrip?.origin_address?.trim());
+      const destNeeded = Boolean(
+        displayDest &&
+          !selectedTrip?.destination_address?.trim() &&
+          (!displayOrigin ||
+            displayDest.latitude !== displayOrigin.latitude ||
+            displayDest.longitude !== displayOrigin.longitude),
+      );
+
+      if (originNeeded && displayOrigin) {
+        const addr = await lookupAddress(displayOrigin);
+        if (addr && !controller.signal.aborted) {
+          setResolvedAddresses((prev) => ({ ...prev, origin: addr }));
+        }
+      }
+      if (destNeeded && displayDest && !controller.signal.aborted) {
+        const addr = await lookupAddress(displayDest);
+        if (addr && !controller.signal.aborted) {
+          setResolvedAddresses((prev) => ({ ...prev, dest: addr }));
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      controller.abort();
+    };
+  }, [isModalOpen, streamStatus, displayOrigin, displayDest, selectedTrip]);
+
+  const originAddressText =
+    selectedTrip?.origin_address?.trim() || resolvedAddresses.origin || "";
+  const destAddressText =
+    selectedTrip?.destination_address?.trim() ||
+    resolvedAddresses.dest ||
+    (displayOrigin &&
+    displayDest &&
+    displayOrigin.latitude === displayDest.latitude &&
+    displayOrigin.longitude === displayDest.longitude
+      ? originAddressText
+      : "");
+
+  const isSingleEventView = !selectedTrip && streamCoords.length === 1;
   const renderedCoords = streamCoords.slice(0, visibleRows);
 
   return (
@@ -552,8 +665,8 @@ export default function HistoryPage() {
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {trips.map((trip, index) => {
-                    const originLabel = formatPlaceLabel(trip.origin_address, trip.origin);
-                    const destLabel = formatPlaceLabel(trip.destination_address, trip.destination);
+                    const originLabel = formatPlaceLabel(trip.origin_address, "Ponto de partida");
+                    const destLabel = formatPlaceLabel(trip.destination_address, "Ponto de chegada");
                     const timeRange = formatTripTimeRange(trip.started_at, trip.ended_at);
                     const conciseDate = formatConciseDate(trip.ended_at || trip.started_at);
 
@@ -704,15 +817,11 @@ export default function HistoryPage() {
                           </p>
 
                           {hasLoc && ev.location && (
-                            <div className="inline-flex items-center gap-1.5 pt-0.5 font-mono text-[11px] text-emerald-400">
+                            <div className="inline-flex items-center gap-1.5 pt-0.5 text-[11px] font-medium text-emerald-400">
                               <MapPin className="size-3" />
                               <span>
-                                {formatCoordinatePair(
-                                  ev.location.latitude,
-                                  ev.location.longitude,
-                                  5,
-                                )}
-                                {ev.location.speed
+                                Ver localização no mapa
+                                {ev.location.speed && Math.round(ev.location.speed) > 0
                                   ? ` • ${Math.round(ev.location.speed)} km/h`
                                   : ""}
                               </span>
@@ -771,16 +880,32 @@ export default function HistoryPage() {
                       </div>
                       <h2 className="mt-1 flex items-center gap-2 truncate font-display text-base sm:text-lg font-bold text-foreground">
                         <span className="truncate">
-                          {formatPlaceLabel(selectedTrip.origin_address, selectedTrip.origin)}
+                          {formatPlaceLabel(selectedTrip.origin_address, "Ponto de partida")}
                         </span>
                         <ArrowRight className="size-4 shrink-0 text-primary" />
                         <span className="truncate">
-                          {formatPlaceLabel(
-                            selectedTrip.destination_address,
-                            selectedTrip.destination,
-                          )}
+                          {formatPlaceLabel(selectedTrip.destination_address, "Ponto de chegada")}
                         </span>
                       </h2>
+                      {(totalDistanceMeters > 0 || selectedTrip.duration_seconds > 0 || selectedTrip.max_speed > 0) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                          {totalDistanceMeters > 0 && (
+                            <span className="rounded-md bg-secondary/70 px-2 py-0.5 text-foreground/90">
+                              {formatDistance(totalDistanceMeters)}
+                            </span>
+                          )}
+                          {selectedTrip.duration_seconds > 0 && (
+                            <span className="rounded-md bg-secondary/70 px-2 py-0.5 text-foreground/90">
+                              {formatDuration(selectedTrip.duration_seconds)}
+                            </span>
+                          )}
+                          {selectedTrip.max_speed > 0 && (
+                            <span className="rounded-md bg-secondary/70 px-2 py-0.5 text-foreground/90">
+                              Máx. {Math.round(selectedTrip.max_speed)} km/h
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
@@ -797,7 +922,7 @@ export default function HistoryPage() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  aria-label="Fechar coordenadas"
+                  aria-label="Fechar detalhes do trajeto"
                   className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary/60 text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   <X className="size-4" />
@@ -815,19 +940,19 @@ export default function HistoryPage() {
                           <span className="relative inline-flex size-2 rounded-full bg-primary" />
                         </span>
                         <span className="font-medium text-foreground">
-                          Carregando telemetria por streaming...
+                          Carregando pontos do trajeto...
                         </span>
                       </>
                     ) : streamStatus === "error" ? (
                       <span className="font-medium text-red-400">
-                        {streamError || "Erro no stream de telemetria"}
+                        {streamError || "Erro ao carregar pontos do trajeto"}
                       </span>
                     ) : (
                       <span className="font-medium text-emerald-400">
                         {streamCoords.length.toLocaleString("pt-BR")}{" "}
                         {streamCoords.length === 1
-                          ? "coordenada carregada"
-                          : "coordenadas carregadas"}
+                          ? "ponto do trajeto carregado"
+                          : "pontos do trajeto carregados"}
                       </span>
                     )}
                   </div>
@@ -835,7 +960,7 @@ export default function HistoryPage() {
                   <span className="font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
                     {streamProgress.total > 0
                       ? `${streamCoords.length.toLocaleString("pt-BR")} / ${streamProgress.total.toLocaleString("pt-BR")} (${progressPct}%)`
-                      : `${streamCoords.length.toLocaleString("pt-BR")} pts`}
+                      : `${streamCoords.length.toLocaleString("pt-BR")} pontos`}
                   </span>
                 </div>
 
@@ -857,82 +982,90 @@ export default function HistoryPage() {
 
               {/* Modal Body */}
               <div className="grid flex-1 gap-4 overflow-y-auto p-5 lg:grid-cols-12">
-                {/* Animated Map / Route Trace + Origin/Destination Coordinates */}
+                {/* Animated Map / Route Trace + Origin/Destination Place Cards */}
                 <div className="space-y-3 lg:col-span-7">
                   <StreamRouteCanvas
                     points={streamCoords}
                     focusedPoint={focusedPoint}
+                    focusedPointNumber={focusedPointNumber}
                     isStreaming={streamStatus === "streaming"}
                   />
 
-                  {/* Origin & Destination Coordinates */}
+                  {/* Origin & Destination Summary (addresses & times, without raw coordinates) */}
                   {(displayOrigin || displayDest) && (
-                    <div className="grid gap-2.5 sm:grid-cols-2">
+                    <div
+                      className={`grid gap-2.5 ${
+                        isSingleEventView ? "grid-cols-1" : "sm:grid-cols-2"
+                      }`}
+                    >
                       {displayOrigin && (
                         <div className="rounded-xl border border-border/70 bg-background/50 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-400">
                               <Navigation className="size-3.5" />
-                              {selectedTrip ? "Origem (De)" : "Posição Inicial"}
+                              {isSingleEventView
+                                ? "Local do Evento"
+                                : selectedTrip
+                                  ? "Origem (De)"
+                                  : "Posição Inicial"}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCopy(
-                                  "origin",
-                                  formatCoordinatePair(
-                                    displayOrigin.latitude,
-                                    displayOrigin.longitude,
-                                  ),
-                                )
-                              }
-                              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                            >
-                              {copiedKey === "origin" ? (
-                                <Check className="size-3 text-emerald-400" />
-                              ) : (
-                                <Copy className="size-3" />
-                              )}
-                            </button>
+                            {originAddressText && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopy("origin", originAddressText)}
+                                title="Copiar endereço"
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                              >
+                                {copiedKey === "origin" ? (
+                                  <Check className="size-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            )}
                           </div>
-                          <p className="mt-1 font-mono text-xs font-semibold text-foreground">
-                            {formatCoordinatePair(displayOrigin.latitude, displayOrigin.longitude)}
+                          <p className="mt-1 line-clamp-2 text-xs font-semibold text-foreground">
+                            {formatPlaceLabel(
+                              originAddressText,
+                              isSingleEventView ? "Localização no mapa" : "Ponto de partida",
+                            )}
                           </p>
-                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                            {formatPlaceLabel(selectedTrip?.origin_address, displayOrigin)}
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Ponto #1 • {formatTimeWithSeconds(displayOrigin.timestamp)} •{" "}
+                            {formatSpeedLabel(displayOrigin.speed)}
                           </p>
                         </div>
                       )}
 
-                      {displayDest && (
+                      {displayDest && !isSingleEventView && (
                         <div className="rounded-xl border border-border/70 bg-background/50 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-primary">
                               <MapPin className="size-3.5" />
                               {selectedTrip ? "Destino (Para)" : "Posição Final"}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCopy(
-                                  "dest",
-                                  formatCoordinatePair(displayDest.latitude, displayDest.longitude),
-                                )
-                              }
-                              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                            >
-                              {copiedKey === "dest" ? (
-                                <Check className="size-3 text-emerald-400" />
-                              ) : (
-                                <Copy className="size-3" />
-                              )}
-                            </button>
+                            {destAddressText && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopy("dest", destAddressText)}
+                                title="Copiar endereço"
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                              >
+                                {copiedKey === "dest" ? (
+                                  <Check className="size-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            )}
                           </div>
-                          <p className="mt-1 font-mono text-xs font-semibold text-foreground">
-                            {formatCoordinatePair(displayDest.latitude, displayDest.longitude)}
+                          <p className="mt-1 line-clamp-2 text-xs font-semibold text-foreground">
+                            {formatPlaceLabel(destAddressText, "Ponto de chegada")}
                           </p>
-                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                            {formatPlaceLabel(selectedTrip?.destination_address, displayDest)}
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Ponto #{Math.max(1, streamCoords.length)} •{" "}
+                            {formatTimeWithSeconds(displayDest.timestamp)} •{" "}
+                            {formatSpeedLabel(displayDest.speed)}
                           </p>
                         </div>
                       )}
@@ -940,11 +1073,11 @@ export default function HistoryPage() {
                   )}
                 </div>
 
-                {/* Animated Coordinates List */}
+                {/* Numbered Route Points List */}
                 <div className="flex flex-col rounded-xl border border-border/70 bg-background/50 lg:col-span-5">
                   <div className="flex items-center justify-between border-b border-border/70 px-3.5 py-2.5">
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      Coordenadas ({streamCoords.length.toLocaleString("pt-BR")})
+                      Pontos do Trajeto ({streamCoords.length.toLocaleString("pt-BR")})
                     </span>
                     {streamStatus === "streaming" && (
                       <span className="text-[11px] font-medium text-primary animate-pulse">
@@ -965,7 +1098,7 @@ export default function HistoryPage() {
                       </div>
                     ) : renderedCoords.length === 0 ? (
                       <div className="p-6 text-center text-xs text-muted-foreground">
-                        Nenhuma coordenada registrada neste intervalo.
+                        Nenhum ponto registrado neste intervalo.
                       </div>
                     ) : (
                       renderedCoords.map((pt, idx) => {
@@ -974,6 +1107,13 @@ export default function HistoryPage() {
                           focusedPoint.latitude === pt.latitude &&
                           focusedPoint.longitude === pt.longitude &&
                           focusedPoint.timestamp === pt.timestamp;
+                        const isStart = idx === 0 && streamCoords.length > 1;
+                        const isEnd =
+                          streamStatus === "done" &&
+                          streamCoords.length > 1 &&
+                          idx === streamCoords.length - 1;
+                        const distMeters = cumulativeDistances[idx] ?? 0;
+                        const speedRounded = Math.round(pt.speed ?? 0);
 
                         return (
                           <motion.button
@@ -986,22 +1126,62 @@ export default function HistoryPage() {
                               userFocusedRef.current = true;
                               setFocusedPoint(pt);
                             }}
-                            className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left transition cursor-pointer ${
+                            className={`flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition cursor-pointer ${
                               isFocused
                                 ? "bg-primary/15 text-foreground"
                                 : "hover:bg-secondary/40 text-muted-foreground"
                             }`}
                           >
-                            <div className="min-w-0">
-                              <p className="font-mono text-xs font-semibold text-foreground">
-                                {formatCoordinatePair(pt.latitude, pt.longitude)}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                {formatTimeShort(pt.timestamp)} • {Math.round(pt.speed)} km/h
-                              </p>
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span
+                                className={`flex size-7 shrink-0 items-center justify-center rounded-lg font-mono text-[11px] font-bold ${
+                                  isFocused
+                                    ? "bg-primary text-primary-foreground"
+                                    : isStart
+                                      ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"
+                                      : isEnd
+                                        ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                                        : "bg-secondary/80 text-foreground/80"
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-semibold text-foreground">
+                                    Ponto #{idx + 1}
+                                  </p>
+                                  {isStart && (
+                                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                      Partida
+                                    </span>
+                                  )}
+                                  {isEnd && (
+                                    <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                      Chegada
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {formatTimeWithSeconds(pt.timestamp)}
+                                  {idx === 0
+                                    ? " • Início"
+                                    : distMeters > 0
+                                      ? ` • ${formatDistance(distMeters)}`
+                                      : ""}
+                                </p>
+                              </div>
                             </div>
-                            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                              #{idx + 1}
+
+                            <span
+                              className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold ${
+                                speedRounded > 0
+                                  ? "bg-secondary/70 text-foreground"
+                                  : "bg-secondary/40 text-muted-foreground"
+                              }`}
+                            >
+                              {formatSpeedLabel(pt.speed)}
                             </span>
                           </motion.button>
                         );

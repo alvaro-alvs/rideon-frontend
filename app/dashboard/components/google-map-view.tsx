@@ -11,6 +11,11 @@ export interface GoogleMapViewProps {
     longitude: number;
   };
   heading?: number;
+  originPosition?: {
+    latitude: number;
+    longitude: number;
+  } | null;
+  originTitle?: string;
   history?: Array<{ latitude: number; longitude: number }>;
   geofences?: GeofenceItem[];
   draftCircle?: { center: LatLngPoint; radiusMeters: number; color?: string } | null;
@@ -19,6 +24,7 @@ export interface GoogleMapViewProps {
   zoom?: number;
   interactive?: boolean;
   markerType?: "arrow" | "pin";
+  markerTitle?: string;
   showCircle?: boolean;
   className?: string;
   onMapClick?: (coords: LatLngPoint) => void;
@@ -30,6 +36,8 @@ const PIN_SVG_PATH =
 export function GoogleMapView({
   position,
   heading = 0,
+  originPosition = null,
+  originTitle = "Ponto de partida",
   history = [],
   geofences = [],
   draftCircle = null,
@@ -38,6 +46,7 @@ export function GoogleMapView({
   zoom,
   interactive = true,
   markerType = "arrow",
+  markerTitle,
   showCircle = false,
   className,
   onMapClick,
@@ -45,6 +54,7 @@ export function GoogleMapView({
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapInstance = useRef<google.maps.Map | null>(null);
   const markerInstance = useRef<google.maps.Marker | null>(null);
+  const originMarkerInstance = useRef<google.maps.Marker | null>(null);
   const circleInstance = useRef<google.maps.Circle | null>(null);
   const pulseCircleInstance = useRef<google.maps.Circle | null>(null);
   const polylineInstance = useRef<google.maps.Polyline | null>(null);
@@ -55,6 +65,16 @@ export function GoogleMapView({
   onMapClickRef.current = onMapClick;
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  const getOriginPinIcon = (): google.maps.Symbol => ({
+    path: PIN_SVG_PATH,
+    scale: 1.65,
+    anchor: new google.maps.Point(12, 23),
+    fillColor: "#10b981",
+    fillOpacity: 1,
+    strokeColor: "#ffffff",
+    strokeWeight: 2,
+  });
 
   const getMarkerIcon = (type: "arrow" | "pin", angle: number): google.maps.Symbol => {
     if (type === "pin") {
@@ -116,8 +136,25 @@ export function GoogleMapView({
           ? new google.maps.Marker({
               position: center,
               map,
-              title: markerType === "pin" ? "Última posição do veículo" : "Veículo em tempo real",
+              title: markerTitle ?? (markerType === "pin" ? "Última posição do veículo" : "Veículo em tempo real"),
               icon: getMarkerIcon(markerType, heading),
+              zIndex: 2,
+            })
+          : null;
+
+        const hasValidOrigin =
+          originPosition !== null &&
+          isValidCoordinate(originPosition.latitude, originPosition.longitude);
+        const originMarker = hasValidOrigin
+          ? new google.maps.Marker({
+              position: {
+                lat: originPosition.latitude,
+                lng: originPosition.longitude,
+              },
+              map,
+              title: originTitle,
+              icon: getOriginPinIcon(),
+              zIndex: 1,
             })
           : null;
 
@@ -162,6 +199,7 @@ export function GoogleMapView({
 
         googleMapInstance.current = map;
         markerInstance.current = marker;
+        originMarkerInstance.current = originMarker;
         circleInstance.current = circle;
         polylineInstance.current = polyline;
       })
@@ -186,6 +224,10 @@ export function GoogleMapView({
       if (markerInstance.current) {
         markerInstance.current.setMap(null);
         markerInstance.current = null;
+      }
+      if (originMarkerInstance.current) {
+        originMarkerInstance.current.setMap(null);
+        originMarkerInstance.current = null;
       }
       if (circleInstance.current) {
         circleInstance.current.setMap(null);
@@ -212,13 +254,17 @@ export function GoogleMapView({
       markerInstance.current = new google.maps.Marker({
         position: latLng,
         map: googleMapInstance.current,
-        title: markerType === "pin" ? "Última posição do veículo" : "Veículo em tempo real",
+        title: markerTitle ?? (markerType === "pin" ? "Última posição do veículo" : "Veículo em tempo real"),
         icon: getMarkerIcon(markerType, heading),
+        zIndex: 2,
       });
       googleMapInstance.current.setZoom(zoom ?? 16);
     } else {
       markerInstance.current.setPosition(latLng);
       markerInstance.current.setIcon(getMarkerIcon(markerType, heading));
+      if (markerTitle !== undefined) {
+        markerInstance.current.setTitle(markerTitle);
+      }
     }
 
     if (showCircle) {
@@ -250,7 +296,43 @@ export function GoogleMapView({
           .map((p) => ({ lat: p.latitude, lng: p.longitude })),
       );
     }
-  }, [position.latitude, position.longitude, heading, history, markerType, showCircle, zoom]);
+  }, [position.latitude, position.longitude, heading, history, markerType, markerTitle, showCircle, zoom]);
+
+  // Update starting pin marker when originPosition changes
+  useEffect(() => {
+    const map = googleMapInstance.current;
+    if (!map || typeof google === "undefined" || !google.maps) return;
+
+    const hasValidOrigin =
+      originPosition !== null &&
+      isValidCoordinate(originPosition.latitude, originPosition.longitude);
+
+    if (!hasValidOrigin) {
+      if (originMarkerInstance.current) {
+        originMarkerInstance.current.setMap(null);
+        originMarkerInstance.current = null;
+      }
+      return;
+    }
+
+    const originLatLng = {
+      lat: originPosition.latitude,
+      lng: originPosition.longitude,
+    };
+
+    if (!originMarkerInstance.current) {
+      originMarkerInstance.current = new google.maps.Marker({
+        position: originLatLng,
+        map,
+        title: originTitle,
+        icon: getOriginPinIcon(),
+        zIndex: 1,
+      });
+    } else {
+      originMarkerInstance.current.setPosition(originLatLng);
+      originMarkerInstance.current.setTitle(originTitle);
+    }
+  }, [originPosition?.latitude, originPosition?.longitude, originTitle]);
 
   // Render active & inactive geofences
   useEffect(() => {

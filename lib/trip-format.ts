@@ -1,3 +1,5 @@
+import { calculateDistanceMeters, isValidCoordinate } from "@/lib/geo";
+
 export interface TripPoint {
   latitude: number;
   longitude: number;
@@ -62,17 +64,77 @@ export function formatTimeShort(isoDate: string): string {
   });
 }
 
+export function formatTimeWithSeconds(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return "--:--:--";
+  return date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function formatTripTimeRange(startedAt: string, endedAt: string): string {
   return `${formatTimeShort(startedAt)} - ${formatTimeShort(endedAt)}`;
 }
 
-export function formatPlaceLabel(address?: string, point?: TripPoint): string {
+export function formatPlaceLabel(
+  address?: string,
+  fallback = "Local não identificado",
+): string {
   const trimmed = address?.trim();
   if (trimmed) return trimmed;
-  if (point && (Math.abs(point.latitude) >= 1e-6 || Math.abs(point.longitude) >= 1e-6)) {
-    return `${point.latitude.toFixed(4)}, ${point.longitude.toFixed(4)}`;
+  return fallback;
+}
+
+export function formatDistance(meters: number): string {
+  if (!Number.isFinite(meters) || meters < 0) return "0 m";
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  const km = meters / 1000;
+  return `${km.toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} km`;
+}
+
+export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "< 1 min";
+  const rounded = Math.round(seconds);
+  if (rounded < 60) return `${rounded} s`;
+  const mins = Math.floor(rounded / 60);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}min` : `${hours}h`;
+}
+
+export function formatSpeedLabel(speed?: number | null): string {
+  const rounded = Math.round(speed ?? 0);
+  return rounded > 0 ? `${rounded} km/h` : "Parado";
+}
+
+export function computeCumulativeDistances(points: TripPoint[]): number[] {
+  const distances: number[] = [];
+  let total = 0;
+  let prevValid: TripPoint | null = null;
+
+  for (const pt of points) {
+    const valid = isValidCoordinate(pt.latitude, pt.longitude);
+    if (valid && prevValid) {
+      total += calculateDistanceMeters(
+        prevValid.latitude,
+        prevValid.longitude,
+        pt.latitude,
+        pt.longitude,
+      );
+    }
+    if (valid) {
+      prevValid = pt;
+    }
+    distances.push(total);
   }
-  return "Local não identificado";
+
+  return distances;
 }
 
 export function formatCoordinatePair(lat: number, lon: number, decimals = 6): string {
