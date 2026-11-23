@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
+  ArrowLeft,
   ArrowRight,
   Bell,
   Bike,
@@ -11,6 +13,8 @@ import {
   Clock,
   Copy,
   History,
+  Loader2,
+  Lock,
   MapPin,
   Navigation,
   Power,
@@ -23,7 +27,6 @@ import {
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
-import { StreamRouteCanvas } from "@/app/dashboard/history/components/stream-route-canvas";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import {
@@ -49,8 +52,29 @@ import {
   type TripPoint,
 } from "@/lib/trip-format";
 
-const INITIAL_VISIBLE_ROWS = 120;
-const LOAD_MORE_STEP = 150;
+const StreamRouteCanvas = dynamic(
+  () =>
+    import("@/app/dashboard/history/components/stream-route-canvas").then(
+      (mod) => mod.StreamRouteCanvas,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="relative flex h-64 sm:h-80 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-[#0d0d10]">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <Loader2 className="size-6 animate-spin text-primary" />
+          <span className="text-xs font-medium text-muted-foreground">
+            Inicializando mapa da rota...
+          </span>
+        </div>
+      </div>
+    ),
+  },
+);
+
+const TRIPS_PAGE_SIZE = 15;
+const INITIAL_VISIBLE_ROWS = 40;
+const LOAD_MORE_STEP = 60;
 
 type HistoryTab = "trips" | "events";
 type EventCategoryFilter = "all" | "ignition" | "alert" | "telemetry";
@@ -68,9 +92,12 @@ export default function HistoryPage() {
   const [filterMotoId, setFilterMotoId] = useState<string>("all");
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // Trips state
+  // Trips state (paginated lazy loading)
   const [trips, setTrips] = useState<TripItem[]>([]);
+  const [tripsTotal, setTripsTotal] = useState<number>(0);
   const [loadingTrips, setLoadingTrips] = useState(true);
+  const [loadingMoreTrips, setLoadingMoreTrips] = useState(false);
+  const [hasMoreTrips, setHasMoreTrips] = useState(false);
   const [tripsError, setTripsError] = useState("");
 
   // Ignition & Alerts state
@@ -99,14 +126,17 @@ export default function HistoryPage() {
   const streamAbortRef = useRef<AbortController | null>(null);
   const userFocusedRef = useRef(false);
   const geocodeCacheRef = useRef<Map<string, string>>(new Map());
+  const tripsSentinelRef = useRef<HTMLDivElement | null>(null);
+  const pointsSentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreTripsRef = useRef(false);
 
   const effectiveMotoId =
     motorcycles.length === 1 && motorcycles[0]?.id ? motorcycles[0].id : filterMotoId;
 
-  // Fetch Trips
+  // Fetch initial page of Trips
   useEffect(() => {
     let cancelled = false;
-    const qs = new URLSearchParams({ limit: "30" });
+    const qs = new URLSearchParams({ limit: String(TRIPS_PAGE_SIZE), offset: "0" });
     if (effectiveMotoId && effectiveMotoId !== "all") {
       qs.set("motorcycle_id", effectiveMotoId);
     }
@@ -122,7 +152,10 @@ export default function HistoryPage() {
       .then((data) => {
         if (cancelled) return;
         const list = Array.isArray(data?.data) ? (data.data as TripItem[]) : [];
+        const total = typeof data?.total === "number" ? data.total : list.length;
         setTrips(list);
+        setTripsTotal(total);
+        setHasMoreTrips(list.length < total && list.length >= TRIPS_PAGE_SIZE);
         setTripsError("");
       })
       .catch((err) => {
@@ -139,6 +172,59 @@ export default function HistoryPage() {
       cancelled = true;
     };
   }, [effectiveMotoId, refreshTick]);
+
+  // Lazy-load next page of Trips
+  const loadMoreTrips = useCallback(async () => {
+    if (loadingTrips || loadingMoreTripsRef.current || !hasMoreTrips) return;
+    loadingMoreTripsRef.current = true;
+    setLoadingMoreTrips(true);
+
+    try {
+      const qs = new URLSearchParams({
+        limit: String(TRIPS_PAGE_SIZE),
+        offset: String(trips.length),
+      });
+      if (effectiveMotoId && effectiveMotoId !== "all") {
+        qs.set("motorcycle_id", effectiveMotoId);
+      }
+      const res = await fetch(`/api/trips?${qs.toString()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const nextList = Array.isArray(data?.data) ? (data.data as TripItem[]) : [];
+      const total = typeof data?.total === "number" ? data.total : trips.length + nextList.length;
+
+      setTrips((prev) => {
+        const seen = new Set(prev.map((t) => t.id));
+        const unique = nextList.filter((t) => !seen.has(t.id));
+        const merged = [...prev, ...unique];
+        setHasMoreTrips(nextList.length >= TRIPS_PAGE_SIZE && merged.length < total);
+        return merged;
+      });
+      setTripsTotal(total);
+    } catch {
+      // Ignore transient pagination error; user can retry via scroll/button
+    } finally {
+      loadingMoreTripsRef.current = false;
+      setLoadingMoreTrips(false);
+    }
+  }, [effectiveMotoId, hasMoreTrips, loadingTrips, trips.length]);
+
+  useEffect(() => {
+    const sentinel = tripsSentinelRef.current;
+    if (!sentinel || activeTab !== "trips" || !hasMoreTrips || loadingTrips) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadMoreTrips();
+        }
+      },
+      { rootMargin: "160px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, hasMoreTrips, loadingTrips, loadMoreTrips]);
 
   // Fetch Ignition & Alerts events
   useEffect(() => {
@@ -200,6 +286,11 @@ export default function HistoryPage() {
     setResolvedAddresses({});
   }, []);
 
+  const cancelAndReturnToTripsMenu = useCallback(() => {
+    closeModal();
+    setActiveTab("trips");
+  }, [closeModal]);
+
   const runProgressiveStream = useCallback(
     async (url: string, initialTrip: TripItem | null, titleLabel: string | null) => {
       streamAbortRef.current?.abort();
@@ -220,7 +311,7 @@ export default function HistoryPage() {
       try {
         await consumeNdjsonStream(url, {
           signal: controller.signal,
-          frameDelayMs: 32,
+          frameDelayMs: 26,
           onFrame: (frame) => {
             if (frame.type === "meta") {
               if (frame.trip) {
@@ -278,7 +369,7 @@ export default function HistoryPage() {
 
   const handleCardClick = (trip: TripItem) => {
     void runProgressiveStream(
-      `/api/trips/${encodeURIComponent(trip.id)}/stream?batch_size=25`,
+      `/api/trips/${encodeURIComponent(trip.id)}/stream?batch_size=12`,
       trip,
       null,
     );
@@ -328,6 +419,7 @@ export default function HistoryPage() {
 
   const handleRefresh = useCallback(() => {
     setLoadingTrips(true);
+    setHasMoreTrips(false);
     setLoadingEvents(true);
     setRefreshTick((t) => t + 1);
   }, []);
@@ -342,6 +434,7 @@ export default function HistoryPage() {
 
   const handleSelectVehicleFilter = (id: string) => {
     setLoadingTrips(true);
+    setHasMoreTrips(false);
     setLoadingEvents(true);
     setFilterMotoId(id);
     if (id !== "all") {
@@ -356,6 +449,7 @@ export default function HistoryPage() {
 
   const isLoadingCurrent = activeTab === "trips" ? loadingTrips : loadingEvents;
   const isModalOpen = Boolean(selectedTrip || streamModeTitle);
+  const isStreamingLocked = streamStatus === "streaming";
   const progressPct =
     streamProgress.total > 0
       ? Math.min(100, Math.round((streamProgress.loaded / streamProgress.total) * 100))
@@ -472,6 +566,24 @@ export default function HistoryPage() {
   const isSingleEventView = !selectedTrip && streamCoords.length === 1;
   const renderedCoords = streamCoords.slice(0, visibleRows);
 
+  // Lazy-load more point rows automatically when scrolling inside the modal points list
+  useEffect(() => {
+    const sentinel = pointsSentinelRef.current;
+    if (!sentinel || !isModalOpen || streamCoords.length <= visibleRows) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleRows((v) => v + LOAD_MORE_STEP);
+        }
+      },
+      { rootMargin: "120px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [isModalOpen, streamCoords.length, visibleRows]);
+
   return (
     <DashboardShell>
       <div className="w-full space-y-4">
@@ -525,7 +637,7 @@ export default function HistoryPage() {
               >
                 <Route className="size-3.5" />
                 <span>Trajetos</span>
-                {trips.length > 0 && (
+                {(tripsTotal > 0 || trips.length > 0) && (
                   <span
                     className={`rounded-full px-1.5 py-0.5 font-mono text-[10px] ${
                       activeTab === "trips"
@@ -533,7 +645,7 @@ export default function HistoryPage() {
                         : "bg-secondary text-muted-foreground"
                     }`}
                   >
-                    {trips.length}
+                    {Math.max(tripsTotal, trips.length)}
                   </span>
                 )}
               </button>
@@ -663,7 +775,8 @@ export default function HistoryPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {trips.map((trip, index) => {
                     const originLabel = formatPlaceLabel(trip.origin_address, "Ponto de partida");
                     const destLabel = formatPlaceLabel(trip.destination_address, "Ponto de chegada");
@@ -710,6 +823,30 @@ export default function HistoryPage() {
                     );
                   })}
                 </div>
+                {(hasMoreTrips || loadingMoreTrips) && (
+                  <div
+                    ref={tripsSentinelRef}
+                    className="flex flex-col items-center justify-center gap-2 pt-3"
+                  >
+                    {loadingMoreTrips ? (
+                      <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="size-4 animate-spin text-primary" />
+                        <span>Carregando mais trajetos...</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void loadMoreTrips()}
+                        className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-background/60 px-4 py-2 text-xs font-semibold text-foreground transition hover:border-primary/50 hover:bg-secondary/70 cursor-pointer"
+                      >
+                        <span>
+                          Carregar mais trajetos ({trips.length} de {Math.max(tripsTotal, trips.length)})
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
               )}
             </>
           )}
@@ -845,8 +982,10 @@ export default function HistoryPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-6 backdrop-blur-sm"
-            onClick={closeModal}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-sm"
+            onClick={() => {
+              if (!isStreamingLocked) closeModal();
+            }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.97, y: 12 }}
@@ -919,28 +1058,39 @@ export default function HistoryPage() {
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  aria-label="Fechar detalhes do trajeto"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary/60 text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <X className="size-4" />
-                </button>
+                {isStreamingLocked ? (
+                  <button
+                    type="button"
+                    onClick={cancelAndReturnToTripsMenu}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-500/15 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/25 cursor-pointer"
+                  >
+                    <ArrowLeft className="size-3.5" />
+                    <span>Cancelar e voltar</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    aria-label="Fechar detalhes do trajeto"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary/60 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
               </div>
 
               {/* Progressive Streaming Status & Animated Progress Bar */}
               <div className="border-b border-border/60 bg-background/40 px-5 py-2.5 space-y-1.5">
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2">
-                    {streamStatus === "streaming" ? (
+                    {isStreamingLocked ? (
                       <>
                         <span className="relative flex size-2">
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
                           <span className="relative inline-flex size-2 rounded-full bg-primary" />
                         </span>
                         <span className="font-medium text-foreground">
-                          Carregando pontos do trajeto...
+                          Carregando via streaming — tela bloqueada enquanto a rota se forma
                         </span>
                       </>
                     ) : streamStatus === "error" ? (
@@ -981,22 +1131,93 @@ export default function HistoryPage() {
               </div>
 
               {/* Modal Body */}
-              <div className="grid flex-1 gap-4 overflow-y-auto p-5 lg:grid-cols-12">
+              <div
+                className={`relative grid flex-1 gap-4 p-5 lg:grid-cols-12 ${
+                  isStreamingLocked ? "overflow-hidden" : "overflow-y-auto"
+                }`}
+              >
                 {/* Animated Map / Route Trace + Origin/Destination Place Cards */}
                 <div className="space-y-3 lg:col-span-7">
-                  <StreamRouteCanvas
-                    points={streamCoords}
-                    focusedPoint={focusedPoint}
-                    focusedPointNumber={focusedPointNumber}
-                    isStreaming={streamStatus === "streaming"}
-                  />
+                  <div className="relative">
+                    <StreamRouteCanvas
+                      points={streamCoords}
+                      focusedPoint={focusedPoint}
+                      focusedPointNumber={focusedPointNumber}
+                      isStreaming={isStreamingLocked}
+                    />
+
+                    {/* Animated Screen-Lock Fallback Overlay during Streaming */}
+                    {isStreamingLocked && (
+                      <div
+                        aria-live="polite"
+                        className={`absolute inset-0 z-30 flex flex-col justify-between rounded-xl border border-primary/35 p-3.5 transition-colors ${
+                          streamCoords.length === 0
+                            ? "bg-background/85 backdrop-blur-md"
+                            : "bg-black/25 backdrop-blur-[1px]"
+                        }`}
+                      >
+                        {streamCoords.length === 0 ? (
+                          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                            <div className="relative flex size-16 items-center justify-center">
+                              <span className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+                              <span className="absolute inset-1 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                              <Route className="relative size-6 text-primary" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-display text-sm font-bold text-foreground">
+                                Iniciando streaming da rota...
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Recebendo coordenadas progressivamente ponto a ponto
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-background/90 px-3 py-1.5 text-[11px] font-semibold text-foreground shadow-lg backdrop-blur-md">
+                              <Loader2 className="size-3.5 animate-spin text-primary" />
+                              <span>Formando rota • {progressPct}%</span>
+                            </div>
+
+                            <div className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-background/90 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground backdrop-blur-md">
+                              <Lock className="size-3 text-amber-400" />
+                              <span>Carregando</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/92 px-3.5 py-2.5 shadow-xl backdrop-blur-md">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground">
+                              {streamCoords.length.toLocaleString("pt-BR")}
+                              {streamProgress.total > 0
+                                ? ` de ${streamProgress.total.toLocaleString("pt-BR")} pontos`
+                                : " pontos recebidos"}
+                            </p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              Aguarde a conclusão ou cancele para voltar
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={cancelAndReturnToTripsMenu}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground shadow-sm transition hover:opacity-90 cursor-pointer"
+                          >
+                            <ArrowLeft className="size-3.5" />
+                            <span>Menu de trajetos</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Origin & Destination Summary (addresses & times, without raw coordinates) */}
                   {(displayOrigin || displayDest) && (
                     <div
-                      className={`grid gap-2.5 ${
+                      className={`grid gap-2.5 transition-opacity ${
                         isSingleEventView ? "grid-cols-1" : "sm:grid-cols-2"
-                      }`}
+                      } ${isStreamingLocked ? "pointer-events-none select-none opacity-65" : ""}`}
                     >
                       {displayOrigin && (
                         <div className="rounded-xl border border-border/70 bg-background/50 p-3">
@@ -1012,9 +1233,10 @@ export default function HistoryPage() {
                             {originAddressText && (
                               <button
                                 type="button"
+                                disabled={isStreamingLocked}
                                 onClick={() => handleCopy("origin", originAddressText)}
                                 title="Copiar endereço"
-                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer disabled:cursor-not-allowed"
                               >
                                 {copiedKey === "origin" ? (
                                   <Check className="size-3 text-emerald-400" />
@@ -1047,9 +1269,10 @@ export default function HistoryPage() {
                             {destAddressText && (
                               <button
                                 type="button"
+                                disabled={isStreamingLocked}
                                 onClick={() => handleCopy("dest", destAddressText)}
                                 title="Copiar endereço"
-                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer disabled:cursor-not-allowed"
                               >
                                 {copiedKey === "dest" ? (
                                   <Check className="size-3 text-emerald-400" />
@@ -1073,21 +1296,26 @@ export default function HistoryPage() {
                   )}
                 </div>
 
-                {/* Numbered Route Points List */}
-                <div className="flex flex-col rounded-xl border border-border/70 bg-background/50 lg:col-span-5">
+                {/* Numbered Route Points List (locked during streaming, lazy-loaded on scroll) */}
+                <div
+                  className={`flex flex-col rounded-xl border border-border/70 bg-background/50 lg:col-span-5 transition-opacity ${
+                    isStreamingLocked ? "pointer-events-none select-none opacity-65" : ""
+                  }`}
+                >
                   <div className="flex items-center justify-between border-b border-border/70 px-3.5 py-2.5">
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                       Pontos do Trajeto ({streamCoords.length.toLocaleString("pt-BR")})
                     </span>
-                    {streamStatus === "streaming" && (
-                      <span className="text-[11px] font-medium text-primary animate-pulse">
-                        Ao vivo...
+                    {isStreamingLocked && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary animate-pulse">
+                        <Lock className="size-3" />
+                        Streaming...
                       </span>
                     )}
                   </div>
 
                   <div className="max-h-80 lg:max-h-[410px] divide-y divide-border/50 overflow-y-auto">
-                    {renderedCoords.length === 0 && streamStatus === "streaming" ? (
+                    {renderedCoords.length === 0 && isStreamingLocked ? (
                       <div className="p-4 space-y-2.5">
                         {[1, 2, 3, 4].map((s) => (
                           <div
@@ -1119,6 +1347,7 @@ export default function HistoryPage() {
                           <motion.button
                             key={`${pt.timestamp}-${idx}`}
                             type="button"
+                            disabled={isStreamingLocked}
                             initial={{ opacity: 0, x: -6 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.16 }}
@@ -1189,7 +1418,7 @@ export default function HistoryPage() {
                     )}
 
                     {streamCoords.length > visibleRows && (
-                      <div className="p-3 text-center">
+                      <div ref={pointsSentinelRef} className="p-3 text-center">
                         <button
                           type="button"
                           onClick={() => setVisibleRows((v) => v + LOAD_MORE_STEP)}

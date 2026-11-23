@@ -12,7 +12,7 @@ export interface TelemetryStreamFrame {
 
 export interface ConsumeStreamOptions {
   signal?: AbortSignal;
-  /** Minimum delay in ms between visual chunk yields when chunks arrive instantaneously. */
+  /** Minimum delay in ms between visual point/chunk yields when data arrives instantaneously. */
   frameDelayMs?: number;
   onFrame: (frame: TelemetryStreamFrame) => void;
 }
@@ -36,12 +36,12 @@ function waitAnimationFrame(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Consumes an NDJSON HTTP stream progressively using ReadableStream, invoking
- * `onFrame` incrementally so UI animations render points as they arrive.
+ * Consumes an NDJSON HTTP stream progressively using ReadableStream, emitting
+ * points incrementally so the route visually forms point-by-point as data arrives.
  */
 export async function consumeNdjsonStream(
   url: string,
-  { signal, frameDelayMs = 28, onFrame }: ConsumeStreamOptions,
+  { signal, frameDelayMs = 24, onFrame }: ConsumeStreamOptions,
 ): Promise<void> {
   const res = await fetch(url, {
     method: "GET",
@@ -67,11 +67,40 @@ export async function consumeNdjsonStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let totalHint = 0;
 
   const processLine = async (line: string) => {
     const trimmed = line.trim();
-    if (!trimmed) return;
+    if (!trimmed || signal?.aborted) return;
     const frame = JSON.parse(trimmed) as TelemetryStreamFrame;
+
+    if (typeof frame.total === "number" && frame.total > 0) {
+      totalHint = frame.total;
+    }
+
+    if (frame.type === "chunk" && Array.isArray(frame.points) && frame.points.length > 1) {
+      // Reveal points progressively within each chunk so the route visibly forms step by step,
+      // scaling step size for very large streams so total animation stays responsive.
+      const pts = frame.points;
+      const step = totalHint > 300 ? Math.max(1, Math.ceil(totalHint / 180)) : 1;
+      const baseLoaded = Math.max(0, (frame.loaded ?? pts.length) - pts.length);
+
+      for (let i = 0; i < pts.length; i += step) {
+        if (signal?.aborted) return;
+        const slice = pts.slice(i, i + step);
+        const partialLoaded = baseLoaded + Math.min(pts.length, i + slice.length);
+        onFrame({
+          ...frame,
+          points: slice,
+          loaded: partialLoaded,
+        });
+        if (frameDelayMs > 0) {
+          await waitAnimationFrame(frameDelayMs, signal);
+        }
+      }
+      return;
+    }
+
     onFrame(frame);
     if (frame.type === "chunk" && frameDelayMs > 0) {
       await waitAnimationFrame(frameDelayMs, signal);

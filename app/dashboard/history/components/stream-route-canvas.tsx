@@ -44,7 +44,7 @@ export function StreamRouteCanvas({
     ? `Ponto #${resolvedPointNumber ?? points.length} • ${formatTimeWithSeconds(activePoint.timestamp)} • ${formatSpeedLabel(activePoint.speed)}`
     : undefined;
 
-  const originPoint = points.length > 1 ? points[0] : null;
+  const originPoint = points.length >= 1 ? points[0] : null;
   const originMarkerTitle = originPoint
     ? `Ponto #1 • Partida • ${formatTimeWithSeconds(originPoint.timestamp)}`
     : undefined;
