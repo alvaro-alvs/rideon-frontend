@@ -34,7 +34,7 @@ import { VehicleNicknameModal } from "@/app/components/vehicle-nickname-modal";
 import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
 import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { isMasterAdmin, isManager } from "@/lib/auth";
+import { canSendCommands, isMasterAdmin, isManager } from "@/lib/auth";
 import { formatPhone } from "@/lib/phone";
 import {
   formatVehicleDisplayName,
@@ -124,6 +124,8 @@ export default function VehiclesPage() {
     currentUser.status === "authenticated" && isManager(currentUser.user.role);
   const isFleetUser = isMaster || isMgr;
   const isAdmin = isFleetUser;
+  const allowCommands =
+    currentUser.status === "authenticated" && canSendCommands(currentUser.user.role);
 
   const effectiveRider: RegisteredRider = registeredRider || {
     name:
@@ -1458,6 +1460,8 @@ export default function VehiclesPage() {
           isOpen={Boolean(selectedTelemetryMoto)}
           onClose={() => setSelectedTelemetryMoto(null)}
           motorcycleId={selectedTelemetryMoto.id}
+          isAdmin={isMaster}
+          canSendCommands={allowCommands}
           motorcycleInfo={{
             model: formatVehicleDisplayName(selectedTelemetryMoto),
             licensePlate: selectedTelemetryMoto.license_plate || "SEM PLACA",

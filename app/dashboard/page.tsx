@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,6 +8,7 @@ import {
   BatteryCharging,
   Bike,
   Lock,
+  MapPinOff,
   Maximize2,
   Plus,
   Radar,
@@ -30,9 +31,49 @@ import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import { useTenant } from "@/app/components/tenant-provider";
-import { isMasterAdmin, isManager } from "@/lib/auth";
+import { canSendCommands, isMasterAdmin, isManager } from "@/lib/auth";
 import { isValidCoordinate } from "@/lib/geo";
 import type { GeofenceEventItem, GeofenceItem } from "@/lib/types/protection";
+
+const DEFAULT_FALLBACK_CENTER = {
+  latitude: -23.5505,
+  longitude: -46.6333,
+} as const;
+
+const EMPTY_GEOFENCES: GeofenceItem[] = [];
+const EMPTY_EVENTS: GeofenceEventItem[] = [];
+
+interface CachedProtectionSummary {
+  geofences: GeofenceItem[];
+  recentEvents: GeofenceEventItem[];
+}
+
+async function fetchVehicleProtection(
+  vehicleId: string,
+  signal?: AbortSignal,
+): Promise<{
+  gfData: GeofenceItem[] | null;
+  evData: GeofenceEventItem[] | null;
+}> {
+  const [gfRes, evRes] = await Promise.all([
+    fetch(`/api/geofences?motorcycle_id=${vehicleId}`, {
+      cache: "no-store",
+      signal,
+    }),
+    fetch(`/api/geofences/events?motorcycle_id=${vehicleId}&limit=5`, {
+      cache: "no-store",
+      signal,
+    }),
+  ]);
+
+  const gfJson = gfRes.ok ? ((await gfRes.json()) as { data?: GeofenceItem[] }) : null;
+  const evJson = evRes.ok ? ((await evRes.json()) as { data?: GeofenceEventItem[] }) : null;
+
+  return {
+    gfData: gfJson && Array.isArray(gfJson.data) ? gfJson.data : null,
+    evData: evJson && Array.isArray(evJson.data) ? evJson.data : null,
+  };
+}
 
 export default function DashboardPage() {
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -40,10 +81,16 @@ export default function DashboardPage() {
   const [isCommandModalOpen, setIsCommandModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-  const [geofences, setGeofences] = useState<GeofenceItem[]>([]);
-  const [recentEvents, setRecentEvents] = useState<GeofenceEventItem[]>([]);
+  const [protectionByVehicle, setProtectionByVehicle] = useState<
+    Record<string, CachedProtectionSummary>
+  >({});
   const [anchorBusy, setAnchorBusy] = useState(false);
   const [actionToast, setActionToast] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  const [radarScanTrigger, setRadarScanTrigger] = useState(1);
+  const [isRadarScanning, setIsRadarScanning] = useState(false);
+  const radarScanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const protectionAbortRef = useRef<AbortController | null>(null);
 
   const router = useRouter();
   const currentUser = useCurrentUser();
@@ -53,6 +100,7 @@ export default function DashboardPage() {
   const isMaster = isMasterAdmin(user?.role);
   const isMgr = isManager(user?.role);
   const isFleetUser = isMaster || isMgr;
+  const allowCommands = canSendCommands(user?.role);
 
   const {
     motorcycle,
@@ -63,39 +111,118 @@ export default function DashboardPage() {
     refresh,
   } = useMotorcycle();
 
-  const locationState = useMotorcycleLocation(motorcycle?.id);
+  const locationState = useMotorcycleLocation(motorcycle?.id, {
+    pollIntervalMs: 12_000,
+    enabled: !isMapModalOpen,
+  });
 
-  const loadProtectionSummary = useCallback(async () => {
-    if (!motorcycle?.id) {
-      setGeofences([]);
-      setRecentEvents([]);
-      return;
+  const triggerRadarFeedback = useCallback(() => {
+    setRadarScanTrigger((n) => n + 1);
+    setIsRadarScanning(true);
+    if (radarScanTimeoutRef.current) {
+      clearTimeout(radarScanTimeoutRef.current);
     }
-    const [gfRes, evRes] = await Promise.all([
-      fetch(`/api/geofences?motorcycle_id=${motorcycle.id}`, { cache: "no-store" }),
-      fetch(`/api/geofences/events?motorcycle_id=${motorcycle.id}&limit=5`, { cache: "no-store" }),
-    ]);
-    if (gfRes.ok) {
-      const d = (await gfRes.json()) as { data?: GeofenceItem[] };
-      setGeofences(Array.isArray(d.data) ? d.data : []);
-    }
-    if (evRes.ok) {
-      const d = (await evRes.json()) as { data?: GeofenceEventItem[] };
-      setRecentEvents(Array.isArray(d.data) ? d.data : []);
+    radarScanTimeoutRef.current = setTimeout(() => {
+      setIsRadarScanning(false);
+      radarScanTimeoutRef.current = null;
+    }, 1350);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (radarScanTimeoutRef.current) {
+        clearTimeout(radarScanTimeoutRef.current);
+      }
+      protectionAbortRef.current?.abort();
+    };
+  }, []);
+
+  const loadProtectionSummary = useCallback(async (targetId?: string) => {
+    const vehicleId = targetId ?? motorcycle?.id;
+    protectionAbortRef.current?.abort();
+
+    if (!vehicleId) return;
+
+    const controller = new AbortController();
+    protectionAbortRef.current = controller;
+
+    try {
+      const { gfData, evData } = await fetchVehicleProtection(vehicleId, controller.signal);
+      if (controller.signal.aborted) return;
+
+      setProtectionByVehicle((prev) => {
+        const existing = prev[vehicleId];
+        return {
+          ...prev,
+          [vehicleId]: {
+            geofences: gfData ?? existing?.geofences ?? EMPTY_GEOFENCES,
+            recentEvents: evData ?? existing?.recentEvents ?? EMPTY_EVENTS,
+          },
+        };
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
     }
   }, [motorcycle?.id]);
 
+  const activeMotorcycleId = motorcycle?.id;
+
   useEffect(() => {
-    void loadProtectionSummary();
-  }, [loadProtectionSummary]);
+    if (!activeMotorcycleId) return;
 
-  const hasVehicle = !isLoading && Boolean(motorcycle);
+    const controller = new AbortController();
+    let active = true;
+
+    fetchVehicleProtection(activeMotorcycleId, controller.signal)
+      .then(({ gfData, evData }) => {
+        if (!active || controller.signal.aborted) return;
+        setProtectionByVehicle((prev) => {
+          const existing = prev[activeMotorcycleId];
+          return {
+            ...prev,
+            [activeMotorcycleId]: {
+              geofences: gfData ?? existing?.geofences ?? EMPTY_GEOFENCES,
+              recentEvents: evData ?? existing?.recentEvents ?? EMPTY_EVENTS,
+            },
+          };
+        });
+      })
+      .catch(() => {
+        // AbortError ou falha transitória silenciosa
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeMotorcycleId]);
+
+  const currentProtection = motorcycle?.id ? protectionByVehicle[motorcycle.id] : undefined;
+  const geofences = currentProtection?.geofences ?? EMPTY_GEOFENCES;
+  const recentEvents = currentProtection?.recentEvents ?? EMPTY_EVENTS;
+
+  const handleSelectVehicle = useCallback(
+    (bikeId: string) => {
+      if (bikeId !== selectedVehicleId) {
+        setSelectedVehicleId(bikeId);
+      }
+      triggerRadarFeedback();
+    },
+    [selectedVehicleId, setSelectedVehicleId, triggerRadarFeedback],
+  );
+
+  const hasVehicle = Boolean(motorcycle);
   const isMultiVehiclePlan = motorcycles.length > 1;
-  const activeAnchor = geofences.find((g) => g.kind === "anchor" && g.active);
+  const activeAnchor = useMemo(
+    () => geofences.find((g) => g.kind === "anchor" && g.active),
+    [geofences],
+  );
+  const activeFenceCount = useMemo(
+    () => geofences.filter((g) => g.active).length,
+    [geofences],
+  );
 
-  const motorcycleModel = motorcycle
-    ? formatVehicleDisplayName(motorcycle)
-    : "";
+  const motorcycleModel = motorcycle ? formatVehicleDisplayName(motorcycle) : "";
   const motorcyclePlate = motorcycle?.license_plate || "";
 
   const rawSpeed =
@@ -123,23 +250,53 @@ export default function DashboardPage() {
       ? locationState.data.device.ignition
       : locationState.data.motion?.speed != null && locationState.data.motion.speed > 0);
 
-  const hasLiveCoords =
-    locationState.status === "ok" &&
-    isValidCoordinate(locationState.data.position.latitude, locationState.data.position.longitude);
+  const liveLat = locationState.status === "ok" ? locationState.data.position.latitude : undefined;
+  const liveLng = locationState.status === "ok" ? locationState.data.position.longitude : undefined;
+  const hasLiveCoords = isValidCoordinate(liveLat, liveLng);
 
-  const hasStoredCoords = isValidCoordinate(
-    motorcycle?.last_position?.latitude,
-    motorcycle?.last_position?.longitude,
-  );
+  const storedLat = motorcycle?.last_position?.latitude;
+  const storedLng = motorcycle?.last_position?.longitude;
+  const hasStoredCoords = isValidCoordinate(storedLat, storedLng);
 
-  const activePosition = hasLiveCoords
-    ? locationState.data.position
-    : hasStoredCoords
-      ? {
-          latitude: motorcycle!.last_position!.latitude,
-          longitude: motorcycle!.last_position!.longitude,
-        }
-      : null;
+  const activePosition = useMemo(() => {
+    if (hasLiveCoords && liveLat !== undefined && liveLng !== undefined) {
+      return { latitude: liveLat, longitude: liveLng };
+    }
+    if (hasStoredCoords && storedLat !== undefined && storedLng !== undefined) {
+      return { latitude: storedLat, longitude: storedLng };
+    }
+    return null;
+  }, [hasLiveCoords, liveLat, liveLng, hasStoredCoords, storedLat, storedLng]);
+
+  // Mantém a última coordenada válida da sessão durante o render (sem cascading effects)
+  const [persistedMapCenter, setPersistedMapCenter] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  if (
+    activePosition &&
+    (!persistedMapCenter ||
+      persistedMapCenter.latitude !== activePosition.latitude ||
+      persistedMapCenter.longitude !== activePosition.longitude)
+  ) {
+    setPersistedMapCenter(activePosition);
+  }
+
+  const fleetInitialCenter = useMemo(() => {
+    const fleetWithPos = motorcycles.find((m) =>
+      isValidCoordinate(m.last_position?.latitude, m.last_position?.longitude),
+    );
+    if (fleetWithPos?.last_position) {
+      return {
+        latitude: fleetWithPos.last_position.latitude,
+        longitude: fleetWithPos.last_position.longitude,
+      };
+    }
+    return DEFAULT_FALLBACK_CENTER;
+  }, [motorcycles]);
+
+  const effectiveMapPosition = activePosition ?? persistedMapCenter ?? fleetInitialCenter;
 
   const activeHeading =
     locationState.status === "ok" && locationState.data.motion?.heading != null
@@ -170,7 +327,7 @@ export default function DashboardPage() {
           ? "Âncora Virtual desarmada com sucesso."
           : "Âncora Virtual armada (60m) na posição atual!",
       });
-      await loadProtectionSummary();
+      await loadProtectionSummary(motorcycle.id);
     } finally {
       setAnchorBusy(false);
     }
@@ -180,6 +337,9 @@ export default function DashboardPage() {
     setModalInitialTab(tab);
     setIsMapModalOpen(true);
   };
+
+  const vehicleTransitionKey = selectedVehicleId ?? motorcycle?.id ?? "default";
+  const isFetchingInitialCoords = !activePosition && locationState.status === "loading";
 
   return (
     <DashboardShell>
@@ -238,8 +398,9 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2.5 shrink-0">
               <button
                 onClick={() => {
+                  triggerRadarFeedback();
                   void refresh();
-                  void loadProtectionSummary();
+                  void loadProtectionSummary(motorcycle?.id);
                 }}
                 disabled={isLoading}
                 className="inline-flex items-center gap-2 rounded-xl bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50 cursor-pointer"
@@ -273,14 +434,15 @@ export default function DashboardPage() {
                   return (
                     <button
                       key={bike.id ?? bike.license_plate}
-                      onClick={() => bike.id && setSelectedVehicleId(bike.id)}
-                      className={`inline-flex items-center gap-2.5 rounded-xl px-3.5 py-2 text-left transition-all cursor-pointer ${
+                      type="button"
+                      onClick={() => bike.id && handleSelectVehicle(bike.id)}
+                      className={`inline-flex items-center gap-2.5 rounded-xl px-3.5 py-2 text-left transition-all duration-200 cursor-pointer ${
                         isSelected
-                          ? "bg-primary/15 text-foreground ring-1 ring-primary/50"
+                          ? "bg-primary/15 text-foreground ring-1 ring-primary/60 shadow-sm shadow-primary/10"
                           : "bg-background/50 text-muted-foreground hover:bg-background hover:text-foreground"
                       }`}
                     >
-                      <Bike className={`size-4 shrink-0 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                      <Bike className={`size-4 shrink-0 transition-transform duration-200 ${isSelected ? "text-primary scale-105" : "text-muted-foreground"}`} />
                       <span className="text-xs font-semibold truncate">{bikeName}</span>
                       <span className="font-mono text-[11px] font-semibold text-muted-foreground">
                         {bike.license_plate || "--"}
@@ -333,7 +495,7 @@ export default function DashboardPage() {
                 {isLoading ? "..." : hasVehicle ? (isIgnitionOn ? "Ligada" : "Desligada") : "--"}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {activeAnchor ? "Âncora virtual armada (60m)" : `${geofences.filter((g) => g.active).length} cercas ativas`}
+                {activeAnchor ? "Âncora virtual armada (60m)" : `${activeFenceCount} cercas ativas`}
               </p>
             </div>
 
@@ -379,14 +541,16 @@ export default function DashboardPage() {
                     <span>{activeAnchor ? "Âncora: Armada" : "Armar Âncora"}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsCommandModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 cursor-pointer"
-                  >
-                    <ShieldAlert className="size-3.5" />
-                    <span>Bloqueio & Comandos</span>
-                  </button>
+                  {allowCommands && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCommandModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 cursor-pointer"
+                    >
+                      <ShieldAlert className="size-3.5" />
+                      <span>Bloqueio & Comandos</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -421,7 +585,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Embedded Map with Live Geofences & Radar Animation */}
+          {/* Embedded Persistent Map with 3D Pin, Smooth Regional Flight & Momentary Radar */}
           <section
             onClick={() => {
               if (hasVehicle) openCockpit("telemetry");
@@ -439,24 +603,33 @@ export default function DashboardPage() {
             }}
             className="group relative h-[380px] sm:h-[430px] cursor-pointer overflow-hidden rounded-xl bg-surface transition-all focus:outline-none focus:ring-2 focus:ring-primary"
           >
+            {/* Instância persistente: nunca desmonta na troca de veículos */}
             <div className="absolute inset-0 pointer-events-none">
-              {activePosition ? (
-                <GoogleMapView
-                  position={activePosition}
-                  heading={activeHeading}
-                  geofences={geofences}
-                  pulseMode={activeAnchor ? "anchor" : "none"}
-                  interactive={false}
-                  markerType="pin"
-                  showCircle={!activeAnchor}
-                  zoom={16}
-                />
-              ) : (
-                <div className="mini-map h-full w-full opacity-60" />
-              )}
+              <GoogleMapView
+                position={effectiveMapPosition}
+                heading={activeHeading}
+                geofences={geofences}
+                pulseMode={activeAnchor ? "anchor" : "none"}
+                interactive={false}
+                markerType="modern-pin"
+                markerTitle={motorcycleModel || "Veículo monitorado"}
+                pinVisible={Boolean(activePosition)}
+                transitionKey={vehicleTransitionKey}
+                radarScanTrigger={radarScanTrigger}
+                showCircle={false}
+                zoom={16}
+              />
             </div>
 
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/30" />
+
+            {/* Indicador momentâneo de varredura de radar durante troca de veículo */}
+            {hasVehicle && isRadarScanning && activePosition && (
+              <div className="pointer-events-none absolute top-4 left-4 z-10 inline-flex items-center gap-2 rounded-xl border border-primary/50 bg-background/90 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-primary backdrop-blur-md shadow-lg animate-in fade-in duration-150">
+                <Radar className="size-3.5 animate-spin" />
+                <span>Varredura Radar • Foco Ativo</span>
+              </div>
+            )}
 
             <div className="pointer-events-auto absolute top-4 right-4 z-10 flex items-center gap-2 rounded-xl border border-border/80 bg-background/90 px-3.5 py-2 text-xs font-semibold text-muted-foreground backdrop-blur-md shadow-lg transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
               {hasVehicle ? (
@@ -476,12 +649,24 @@ export default function DashboardPage() {
               <div className="pointer-events-auto absolute bottom-5 left-5 z-10 max-w-md rounded-xl border border-border/80 bg-background/95 p-4 shadow-xl backdrop-blur-md">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="relative flex size-2.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
-                    </span>
+                    {activePosition ? (
+                      <span className="relative flex size-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+                      </span>
+                    ) : isFetchingInitialCoords ? (
+                      <RefreshCw className="size-3.5 animate-spin text-primary" />
+                    ) : (
+                      <MapPinOff className="size-3.5 text-amber-400" />
+                    )}
                     <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                      {hasLiveCoords ? "Localização • GPS" : "Última Posição Registrada"}
+                      {activePosition
+                        ? hasLiveCoords
+                          ? "Localização • GPS"
+                          : "Última Posição Registrada"
+                        : isFetchingInitialCoords
+                          ? "Sincronizando Posição..."
+                          : "Aguardando Sinal GPS"}
                     </p>
                   </div>
                   <span className="rounded bg-secondary px-2 py-0.5 font-mono text-xs font-bold text-foreground">
@@ -491,6 +676,17 @@ export default function DashboardPage() {
                 <p className="mt-1.5 font-display text-base font-bold text-foreground">
                   {motorcycleModel}
                 </p>
+                {activePosition ? (
+                  <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                    {activePosition.latitude.toFixed(5)}, {activePosition.longitude.toFixed(5)}
+                  </p>
+                ) : (
+                  !isFetchingInitialCoords && (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Sem coordenadas enviadas ainda — clique para abrir comandos e cercas
+                    </p>
+                  )
+                )}
                 {recentEvents[0] && (
                   <p className="mt-1 text-[11px] text-amber-400">
                     Último evento de cerca:{" "}
@@ -529,10 +725,11 @@ export default function DashboardPage() {
             isOpen={isMapModalOpen}
             onClose={() => {
               setIsMapModalOpen(false);
-              void loadProtectionSummary();
+              void loadProtectionSummary(motorcycle.id);
             }}
             motorcycleId={motorcycle.id}
-            isAdmin={isMaster || isMgr}
+            isAdmin={isMaster}
+            canSendCommands={allowCommands}
             initialTab={modalInitialTab}
             motorcycleInfo={{
               model: motorcycleModel,
@@ -540,14 +737,16 @@ export default function DashboardPage() {
             }}
           />
 
-          <CommandControlModal
-            isOpen={isCommandModalOpen}
-            onClose={() => setIsCommandModalOpen(false)}
-            motorcycleId={motorcycle.id}
-            vehicleLabel={`${motorcycleModel} (${motorcyclePlate || "sem placa"})`}
-            currentSpeedKmh={rawSpeed}
-            isAdmin={isMaster || isMgr}
-          />
+          {allowCommands && (
+            <CommandControlModal
+              isOpen={isCommandModalOpen}
+              onClose={() => setIsCommandModalOpen(false)}
+              motorcycleId={motorcycle.id}
+              vehicleLabel={`${motorcycleModel} (${motorcyclePlate || "sem placa"})`}
+              currentSpeedKmh={rawSpeed}
+              isAdmin={isMaster}
+            />
+          )}
 
           <ShareLinkModal
             isOpen={isShareModalOpen}

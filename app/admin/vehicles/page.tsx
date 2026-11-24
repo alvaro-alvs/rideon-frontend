@@ -32,7 +32,7 @@ import { VehicleSmartImport } from "@/app/components/vehicle-smart-import";
 import type { ParsedVehicleData } from "@/lib/vehicle-parser";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useTenant } from "@/app/components/tenant-provider";
-import { isPlatformOrTenantAdmin, isMasterAdmin } from "@/lib/auth";
+import { canSendCommands, isPlatformOrTenantAdmin, isMasterAdmin } from "@/lib/auth";
 import {
   formatVehicleDisplayName,
   formatVehicleModel,
@@ -46,6 +46,8 @@ export default function AdminVehiclesPage() {
   const { tenant } = useTenant();
   const isMaster =
     currentUser.status === "authenticated" && isMasterAdmin(currentUser.user.role);
+  const allowCommands =
+    currentUser.status === "authenticated" && canSendCommands(currentUser.user.role);
 
   const [vehicles, setVehicles] = useState<CustomerMotorcycle[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -857,6 +859,8 @@ export default function AdminVehiclesPage() {
         {selectedTelemetryVehicle && (
           <LiveTelemetryModal
             motorcycleId={selectedTelemetryVehicle.id}
+            isAdmin={isMaster}
+            canSendCommands={allowCommands}
             motorcycleInfo={{
               model: formatVehicleDisplayName(selectedTelemetryVehicle),
               licensePlate: selectedTelemetryVehicle.license_plate,

@@ -209,3 +209,245 @@ input {
 .calendar-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(239, 37, 27, 0.55);
 }
+
+/* Clean Modern 2D Vehicle Pin & Momentary Radar Pulse (GPU compositor only) */
+.rideon-pin-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.rideon-radar-2d {
+  position: absolute;
+  left: -72px;
+  top: -72px;
+  width: 144px;
+  height: 144px;
+  pointer-events: none;
+}
+
+.rideon-radar-ring {
+  position: absolute;
+  inset: 16px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(239, 37, 27, 0.85);
+  background: radial-gradient(
+    circle,
+    rgba(239, 37, 27, 0.16) 0%,
+    rgba(239, 37, 27, 0.04) 65%,
+    transparent 100%
+  );
+  opacity: 0;
+}
+
+.rideon-radar-sweep {
+  position: absolute;
+  inset: 16px;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(239, 37, 27, 0) 0deg,
+    rgba(239, 37, 27, 0.03) 260deg,
+    rgba(239, 37, 27, 0.32) 345deg,
+    rgba(239, 37, 27, 0.65) 358deg,
+    rgba(239, 37, 27, 0) 360deg
+  );
+  mask-image: radial-gradient(circle, transparent 8%, black 22%, black 68%, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle, transparent 8%, black 22%, black 68%, transparent 72%);
+  opacity: 0;
+}
+
+.rideon-pin-shadow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.5);
+  filter: blur(1.5px);
+  transform: translate3d(-50%, -50%, 0);
+  opacity: 0.55;
+}
+
+.rideon-pin-wrap {
+  position: absolute;
+  left: -17px;
+  top: -41px;
+  width: 34px;
+  height: 42px;
+  transform-origin: 50% 100%;
+}
+
+.rideon-pin-svg {
+  display: block;
+  width: 34px;
+  height: 42px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
+}
+
+@keyframes rideon-pin-pop-a {
+  0% {
+    transform: translate3d(0, -20px, 0) scale3d(0.76, 0.76, 1);
+    opacity: 0;
+  }
+  58% {
+    transform: translate3d(0, 1.5px, 0) scale3d(1.05, 0.95, 1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate3d(0, -3px, 0) scale3d(0.98, 1.02, 1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    opacity: 1;
+  }
+}
+
+@keyframes rideon-pin-pop-b {
+  0% {
+    transform: translate3d(0, -20px, 0) scale3d(0.76, 0.76, 1);
+    opacity: 0;
+  }
+  58% {
+    transform: translate3d(0, 1.5px, 0) scale3d(1.05, 0.95, 1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate3d(0, -3px, 0) scale3d(0.98, 1.02, 1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    opacity: 1;
+  }
+}
+
+@keyframes rideon-pin-shadow-a {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale3d(0.4, 0.4, 1);
+    opacity: 0.15;
+  }
+  58% {
+    transform: translate3d(-50%, -50%, 0) scale3d(1.15, 1.15, 1);
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+    opacity: 0.55;
+  }
+}
+
+@keyframes rideon-pin-shadow-b {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale3d(0.4, 0.4, 1);
+    opacity: 0.15;
+  }
+  58% {
+    transform: translate3d(-50%, -50%, 0) scale3d(1.15, 1.15, 1);
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+    opacity: 0.55;
+  }
+}
+
+@keyframes rideon-radar-ring-a {
+  0% {
+    transform: scale3d(0.18, 0.18, 1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale3d(1.25, 1.25, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes rideon-radar-ring-b {
+  0% {
+    transform: scale3d(0.18, 0.18, 1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale3d(1.25, 1.25, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes rideon-radar-sweep-a {
+  0% {
+    transform: rotateZ(0deg) scale3d(0.7, 0.7, 1);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: rotateZ(360deg) scale3d(1.1, 1.1, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes rideon-radar-sweep-b {
+  0% {
+    transform: rotateZ(0deg) scale3d(0.7, 0.7, 1);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: rotateZ(360deg) scale3d(1.1, 1.1, 1);
+    opacity: 0;
+  }
+}
+
+.rideon-pin-stage.burst-a .rideon-pin-wrap {
+  animation: rideon-pin-pop-a 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rideon-pin-stage.burst-b .rideon-pin-wrap {
+  animation: rideon-pin-pop-b 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rideon-pin-stage.burst-a .rideon-pin-shadow {
+  animation: rideon-pin-shadow-a 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rideon-pin-stage.burst-b .rideon-pin-shadow {
+  animation: rideon-pin-shadow-b 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rideon-pin-stage.burst-a .rideon-radar-ring-1 {
+  animation: rideon-radar-ring-a 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.rideon-pin-stage.burst-b .rideon-radar-ring-1 {
+  animation: rideon-radar-ring-b 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.rideon-pin-stage.burst-a .rideon-radar-ring-2 {
+  animation: rideon-radar-ring-a 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.14s forwards;
+}
+.rideon-pin-stage.burst-b .rideon-radar-ring-2 {
+  animation: rideon-radar-ring-b 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.14s forwards;
+}
+
+.rideon-pin-stage.burst-a .rideon-radar-sweep {
+  animation: rideon-radar-sweep-a 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.rideon-pin-stage.burst-b .rideon-radar-sweep {
+  animation: rideon-radar-sweep-b 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rideon-pin-stage.burst-a .rideon-pin-wrap,
+  .rideon-pin-stage.burst-b .rideon-pin-wrap,
+  .rideon-pin-stage.burst-a .rideon-pin-shadow,
+  .rideon-pin-stage.burst-b .rideon-pin-shadow {
+    animation-duration: 0.01ms;
+  }
+}

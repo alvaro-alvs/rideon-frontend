@@ -34,6 +34,7 @@ interface LiveTelemetryModalProps {
   onClose: () => void;
   motorcycleId?: string;
   isAdmin?: boolean;
+  canSendCommands?: boolean;
   initialTab?: "telemetry" | "geofences" | "commands" | "share";
   motorcycleInfo?: {
     model: string;
@@ -78,6 +79,7 @@ function LiveTelemetryModalContent({
   onClose,
   motorcycleId,
   isAdmin = false,
+  canSendCommands = false,
   initialTab = "telemetry",
   motorcycleInfo = { model: "Honda CG 160", licensePlate: "ABC1234" },
 }: LiveTelemetryModalProps) {
@@ -93,7 +95,10 @@ function LiveTelemetryModalContent({
   const [events, setEvents] = useState<GeofenceEventItem[]>([]);
   const [breachBanner, setBreachBanner] = useState<string | null>(null);
   const [anchorBusy, setAnchorBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<"telemetry" | "geofences" | "commands" | "share">(initialTab);
+  const [activeTab, setActiveTab] = useState<"telemetry" | "geofences" | "commands" | "share">(
+    initialTab === "commands" && !canSendCommands ? "telemetry" : initialTab,
+  );
+  const effectiveTab = !canSendCommands && activeTab === "commands" ? "telemetry" : activeTab;
   const [panelOpen, setPanelOpen] = useState(true);
   const seededRef = useRef(false);
 
@@ -554,7 +559,11 @@ function LiveTelemetryModalContent({
                 </p>
                 <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-[11px] text-muted-foreground">
                   <Info className="size-4 text-primary shrink-0" />
-                  <span>Os comandos e compartilhamento seguem disponíveis no painel ao lado.</span>
+                  <span>
+                    {canSendCommands
+                      ? "Os comandos e compartilhamento seguem disponíveis no painel ao lado."
+                      : "As cercas e compartilhamento seguem disponíveis no painel ao lado."}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -592,21 +601,25 @@ function LiveTelemetryModalContent({
           {panelOpen && (
             <aside className="w-full lg:w-[390px] shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-card flex flex-col max-h-[48vh] lg:max-h-none">
               {/* Tabs */}
-              <div className="grid grid-cols-4 border-b border-border bg-background/40 p-1.5 gap-1">
-                {(
-                  [
-                    { id: "telemetry", label: "Ao Vivo", icon: Activity },
-                    { id: "geofences", label: "Cercas", icon: Radar },
-                    { id: "commands", label: "Comandos", icon: ShieldAlert },
-                    { id: "share", label: "Enviar", icon: Share2 },
-                  ] as const
-                ).map(({ id, label, icon: Icon }) => (
+              <div
+                className={`grid ${
+                  canSendCommands ? "grid-cols-4" : "grid-cols-3"
+                } border-b border-border bg-background/40 p-1.5 gap-1`}
+              >
+                {[
+                  { id: "telemetry" as const, label: "Ao Vivo", icon: Activity },
+                  { id: "geofences" as const, label: "Cercas", icon: Radar },
+                  ...(canSendCommands
+                    ? [{ id: "commands" as const, label: "Comandos", icon: ShieldAlert }]
+                    : []),
+                  { id: "share" as const, label: "Enviar", icon: Share2 },
+                ].map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => setActiveTab(id)}
                     className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-bold transition cursor-pointer ${
-                      activeTab === id
+                      effectiveTab === id
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     }`}
@@ -618,7 +631,7 @@ function LiveTelemetryModalContent({
               </div>
 
               <div className="flex-1 overflow-y-auto p-4">
-                {activeTab === "telemetry" && (
+                {effectiveTab === "telemetry" && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-2.5">
                       <div className="rounded-xl border border-border bg-background/50 p-3">
@@ -678,7 +691,7 @@ function LiveTelemetryModalContent({
                   </div>
                 )}
 
-                {activeTab === "geofences" && (
+                {effectiveTab === "geofences" && (
                   <GeofenceQuickPanel
                     geofences={geofences}
                     events={events}
@@ -688,7 +701,7 @@ function LiveTelemetryModalContent({
                   />
                 )}
 
-                {activeTab === "commands" && motorcycleId && (
+                {canSendCommands && effectiveTab === "commands" && motorcycleId && (
                   <CommandControlPanel
                     motorcycleId={motorcycleId}
                     currentSpeedKmh={currentSpeed}
@@ -697,7 +710,7 @@ function LiveTelemetryModalContent({
                   />
                 )}
 
-                {activeTab === "share" && motorcycleId && (
+                {effectiveTab === "share" && motorcycleId && (
                   <ShareLinkPanel motorcycleId={motorcycleId} compact />
                 )}
               </div>

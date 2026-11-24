@@ -6,43 +6,101 @@ import type { TelemetryPoint } from "@/app/dashboard/components/live-telemetry-m
 export type LocationState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ok"; data: TelemetryPoint }
+  | { status: "ok"; data: TelemetryPoint; isRevalidating?: boolean }
   | { status: "error"; message: string };
+
+export interface UseMotorcycleLocationOptions {
+  /** Intervalo opcional (ms) para atualização automática silenciosa enquanto a aba estiver visível. */
+  pollIntervalMs?: number;
+  /** Permite pausar requisições quando outro modal/stream já está ativo. */
+  enabled?: boolean;
+}
+
+const MAX_CACHE_ENTRIES = 64;
+const locationCache = new Map<string, TelemetryPoint>();
+
+function setCachedLocation(id: string, point: TelemetryPoint) {
+  if (locationCache.size >= MAX_CACHE_ENTRIES && !locationCache.has(id)) {
+    const oldestKey = locationCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      locationCache.delete(oldestKey);
+    }
+  }
+  locationCache.set(id, point);
+}
+
+export function getCachedMotorcycleLocation(id: string | undefined): TelemetryPoint | undefined {
+  return id ? locationCache.get(id) : undefined;
+}
 
 /**
  * Busca a última localização registrada de uma motocicleta via
- * GET /api/motorcycles/[id]/location (proxy Next.js → backend).
- *
- * Retorna `{ status: "idle" }` se nenhum `motorcycleId` for fornecido.
+ * GET /api/motorcycles/[id]/location com cache em memória (stale-while-revalidate)
+ * e cancelamento automático via AbortController em trocas rápidas de veículo.
  */
-export function useMotorcycleLocation(motorcycleId: string | undefined) {
-  const [state, setState] = useState<LocationState>(
-    motorcycleId ? { status: "loading" } : { status: "idle" },
-  );
+export function useMotorcycleLocation(
+  motorcycleId: string | undefined,
+  options?: UseMotorcycleLocationOptions,
+): LocationState {
+  const pollIntervalMs = options?.pollIntervalMs ?? 0;
+  const enabled = options?.enabled ?? true;
+
+  const [state, setState] = useState<LocationState>(() => {
+    if (!motorcycleId) return { status: "idle" };
+    const cached = locationCache.get(motorcycleId);
+    if (cached) {
+      return { status: "ok", data: cached, isRevalidating: true };
+    }
+    return { status: "loading" };
+  });
   const [prevId, setPrevId] = useState(motorcycleId);
 
   if (motorcycleId !== prevId) {
     setPrevId(motorcycleId);
-    setState(motorcycleId ? { status: "loading" } : { status: "idle" });
+    if (!motorcycleId) {
+      setState({ status: "idle" });
+    } else {
+      const cached = locationCache.get(motorcycleId);
+      setState(
+        cached
+          ? { status: "ok", data: cached, isRevalidating: true }
+          : { status: "loading" },
+      );
+    }
   }
 
   useEffect(() => {
-    if (!motorcycleId) {
+    if (!motorcycleId || !enabled) {
       return;
     }
 
     let active = true;
+    let currentController: AbortController | null = null;
 
-    async function fetchLocation() {
+    async function fetchLocation(isBackgroundPoll = false) {
+      if (isBackgroundPoll && typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+
+      currentController?.abort();
+      const controller = new AbortController();
+      currentController = controller;
 
       try {
         const res = await fetch(`/api/motorcycles/${motorcycleId}/location`, {
           cache: "no-store",
+          signal: controller.signal,
         });
 
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
 
         if (!res.ok) {
+          // Se já temos posição em cache e falhou um poll silencioso, preserva o estado válido
+          const existing = locationCache.get(motorcycleId!);
+          if (existing) {
+            setState({ status: "ok", data: existing, isRevalidating: false });
+            return;
+          }
           const body = (await res.json().catch(() => null)) as {
             message?: string;
           } | null;
@@ -53,16 +111,19 @@ export function useMotorcycleLocation(motorcycleId: string | undefined) {
           return;
         }
 
-        // O backend retorna o shape documentado no endpoint 5.8:
-        // { motorcycle_id, timestamp, position: { latitude, longitude, altitude, accuracy },
-        //   motion: { speed, heading, acceleration }, device: { battery, signal } }
         const raw = (await res.json()) as Record<string, unknown>;
+        if (!active || controller.signal.aborted) return;
 
         const pos = raw.position as
           | { latitude: number; longitude: number; altitude?: number; accuracy?: number }
           | undefined;
 
         if (!pos) {
+          const existing = locationCache.get(motorcycleId!);
+          if (existing) {
+            setState({ status: "ok", data: existing, isRevalidating: false });
+            return;
+          }
           setState({ status: "error", message: "Resposta sem dados de posicao." });
           return;
         }
@@ -96,9 +157,19 @@ export function useMotorcycleLocation(motorcycleId: string | undefined) {
             : undefined,
         };
 
-        if (active) setState({ status: "ok", data: point });
+        setCachedLocation(motorcycleId!, point);
+        if (active) {
+          setState({ status: "ok", data: point, isRevalidating: false });
+        }
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+
+        const existing = locationCache.get(motorcycleId!);
+        if (existing) {
+          setState({ status: "ok", data: existing, isRevalidating: false });
+          return;
+        }
         setState({
           status: "error",
           message: err instanceof Error ? err.message : "Erro desconhecido",
@@ -106,12 +177,21 @@ export function useMotorcycleLocation(motorcycleId: string | undefined) {
       }
     }
 
-    void fetchLocation();
+    void fetchLocation(false);
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    if (pollIntervalMs > 0) {
+      intervalId = setInterval(() => {
+        void fetchLocation(true);
+      }, pollIntervalMs);
+    }
 
     return () => {
       active = false;
+      currentController?.abort();
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [motorcycleId]);
+  }, [motorcycleId, pollIntervalMs, enabled]);
 
   return state;
 }

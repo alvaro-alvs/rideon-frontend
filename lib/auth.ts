@@ -78,6 +78,13 @@ export function canManageDeviceTransfers(role: UserRole | string | undefined): b
   );
 }
 
+/**
+ * Sending hardware commands is temporarily restricted to Master Admins.
+ */
+export function canSendCommands(role: UserRole | string | undefined): boolean {
+  return isMasterAdmin(role);
+}
+
 export function isCustomer(role: UserRole | string | undefined): boolean {
   return !isPlatformOrTenantAdmin(role);
 }
