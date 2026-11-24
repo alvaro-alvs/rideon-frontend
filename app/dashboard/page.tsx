@@ -125,7 +125,7 @@ export default function DashboardPage() {
     radarScanTimeoutRef.current = setTimeout(() => {
       setIsRadarScanning(false);
       radarScanTimeoutRef.current = null;
-    }, 1350);
+    }, 2400);
   }, []);
 
   useEffect(() => {

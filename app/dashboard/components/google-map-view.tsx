@@ -545,13 +545,17 @@ function GoogleMapViewInner({
         targetLatLng.lng,
       );
 
-      // Mesma posição ou muito próximo: centraliza suave e dispara imediatamente Pin + Radar
+      // Mesma posição ou muito próximo: centraliza e aguarda a câmera estabilizar antes do radar
       if (distMeters < 35) {
         if (map.getZoom() !== targetZoom) {
           map.setZoom(targetZoom);
         }
         map.panTo(targetLatLng);
-        modernPinOverlayRef.current?.triggerBurst();
+        const shortSettleMs = distMeters < 3 ? 90 : 260;
+        arrivalBurstTimeoutRef.current = setTimeout(() => {
+          arrivalBurstTimeoutRef.current = null;
+          modernPinOverlayRef.current?.triggerBurst();
+        }, shortSettleMs);
         return;
       }
 
@@ -575,13 +579,6 @@ function GoogleMapViewInner({
       let restoredTargetZoom = !isLongFlight;
       const startTime = performance.now();
 
-      // Sincroniza a animação do Pin e o pulso de radar exatamente na chegada visual da câmera
-      const burstDelayMs = Math.round(durationMs * (isLongFlight ? 0.58 : 0.44));
-      arrivalBurstTimeoutRef.current = setTimeout(() => {
-        arrivalBurstTimeoutRef.current = null;
-        modernPinOverlayRef.current?.triggerBurst();
-      }, burstDelayMs);
-
       const stepCamera = (now: number) => {
         const rawProgress = Math.min(1, (now - startTime) / durationMs);
         const eased = easeInOutCubic(rawProgress);
@@ -599,9 +596,15 @@ function GoogleMapViewInner({
           cameraRafRef.current = requestAnimationFrame(stepCamera);
         } else {
           cameraRafRef.current = 0;
+          map.setCenter(targetLatLng);
           if (map.getZoom() !== targetZoom) {
             map.setZoom(targetZoom);
           }
+          // Dispara o Pin + Radar somente após a câmera parar totalmente no destino
+          arrivalBurstTimeoutRef.current = setTimeout(() => {
+            arrivalBurstTimeoutRef.current = null;
+            modernPinOverlayRef.current?.triggerBurst();
+          }, 180);
         }
       };
 

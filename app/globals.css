@@ -409,38 +409,39 @@ input {
 }
 
 .rideon-pin-stage.burst-a .rideon-pin-wrap {
-  animation: rideon-pin-pop-a 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rideon-pin-pop-a 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .rideon-pin-stage.burst-b .rideon-pin-wrap {
-  animation: rideon-pin-pop-b 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rideon-pin-pop-b 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .rideon-pin-stage.burst-a .rideon-pin-shadow {
-  animation: rideon-pin-shadow-a 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rideon-pin-shadow-a 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .rideon-pin-stage.burst-b .rideon-pin-shadow {
-  animation: rideon-pin-shadow-b 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rideon-pin-shadow-b 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Delay intencional para o radar expandir após o pouso do Pin e estabilização da câmera */
 .rideon-pin-stage.burst-a .rideon-radar-ring-1 {
-  animation: rideon-radar-ring-a 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: rideon-radar-ring-a 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.18s forwards;
 }
 .rideon-pin-stage.burst-b .rideon-radar-ring-1 {
-  animation: rideon-radar-ring-b 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: rideon-radar-ring-b 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.18s forwards;
 }
 
 .rideon-pin-stage.burst-a .rideon-radar-ring-2 {
-  animation: rideon-radar-ring-a 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.14s forwards;
+  animation: rideon-radar-ring-a 1.25s cubic-bezier(0.16, 1, 0.3, 1) 0.36s forwards;
 }
 .rideon-pin-stage.burst-b .rideon-radar-ring-2 {
-  animation: rideon-radar-ring-b 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.14s forwards;
+  animation: rideon-radar-ring-b 1.25s cubic-bezier(0.16, 1, 0.3, 1) 0.36s forwards;
 }
 
 .rideon-pin-stage.burst-a .rideon-radar-sweep {
-  animation: rideon-radar-sweep-a 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: rideon-radar-sweep-a 1.25s cubic-bezier(0.22, 1, 0.36, 1) 0.16s forwards;
 }
 .rideon-pin-stage.burst-b .rideon-radar-sweep {
-  animation: rideon-radar-sweep-b 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: rideon-radar-sweep-b 1.25s cubic-bezier(0.22, 1, 0.36, 1) 0.16s forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
