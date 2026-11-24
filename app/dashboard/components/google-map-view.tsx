@@ -59,6 +59,8 @@ function ensureGoogleMapsLoaded(apiKey: string): Promise<unknown> {
   return mapsPromise;
 }
 
+let modernPinGradSeq = 0;
+
 interface ModernPinOverlayHandle {
   setMap: (map: google.maps.Map | null) => void;
   update: (pos: google.maps.LatLngLiteral, visible: boolean, title?: string) => void;
@@ -70,6 +72,8 @@ function createModernPinOverlay(
   initialVisible: boolean,
   initialTitle?: string,
 ): ModernPinOverlayHandle {
+  const gradId = `rideon-pin-grad-${++modernPinGradSeq}`;
+
   class RideOnModernPinOverlay extends google.maps.OverlayView {
     private pos: google.maps.LatLngLiteral = initialPos;
     private visible: boolean = initialVisible;
@@ -83,7 +87,7 @@ function createModernPinOverlay(
       root.className = "rideon-pin-stage";
       root.setAttribute("aria-label", this.titleText);
 
-      // Pin 2D minimalista e moderno: formato flat limpo, borda branca nítida e núcleo branco sólido
+      // Pin 2D clean sem borda branca: 100% vermelho em degradê suave com vazado central
       root.innerHTML = `
         <div class="rideon-radar-2d">
           <div class="rideon-radar-sweep"></div>
@@ -93,14 +97,19 @@ function createModernPinOverlay(
         <div class="rideon-pin-shadow"></div>
         <div class="rideon-pin-wrap">
           <svg class="rideon-pin-svg" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="${gradId}" x1="17" y1="2" x2="17" y2="40" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#ff4d42"/>
+                <stop offset="48%" stop-color="#ef251b"/>
+                <stop offset="100%" stop-color="#990d07"/>
+              </linearGradient>
+            </defs>
             <path
-              d="M17 2C9.268 2 3 8.268 3 16C3 25.8 15.1 38.2 16.32 39.42C16.7 39.8 17.3 39.8 17.68 39.42C18.9 38.2 31 25.8 31 16C31 8.268 24.732 2 17 2Z"
-              fill="#ef251b"
-              stroke="#ffffff"
-              stroke-width="2.25"
-              stroke-linejoin="round"
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              d="M17 2C9.268 2 3 8.268 3 16C3 25.8 15.1 38.2 16.32 39.42C16.7 39.8 17.3 39.8 17.68 39.42C18.9 38.2 31 25.8 31 16C31 8.268 24.732 2 17 2ZM17 20.75C14.377 20.75 12.25 18.623 12.25 16C12.25 13.377 14.377 11.25 17 11.25C19.623 11.25 21.75 13.377 21.75 16C21.75 18.623 19.623 20.75 17 20.75Z"
+              fill="url(#${gradId})"
             />
-            <circle cx="17" cy="16" r="5" fill="#ffffff"/>
           </svg>
         </div>
       `;
@@ -864,14 +873,19 @@ function GoogleMapViewInner({
               <div className="rideon-pin-shadow" />
               <div className="rideon-pin-wrap">
                 <svg className="rideon-pin-svg" viewBox="0 0 34 42" fill="none">
+                  <defs>
+                    <linearGradient id="rideon-fallback-pin-grad" x1="17" y1="2" x2="17" y2="40" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#ff4d42" />
+                      <stop offset="48%" stopColor="#ef251b" />
+                      <stop offset="100%" stopColor="#990d07" />
+                    </linearGradient>
+                  </defs>
                   <path
-                    d="M17 2C9.268 2 3 8.268 3 16C3 25.8 15.1 38.2 16.32 39.42C16.7 39.8 17.3 39.8 17.68 39.42C18.9 38.2 31 25.8 31 16C31 8.268 24.732 2 17 2Z"
-                    fill="#ef251b"
-                    stroke="#ffffff"
-                    strokeWidth="2.25"
-                    strokeLinejoin="round"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M17 2C9.268 2 3 8.268 3 16C3 25.8 15.1 38.2 16.32 39.42C16.7 39.8 17.3 39.8 17.68 39.42C18.9 38.2 31 25.8 31 16C31 8.268 24.732 2 17 2ZM17 20.75C14.377 20.75 12.25 18.623 12.25 16C12.25 13.377 14.377 11.25 17 11.25C19.623 11.25 21.75 13.377 21.75 16C21.75 18.623 19.623 20.75 17 20.75Z"
+                    fill="url(#rideon-fallback-pin-grad)"
                   />
-                  <circle cx="17" cy="16" r="5" fill="#ffffff" />
                 </svg>
               </div>
             </div>
