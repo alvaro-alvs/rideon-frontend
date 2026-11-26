@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
+import { ReverseAddress } from "@/app/components/reverse-address";
 import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { Device, DeviceLastPosition } from "@/lib/types/device";
 
@@ -542,9 +543,11 @@ function DeviceMapModalContent({
                       <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                     </span>
                   </div>
-                  <span className="font-mono text-xs font-semibold text-foreground">
-                    {position.latitude.toFixed(6)}, {position.longitude.toFixed(6)}
-                  </span>
+                  <ReverseAddress
+                    latitude={position.latitude}
+                    longitude={position.longitude}
+                    className="max-w-[260px] truncate text-xs font-semibold text-foreground"
+                  />
                   <button
                     type="button"
                     onClick={copyCoordinates}

@@ -36,6 +36,7 @@ import {
 } from "@/lib/alert-meta";
 import { isPlatformOrTenantAdmin } from "@/lib/auth";
 import { isValidCoordinate } from "@/lib/geo";
+import { reverseGeocode } from "@/lib/reverse-geocode";
 import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import { consumeNdjsonStream } from "@/lib/ndjson-stream";
 import {
@@ -125,7 +126,6 @@ export default function HistoryPage() {
 
   const streamAbortRef = useRef<AbortController | null>(null);
   const userFocusedRef = useRef(false);
-  const geocodeCacheRef = useRef<Map<string, string>>(new Map());
   const tripsSentinelRef = useRef<HTMLDivElement | null>(null);
   const pointsSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingMoreTripsRef = useRef(false);
@@ -494,30 +494,8 @@ export default function HistoryPage() {
     const controller = new AbortController();
 
     const lookupAddress = async (pt: TripPoint): Promise<string | undefined> => {
-      if (!isValidCoordinate(pt.latitude, pt.longitude)) return undefined;
-      const key = `${pt.latitude.toFixed(4)},${pt.longitude.toFixed(4)}`;
-      const cached = geocodeCacheRef.current.get(key);
-      if (cached) return cached;
-
-      try {
-        const res = await fetch(
-          `/api/geocode/reverse?lat=${encodeURIComponent(pt.latitude)}&lon=${encodeURIComponent(pt.longitude)}`,
-          { signal: controller.signal },
-        );
-        if (!res.ok) return undefined;
-        const data = (await res.json()) as {
-          formatted_address?: string;
-          display_name?: string;
-        };
-        const label = data.formatted_address?.trim() || data.display_name?.trim();
-        if (label) {
-          geocodeCacheRef.current.set(key, label);
-          return label;
-        }
-      } catch {
-        // Ignore abort or transient reverse-geocode errors
-      }
-      return undefined;
+      const label = await reverseGeocode(pt.latitude, pt.longitude, controller.signal);
+      return label ?? undefined;
     };
 
     const run = async () => {

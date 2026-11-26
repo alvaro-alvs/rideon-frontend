@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
+import { ReverseAddress } from "@/app/components/reverse-address";
 import { LiveTelemetryModal } from "@/app/dashboard/components/live-telemetry-modal";
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
 import { CommandControlModal } from "@/app/dashboard/components/command-control-modal";
@@ -677,8 +678,11 @@ export default function DashboardPage() {
                   {motorcycleModel}
                 </p>
                 {activePosition ? (
-                  <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                    {activePosition.latitude.toFixed(5)}, {activePosition.longitude.toFixed(5)}
+                  <p className="mt-0.5 text-[11px] text-muted-foreground truncate max-w-[280px]">
+                    <ReverseAddress
+                      latitude={activePosition.latitude}
+                      longitude={activePosition.longitude}
+                    />
                   </p>
                 ) : (
                   !isFetchingInitialCoords && (

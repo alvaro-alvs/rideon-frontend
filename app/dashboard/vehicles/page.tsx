@@ -10,12 +10,17 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Cpu,
   Info,
+  LayoutGrid,
+  List,
   Lock,
+  Maximize2,
   Palette,
   Phone,
   Plus,
   Radio,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -44,6 +49,8 @@ import {
   VehicleMiniCard,
   type VehicleCardData,
 } from "./components/vehicle-mini-card";
+import { VehicleCompactCard } from "./components/vehicle-compact-card";
+import { VehicleDetailModal } from "./components/vehicle-detail-modal";
 import { VehiclePlatePreview } from "./components/vehicle-plate-preview";
 import {
   BrandQuickSelect,
@@ -67,7 +74,7 @@ type RegisteredRider = {
 
 type View = "loading" | "new" | "pending-card" | "pending-form" | "success";
 
-const ADMIN_PAGE_SIZE = 6;
+const ADMIN_PAGE_SIZE = 15;
 
 export default function VehiclesPage() {
   const currentUser = useCurrentUser();
@@ -83,10 +90,18 @@ export default function VehiclesPage() {
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [vehicleLimit, setVehicleLimit] = useState(1);
 
-  // Filtro de busca (Admin ou multi-veículos)
+  // Filtro de busca e gerência (Admin/Manager)
   const [searchQuery, setSearchQuery] = useState("");
+  const [adminViewMode, setAdminViewMode] = useState<"table" | "grid">("table");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "gps_active" | "waiting" | "no_device"
+  >("all");
+  const [brandFilter, setBrandFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"plate" | "model" | "status">("plate");
 
-  // Live Telemetry Modal
+  // Modais
+  const [selectedDetailMoto, setSelectedDetailMoto] =
+    useState<VehicleCardData | null>(null);
   const [selectedTelemetryMoto, setSelectedTelemetryMoto] =
     useState<VehicleCardData | null>(null);
   const [renamingMoto, setRenamingMoto] = useState<VehicleCardData | null>(null);
@@ -417,23 +432,88 @@ export default function VehiclesPage() {
   // Regra de Negócio: Cliente comum atingiu a cota de veículos permitida pelo tenant/manager
   const hasReachedLimit = !isAdmin && motorcycles.length >= vehicleLimit;
 
-  // Filtragem e Paginação para Admin
-  const filteredMotorcycles = motorcycles.filter((moto) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    const plate = (moto.license_plate ?? "").toLowerCase();
-    const brand = (moto.brand ?? "").toLowerCase();
-    const model = (moto.model ?? "").toLowerCase();
-    const nickname = (moto.nickname ?? "").toLowerCase();
-    const riderName = (moto.rider?.name ?? "").toLowerCase();
-    return (
-      plate.includes(query) ||
-      brand.includes(query) ||
-      model.includes(query) ||
-      nickname.includes(query) ||
-      riderName.includes(query)
-    );
-  });
+  // Estatísticas e marcas disponíveis para filtros de Admin/Manager
+  const fleetCounts = {
+    all: motorcycles.length,
+    gpsActive: motorcycles.filter((m) =>
+      Boolean(m.device && (m.has_position || m.last_position)),
+    ).length,
+    waiting: motorcycles.filter((m) =>
+      Boolean(m.device && !m.has_position && !m.last_position),
+    ).length,
+    noDevice: motorcycles.filter((m) => !m.device).length,
+  };
+
+  const availableBrands = Array.from(
+    new Set(
+      motorcycles
+        .map((m) => (m.brand ?? "").trim())
+        .filter((b) => b.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  // Filtragem, Ordenação e Paginação para Admin/Manager
+  const filteredMotorcycles = motorcycles
+    .filter((moto) => {
+      if (isAdmin) {
+        const hasDevice = Boolean(moto.device);
+        const hasGps = Boolean(
+          hasDevice && (moto.has_position || moto.last_position),
+        );
+        if (statusFilter === "gps_active" && !hasGps) return false;
+        if (statusFilter === "waiting" && (!hasDevice || hasGps)) return false;
+        if (statusFilter === "no_device" && hasDevice) return false;
+
+        if (
+          brandFilter !== "all" &&
+          (moto.brand ?? "").trim().toLowerCase() !== brandFilter.toLowerCase()
+        ) {
+          return false;
+        }
+      }
+
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      const plate = (moto.license_plate ?? "").toLowerCase();
+      const brand = (moto.brand ?? "").toLowerCase();
+      const model = (moto.model ?? "").toLowerCase();
+      const nickname = (moto.nickname ?? "").toLowerCase();
+      const riderName = (moto.rider?.name ?? moto.rider_name ?? "").toLowerCase();
+      const riderPhone = (moto.rider?.phone ?? "").toLowerCase();
+      const serial = (moto.device?.serial_number ?? "").toLowerCase();
+      return (
+        plate.includes(query) ||
+        brand.includes(query) ||
+        model.includes(query) ||
+        nickname.includes(query) ||
+        riderName.includes(query) ||
+        riderPhone.includes(query) ||
+        serial.includes(query)
+      );
+    })
+    .sort((a, b) => {
+      if (!isAdmin) return 0;
+      if (sortBy === "model") {
+        return formatVehicleDisplayName(a).localeCompare(
+          formatVehicleDisplayName(b),
+          "pt-BR",
+        );
+      }
+      if (sortBy === "status") {
+        const rank = (m: VehicleCardData) =>
+          m.device && (m.has_position || m.last_position)
+            ? 0
+            : m.device
+              ? 1
+              : 2;
+        const diff = rank(a) - rank(b);
+        if (diff !== 0) return diff;
+      }
+      return (a.license_plate ?? "").localeCompare(
+        b.license_plate ?? "",
+        "pt-BR",
+      );
+    });
 
   const totalAdminPages = Math.max(
     1,
@@ -802,11 +882,11 @@ export default function VehiclesPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* SEÇÃO 1: VEÍCULOS CADASTRADOS (CARDS MODERNOS & BUSCA)                     */}
+        {/* SEÇÃO 1: VEÍCULOS CADASTRADOS (TABELA CLEAN P/ FROTA | CARDS P/ CLIENTE)  */}
         {/* ========================================================================= */}
         {view !== "loading" && motorcycles.length > 0 && (
-          <section aria-labelledby="registered-vehicles-title" className="space-y-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <section aria-labelledby="registered-vehicles-title" className="space-y-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Bike className="size-4.5" />
@@ -839,8 +919,55 @@ export default function VehiclesPage() {
                 </div>
               </div>
 
-              {/* Barra de Busca para Admin ou se houver mais de 2 veículos */}
-              {(isAdmin || motorcycles.length > 2) && (
+              {/* Opções de Gerência (Admin/Manager) ou Busca simples (Cliente > 2 veículos) */}
+              {isAdmin ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReloadTrigger((t) => t + 1)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-secondary/70 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                    title="Atualizar lista de veículos"
+                  >
+                    <RefreshCw className="size-3.5" />
+                    <span className="hidden sm:inline">Atualizar</span>
+                  </button>
+
+                  <Link
+                    href="/admin/devices"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-secondary/70 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <Cpu className="size-3.5 text-primary" />
+                    <span>Rastreadores</span>
+                  </Link>
+
+                  <div className="flex items-center gap-1 rounded-xl bg-background/50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setAdminViewMode("table")}
+                      className={`flex size-8 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                        adminViewMode === "table"
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      title="Visualização em Tabela"
+                    >
+                      <List className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdminViewMode("grid")}
+                      className={`flex size-8 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                        adminViewMode === "grid"
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      title="Visualização em Cards"
+                    >
+                      <LayoutGrid className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : motorcycles.length > 2 ? (
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="relative min-w-[240px]">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -865,26 +992,295 @@ export default function VehiclesPage() {
                     )}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* Grid dos Novos Cards Modernos */}
-            {displayedMotorcycles.length > 0 ? (
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {displayedMotorcycles.map((moto, index) => (
-                  <VehicleMiniCard
-                    key={moto.id || moto.license_plate || index}
-                    vehicle={moto}
-                    isAdmin={isAdmin}
-                    onOpenTelemetry={(m) => setSelectedTelemetryMoto(m)}
-                    onUnlinkDevice={isAdmin ? handleUnlinkDevice : undefined}
-                    onRenameNickname={(m) => setRenamingMoto(m)}
+            {/* Barra de Busca & Filtros Avançados para Admin/Manager */}
+            {isAdmin && (
+              <div className="flex flex-col gap-3 rounded-xl border border-border/50 bg-background/30 p-3.5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="relative flex-1 lg:max-w-md">
+                  <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setAdminPage(1);
+                    }}
+                    placeholder="Buscar por placa, modelo, apelido, piloto, telefone ou IMEI..."
+                    className="w-full rounded-xl bg-background/70 py-2 pl-10 pr-12 text-xs font-medium text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50"
                   />
-                ))}
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setAdminPage(1);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Status Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(
+                      [
+                        { key: "all", label: "Todos", count: fleetCounts.all },
+                        {
+                          key: "gps_active",
+                          label: "GPS Ativo",
+                          count: fleetCounts.gpsActive,
+                          dot: "bg-emerald-500",
+                        },
+                        {
+                          key: "waiting",
+                          label: "Aguardando",
+                          count: fleetCounts.waiting,
+                          dot: "bg-amber-400",
+                        },
+                        {
+                          key: "no_device",
+                          label: "Sem Rastreador",
+                          count: fleetCounts.noDevice,
+                          dot: "bg-neutral-500",
+                        },
+                      ] as const
+                    ).map((tab) => {
+                      const active = statusFilter === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => {
+                            setStatusFilter(tab.key);
+                            setAdminPage(1);
+                          }}
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            active
+                              ? "border-primary bg-primary text-white shadow-sm shadow-primary/20"
+                              : "border-border/70 bg-secondary/70 text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {"dot" in tab && tab.dot && (
+                            <span className={`size-1.5 rounded-full ${tab.dot}`} />
+                          )}
+                          <span>{tab.label}</span>
+                          <span
+                            className={`rounded-full px-1.5 text-[10px] font-mono ${
+                              active
+                                ? "bg-black/30 text-white"
+                                : "bg-card text-muted-foreground"
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Brand Filter */}
+                  {availableBrands.length > 1 && (
+                    <select
+                      value={brandFilter}
+                      onChange={(e) => {
+                        setBrandFilter(e.target.value);
+                        setAdminPage(1);
+                      }}
+                      className="rounded-xl border border-border/70 bg-secondary/80 px-2.5 py-1.5 text-[11px] font-semibold text-foreground focus:border-primary focus:outline-none cursor-pointer"
+                      aria-label="Filtrar por marca"
+                    >
+                      <option value="all">Todas as Marcas</option>
+                      {availableBrands.map((brand) => (
+                        <option key={brand} value={brand}>
+                          {brand}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Sort Selector */}
+                  <select
+                    value={sortBy}
+                    onChange={(e) =>
+                      setSortBy(e.target.value as "plate" | "model" | "status")
+                    }
+                    className="rounded-xl border border-border/70 bg-secondary/80 px-2.5 py-1.5 text-[11px] font-semibold text-foreground focus:border-primary focus:outline-none cursor-pointer"
+                    aria-label="Ordenar veículos"
+                  >
+                    <option value="plate">Ordenar: Placa</option>
+                    <option value="model">Ordenar: Modelo</option>
+                    <option value="status">Ordenar: Status GPS</option>
+                  </select>
+                </div>
               </div>
+            )}
+
+            {/* Listagem: Tabela Clean / Compact Cards para Admin & Manager, Card Completo para Cliente */}
+            {displayedMotorcycles.length > 0 ? (
+              isAdmin ? (
+                adminViewMode === "table" ? (
+                  <div className="overflow-x-auto rounded-xl border border-border/60 bg-background/20">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border/60 bg-background/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="py-3 pl-5 pr-3">Status</th>
+                          <th className="px-3 py-3">Placa</th>
+                          <th className="px-3 py-3">Veículo</th>
+                          <th className="px-3 py-3">Piloto</th>
+                          <th className="px-3 py-3">Rastreador</th>
+                          <th className="py-3 pl-3 pr-5 text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {displayedMotorcycles.map((moto, index) => {
+                          const hasDevice = Boolean(
+                            moto.device &&
+                              (moto.device.serial_number || moto.device.id),
+                          );
+                          const hasGps = Boolean(
+                            hasDevice &&
+                              (moto.has_position || moto.last_position),
+                          );
+                          const riderName = moto.rider?.name || moto.rider_name;
+
+                          return (
+                            <tr
+                              key={moto.id || moto.license_plate || index}
+                              onClick={() => setSelectedDetailMoto(moto)}
+                              className="hover:bg-secondary/40 transition-colors cursor-pointer"
+                            >
+                              {/* Status */}
+                              <td className="py-3.5 pl-5 pr-3 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`size-2 rounded-full ${
+                                      hasGps
+                                        ? "bg-emerald-500 animate-pulse"
+                                        : hasDevice
+                                          ? "bg-amber-400"
+                                          : "bg-neutral-600"
+                                    }`}
+                                  />
+                                  <span
+                                    className={`font-semibold uppercase text-[11px] ${
+                                      hasGps
+                                        ? "text-emerald-400"
+                                        : hasDevice
+                                          ? "text-amber-400"
+                                          : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {hasGps
+                                      ? "GPS Ativo"
+                                      : hasDevice
+                                        ? "Aguardando"
+                                        : "Sem Rastreador"}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Placa Inline */}
+                              <td className="px-3 py-3.5 whitespace-nowrap">
+                                {moto.license_plate ? (
+                                  <VehiclePlatePreview
+                                    plate={moto.license_plate}
+                                    size="sm"
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
+
+                              {/* Veículo */}
+                              <td className="px-3 py-3.5">
+                                <span className="font-semibold text-foreground truncate block max-w-[200px]">
+                                  {formatVehicleDisplayName(moto)}
+                                </span>
+                              </td>
+
+                              {/* Piloto */}
+                              <td className="px-3 py-3.5">
+                                <span className="text-muted-foreground truncate block max-w-[160px]">
+                                  {riderName || "—"}
+                                </span>
+                              </td>
+
+                              {/* Rastreador */}
+                              <td className="px-3 py-3.5 whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                                {moto.device?.serial_number
+                                  ? `•••${moto.device.serial_number.slice(-6)}`
+                                  : "—"}
+                              </td>
+
+                              {/* Ações */}
+                              <td className="py-3.5 pl-3 pr-5 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDetailMoto(moto);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-secondary/70 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
+                                  title="Abrir detalhes do veículo"
+                                >
+                                  <Maximize2 className="size-3" />
+                                  <span>Detalhes</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {displayedMotorcycles.map((moto, index) => (
+                      <VehicleCompactCard
+                        key={moto.id || moto.license_plate || index}
+                        vehicle={moto}
+                        onOpenDetail={(m) => setSelectedDetailMoto(m)}
+                      />
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {displayedMotorcycles.map((moto, index) => (
+                    <VehicleMiniCard
+                      key={moto.id || moto.license_plate || index}
+                      vehicle={moto}
+                      isAdmin={false}
+                      onOpenTelemetry={(m) => setSelectedTelemetryMoto(m)}
+                      onRenameNickname={(m) => setRenamingMoto(m)}
+                    />
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="rounded-2xl border border-border/60 bg-card/40 p-8 text-center text-xs text-muted-foreground">
-                Nenhum veículo encontrado para a busca &quot;{searchQuery}&quot;.
+              <div className="rounded-2xl border border-border/60 bg-card/40 p-8 text-center text-xs text-muted-foreground space-y-2">
+                <p>
+                  Nenhum veículo encontrado para os filtros ou busca selecionados.
+                </p>
+                {isAdmin && (searchQuery || statusFilter !== "all" || brandFilter !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("all");
+                      setBrandFilter("all");
+                      setAdminPage(1);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/80 cursor-pointer"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
               </div>
             )}
 
@@ -1453,8 +1849,21 @@ export default function VehiclesPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL DE TELEMETRIA AO VIVO (ACESSADO DIRETO DO CARD)                     */}
+      {/* MODAIS: DETALHES DO VEÍCULO (FROTA), TELEMETRIA AO VIVO & APELIDO         */}
       {/* ========================================================================= */}
+      <VehicleDetailModal
+        vehicle={
+          selectedDetailMoto
+            ? motorcycles.find((m) => m.id === selectedDetailMoto.id) ||
+              selectedDetailMoto
+            : null
+        }
+        onClose={() => setSelectedDetailMoto(null)}
+        onOpenTelemetry={(m) => setSelectedTelemetryMoto(m)}
+        onRenameNickname={(m) => setRenamingMoto(m)}
+        onUnlinkDevice={isAdmin ? handleUnlinkDevice : undefined}
+      />
+
       {selectedTelemetryMoto && (
         <LiveTelemetryModal
           isOpen={Boolean(selectedTelemetryMoto)}

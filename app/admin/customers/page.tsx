@@ -215,6 +215,21 @@ export default function AdminCustomersPage() {
 
   // Role Protection: Gerentes or Master Admin
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const filterParam = params.get("filter");
+      if (
+        filterParam === "pending" ||
+        filterParam === "has_vehicles" ||
+        filterParam === "no_vehicles" ||
+        filterParam === "all"
+      ) {
+        setVehicleFilter(filterParam);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (currentUser.status === "loading") return;
     if (currentUser.status === "unauthenticated") {
       router.replace(`/login?expired=1&from=${encodeURIComponent("/admin/customers")}`);

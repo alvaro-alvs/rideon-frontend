@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 
+import { ReverseAddress } from "@/app/components/reverse-address";
 import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import type { Device } from "@/lib/types/device";
 
@@ -344,11 +345,14 @@ export function DeviceDetailModal({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[11px] text-muted-foreground">
-                      Coordenadas
+                      Localização
                     </span>
-                    <p className="font-mono font-semibold text-foreground">
-                      {position.latitude.toFixed(5)},{" "}
-                      {position.longitude.toFixed(5)}
+                    <p className="font-semibold text-foreground">
+                      <ReverseAddress
+                        latitude={position.latitude}
+                        longitude={position.longitude}
+                        existingAddress={position.address}
+                      />
                     </p>
                   </div>
                   <div>
@@ -363,15 +367,6 @@ export function DeviceDetailModal({
                     </p>
                   </div>
                 </div>
-
-                {position.address && (
-                  <div>
-                    <span className="text-[11px] text-muted-foreground">
-                      Endereço aproximado
-                    </span>
-                    <p className="text-foreground">{position.address}</p>
-                  </div>
-                )}
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground font-mono">
                   {position.timestamp && (

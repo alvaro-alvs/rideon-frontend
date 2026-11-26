@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Power,
   RotateCcw,
+  UserPlus,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -134,6 +135,8 @@ const VALID_CLIENT_ALERT_TYPES = new Set([
   "gps_blind_exit",
   "power_off",
   "vehicle_stopped",
+  // Notificações administrativas
+  "customer_registration",
 ]);
 
 function isRelevantClientNotification(item: BackendAlert): boolean {
@@ -246,14 +249,26 @@ function resolveAlertTitle(item: BackendAlert): string {
       return "Rastreador Desligado";
     case "vehicle_stopped":
       return "Veículo Parado • Trajeto Salvo";
+    case "customer_registration":
+      return "Novo Cadastro Solicitado";
     default:
       return item.message ? item.message.split(":")[0] : "Notificação";
   }
 }
 
+function resolveAlertLink(item: Pick<BackendAlert, "type" | "motorcycle_id">): string | undefined {
+  if (item.type === "customer_registration") {
+    return "/admin/customers?filter=pending";
+  }
+  if (item.motorcycle_id && item.motorcycle_id !== ZERO_UUID) {
+    return `/dashboard?vehicle=${item.motorcycle_id}`;
+  }
+  return undefined;
+}
+
 export function NotificationPopover() {
   const [isOpen, setIsOpen] = useState(false);
-  const [tab, setTab] = useState<"all" | "alert" | "ignition" | "telemetry">("all");
+  const [tab, setTab] = useState<"all" | "alert" | "ignition" | "telemetry" | "system">("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -395,10 +410,7 @@ export function NotificationPopover() {
             timestamp: formatRelativeTime(d.created_at),
             type: resolveAlertCategory(d.type),
             unread: !d.read && d.status !== "acknowledged" && d.status !== "resolved",
-            link:
-              d.motorcycle_id && d.motorcycle_id !== ZERO_UUID
-                ? `/dashboard?vehicle=${d.motorcycle_id}`
-                : undefined,
+            link: resolveAlertLink(d),
             rawType: d.type,
             createdAt: d.created_at,
             vehicleModel: d.vehicle_model?.trim() || undefined,
@@ -517,10 +529,7 @@ export function NotificationPopover() {
                 timestamp: "Agora",
                 type: resolveAlertCategory(newAlert.type),
                 unread: true,
-                link:
-                  newAlert.motorcycle_id && newAlert.motorcycle_id !== ZERO_UUID
-                    ? `/dashboard?vehicle=${newAlert.motorcycle_id}`
-                    : undefined,
+                link: resolveAlertLink(newAlert),
                 rawType: newAlert.type,
                 createdAt: newAlert.created_at,
                 vehicleModel: newAlert.vehicle_model?.trim() || undefined,
@@ -700,6 +709,9 @@ export function NotificationPopover() {
       case "telemetry":
         return <Radio className="size-4 text-cyan-400" />;
       case "system":
+        if (rawType === "customer_registration") {
+          return <UserPlus className="size-4 text-emerald-400" />;
+        }
         return <Zap className="size-4 text-emerald-400" />;
     }
   };
@@ -914,6 +926,18 @@ export function NotificationPopover() {
               >
                 Telemetria ({notifications.filter((n) => n.type === "telemetry").length})
               </button>
+              {(isAdmin || notifications.some((n) => n.type === "system")) && (
+                <button
+                  type="button"
+                  onClick={() => setTab("system")}
+                  className={`rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors shrink-0 ${tab === "system"
+                      ? "bg-primary text-white"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    }`}
+                >
+                  Sistema ({notifications.filter((n) => n.type === "system").length})
+                </button>
+              )}
             </div>
 
             {/* List */}

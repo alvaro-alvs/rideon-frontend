@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
+import { ReverseAddress } from "@/app/components/reverse-address";
 import { GoogleMapView } from "@/app/dashboard/components/google-map-view";
 import { useMotorcycle } from "@/hooks/use-motorcycle";
 import { useMotorcycleLocation } from "@/hooks/use-motorcycle-location";
@@ -802,7 +803,7 @@ export default function GeofencesPage() {
                           <p className="text-[11px] text-muted-foreground">
                             {Math.round(ev.speed)} km/h •{" "}
                             {ev.dwell_seconds != null ? `Permanência: ${Math.round(ev.dwell_seconds / 60)} min • ` : ""}
-                            ({ev.latitude.toFixed(5)}, {ev.longitude.toFixed(5)})
+                            <ReverseAddress latitude={ev.latitude} longitude={ev.longitude} />
                           </p>
                         </div>
                       </div>

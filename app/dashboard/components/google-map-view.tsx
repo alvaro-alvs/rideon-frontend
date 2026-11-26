@@ -3,6 +3,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { calculateDistanceMeters, isValidCoordinate } from "@/lib/geo";
+import { ReverseAddress } from "@/app/components/reverse-address";
 import type { GeofenceItem, LatLngPoint } from "@/lib/types/protection";
 
 export interface GoogleMapViewProps {
@@ -930,10 +931,13 @@ function GoogleMapViewInner({
           <p className="mt-2 text-xs text-muted-foreground">
             Insira <code className="text-primary">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> no seu arquivo <code className="text-primary">.env.local</code> para habilitar os mapas do Google em renderização vetorial 3D.
           </p>
-          <div className="mt-4 rounded border border-border bg-secondary/50 p-3 text-left font-mono text-xs">
+          <div className="mt-4 rounded border border-border bg-secondary/50 p-3 text-left text-xs">
             <p className="text-muted-foreground">Posição Atual:</p>
             <p className="text-foreground font-semibold">
-              Lat: {position.latitude.toFixed(6)} | Lng: {position.longitude.toFixed(6)}
+              <ReverseAddress
+                latitude={position.latitude}
+                longitude={position.longitude}
+              />
             </p>
             <p className="mt-1 text-muted-foreground">
               Ângulo: {heading}° • Cercas ativas: {geofences.filter((g) => g.active).length}

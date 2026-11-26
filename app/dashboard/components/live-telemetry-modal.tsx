@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { GoogleMapView } from "./google-map-view";
+import { ReverseAddress } from "@/app/components/reverse-address";
 import { CommandControlPanel } from "./command-control-modal";
 import { ShareLinkPanel } from "./share-link-modal";
 import { GeofenceQuickPanel } from "./geofence-panel";
@@ -576,13 +577,15 @@ function LiveTelemetryModalContent({
                   pulseMode={pulseMode}
                 />
 
-                {/* Bottom Coordinates Pill */}
+                {/* Bottom Address Pill */}
                 <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card/90 px-3 py-2 backdrop-blur-md text-xs">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="size-3.5 text-primary" />
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {telemetry.position.latitude.toFixed(6)}, {telemetry.position.longitude.toFixed(6)}
-                    </span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <MapPin className="size-3.5 shrink-0 text-primary" />
+                    <ReverseAddress
+                      latitude={telemetry.position.latitude}
+                      longitude={telemetry.position.longitude}
+                      className="truncate text-[11px] text-foreground/90"
+                    />
                   </div>
                   {telemetry.timestamp && (
                     <span className="text-[11px] text-muted-foreground">
