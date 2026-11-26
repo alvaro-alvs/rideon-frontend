@@ -22,6 +22,7 @@ import { RideOnLogo } from "@/app/components/rideon-logo";
 import { useTenant } from "@/app/components/tenant-provider";
 import { UserHeader } from "@/app/components/user-header";
 import { NotificationPermissionToast } from "@/app/components/notifications/notification-permission-toast";
+import { ActiveSharesLoginModal } from "@/app/components/active-shares-login-modal";
 import { setupGlobalAudioUnlock } from "@/lib/notifications/sound";
 import { notifyAuthChange, useCurrentUser } from "@/hooks/use-current-user";
 
@@ -251,6 +252,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
       {/* Cross-Browser Native Notification Toast */}
       <NotificationPermissionToast />
+
+      {/* Active Share Links Popup for Admins & Managers on Login */}
+      <ActiveSharesLoginModal />
     </div>
   );
 }

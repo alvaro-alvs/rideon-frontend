@@ -139,6 +139,15 @@ export interface ShareLinkItem {
   created_at: string;
 }
 
+export interface ActiveShareLinkItem extends ShareLinkItem {
+  vehicle_brand?: string;
+  vehicle_model?: string;
+  vehicle_nickname?: string;
+  vehicle_plate?: string;
+  rider_id?: string;
+  rider_name?: string;
+}
+
 export interface PublicShareSnapshot {
   label?: string;
   expires_at: string;
@@ -161,6 +170,7 @@ export interface PublicShareSnapshot {
     heading?: number;
     speed?: number;
     ignition?: boolean;
+    address?: string;
     timestamp: string;
   };
   recent_path?: LatLngPoint[];

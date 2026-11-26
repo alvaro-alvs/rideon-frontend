@@ -30,6 +30,9 @@ export function isClientSessionActive(): boolean {
 export function notifyAuthChange(action: "login" | "logout" | "refresh") {
   if (typeof window === "undefined") return;
   try {
+    if (action === "login" || action === "logout") {
+      sessionStorage.removeItem("rideon_active_shares_popup_dismissed");
+    }
     localStorage.setItem(AUTH_SYNC_KEY, `${action}:${Date.now()}`);
   } catch {
     // Ignore storage quota errors

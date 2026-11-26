@@ -451,4 +451,47 @@ input {
   .rideon-pin-stage.burst-b .rideon-pin-shadow {
     animation-duration: 0.01ms;
   }
+
+  .rideon-fab-idle,
+  .rideon-fab-sheen {
+    animation: none;
+  }
+}
+
+@keyframes rideon-fab-idle-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes rideon-fab-sheen {
+  0%, 62% {
+    transform: translateY(-140%);
+    opacity: 0;
+  }
+  72% {
+    opacity: 0.45;
+  }
+  88%, 100% {
+    transform: translateY(160%);
+    opacity: 0;
+  }
+}
+
+.rideon-fab-idle {
+  animation: rideon-fab-idle-float 4.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+.rideon-fab-idle:hover,
+.rideon-fab-idle:focus-visible {
+  animation-play-state: paused;
+}
+
+.rideon-fab-sheen {
+  animation: rideon-fab-sheen 5.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
 }

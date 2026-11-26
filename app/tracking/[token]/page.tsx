@@ -1,10 +1,13 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
+  ArrowUpRight,
   Clock,
   ExternalLink,
+  MapPin,
   Navigation,
   Radio,
   ShieldAlert,
@@ -178,6 +181,50 @@ export default function PublicShareTrackingPage({
               zoom={16}
             />
 
+            {/* Vertical RideOn CTA FAB */}
+            <Link
+              href="/#plataforma"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Conheça a RideOn e seus produtos"
+              title="Conheça a RideOn e seus produtos"
+              className="rideon-fab-idle group absolute bottom-40 right-3.5 sm:bottom-36 sm:right-5 z-20 flex w-[132px] flex-col items-center gap-2 rounded-3xl border border-white/15 bg-card/95 p-3 text-center backdrop-blur-xl shadow-[0_14px_34px_rgba(0,0,0,0.65),0_0_0_1px_rgba(239,37,27,0.16)] transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-[0_18px_40px_rgba(239,37,27,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl"
+              >
+                <span className="rideon-fab-sheen block h-16 w-full bg-gradient-to-b from-transparent via-white/12 to-transparent" />
+              </span>
+
+              <span className="relative flex items-center justify-center gap-1.5">
+                <span className="relative flex size-7 items-center justify-center rounded-full border border-primary/35 bg-primary/15">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/logomark-icon.svg"
+                    alt=""
+                    className="size-4 object-contain"
+                  />
+                  <span className="absolute -right-0.5 -top-0.5 flex size-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-65" />
+                    <span className="relative inline-flex size-2 rounded-full bg-primary" />
+                  </span>
+                </span>
+                <span className="font-display text-xs font-black italic tracking-wide text-foreground">
+                  RIDE<span className="text-primary">ON</span>
+                </span>
+              </span>
+
+              <span className="text-[11px] font-medium leading-snug text-zinc-200">
+                Conheça nossos produtos
+              </span>
+
+              <span className="inline-flex w-full items-center justify-center gap-1 rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground shadow-md shadow-primary/30 transition-transform duration-300 group-hover:scale-[1.03]">
+                <span>Conhecer</span>
+                <ArrowUpRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </span>
+            </Link>
+
             <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 backdrop-blur-md shadow-xl text-xs">
               <div className="flex flex-wrap items-center gap-4">
                 {snapshot.location?.speed != null && (
@@ -196,8 +243,12 @@ export default function PublicShareTrackingPage({
                     Ignição {snapshot.location.ignition ? "Ligada" : "Desligada"}
                   </span>
                 )}
-                <span className="font-mono text-muted-foreground">
-                  {snapshot.location!.latitude.toFixed(6)}, {snapshot.location!.longitude.toFixed(6)}
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground max-w-md truncate">
+                  <MapPin className="size-4 text-primary shrink-0" />
+                  <span className="truncate text-foreground/90" title={snapshot.location!.address || undefined}>
+                    {snapshot.location!.address ||
+                      `${snapshot.location!.latitude.toFixed(6)}, ${snapshot.location!.longitude.toFixed(6)}`}
+                  </span>
                 </span>
               </div>
               <span className="text-[11px] text-muted-foreground">

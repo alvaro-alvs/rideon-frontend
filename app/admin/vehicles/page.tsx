@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, type FormEvent } from "react";
+import { useEffect, useState, useMemo, useRef, type FormEvent } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import {
   Bike,
@@ -39,6 +40,41 @@ import {
 } from "@/lib/vehicle-display";
 import type { Customer, CustomerMotorcycle } from "@/lib/types/customer";
 import type { Device } from "@/lib/types/device";
+
+type VehicleFormField =
+  | "rider_id"
+  | "brand"
+  | "model"
+  | "license_plate"
+  | "year"
+  | "color"
+  | "renavam"
+  | "chassis";
+
+function getShakeKeyframes(attempt: number): number[] {
+  return attempt % 2 === 0 ? [0, -7, 7, -5, 5, -2, 0] : [0, 7, -7, 5, -5, 2, 0];
+}
+
+function FieldErrorMessage({ error }: { error?: string }) {
+  return (
+    <AnimatePresence mode="wait">
+      {error && (
+        <motion.p
+          key={error}
+          role="alert"
+          initial={{ opacity: 0, y: -4, height: 0 }}
+          animate={{ opacity: 1, y: 0, height: "auto" }}
+          exit={{ opacity: 0, y: -4, height: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="flex items-center gap-1.5 overflow-hidden pt-0.5 text-[11px] font-semibold text-red-400"
+        >
+          <AlertCircle className="size-3.5 shrink-0" />
+          <span>{error}</span>
+        </motion.p>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export default function AdminVehiclesPage() {
   const router = useRouter();
@@ -80,15 +116,62 @@ export default function AdminVehiclesPage() {
   const [formRenavam, setFormRenavam] = useState("");
   const [formChassis, setFormChassis] = useState("");
   const [formFuelType, setFormFuelType] = useState("");
+  const [formErrors, setFormErrors] = useState<Partial<Record<VehicleFormField, string>>>({});
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const fieldRefs = useRef<Partial<Record<VehicleFormField, HTMLDivElement | null>>>({});
+
+  const clearFieldError = (field: VehicleFormField) => {
+    setFormErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+    if (modalError) setModalError(null);
+  };
+
+  const openNewVehicleModal = () => {
+    setFormErrors({});
+    setModalError(null);
+    setIsNewVehicleModalOpen(true);
+  };
+
+  const closeNewVehicleModal = () => {
+    setIsNewVehicleModalOpen(false);
+    setFormErrors({});
+    setModalError(null);
+  };
 
   const handleSmartImportApply = (data: ParsedVehicleData) => {
-    if (data.brand) setFormBrand(data.brand);
-    if (data.model) setFormModel(data.model);
-    if (data.license_plate) setFormPlate(data.license_plate);
-    if (data.year) setFormYear(String(data.year));
-    if (data.color) setFormColor(data.color);
-    if (data.renavam) setFormRenavam(data.renavam);
-    if (data.chassis) setFormChassis(data.chassis);
+    if (data.brand) {
+      setFormBrand(data.brand);
+      clearFieldError("brand");
+    }
+    if (data.model) {
+      setFormModel(data.model);
+      clearFieldError("model");
+    }
+    if (data.license_plate) {
+      setFormPlate(data.license_plate);
+      clearFieldError("license_plate");
+    }
+    if (data.year) {
+      setFormYear(String(data.year));
+      clearFieldError("year");
+    }
+    if (data.color) {
+      setFormColor(data.color);
+      clearFieldError("color");
+    }
+    if (data.renavam) {
+      setFormRenavam(data.renavam);
+      clearFieldError("renavam");
+    }
+    if (data.chassis) {
+      setFormChassis(data.chassis);
+      clearFieldError("chassis");
+    }
     if (data.fuel_type) setFormFuelType(data.fuel_type);
   };
   const [saving, setSaving] = useState(false);
@@ -154,10 +237,59 @@ export default function AdminVehiclesPage() {
     }
   }, [currentUser]);
 
+  const validateVehicleForm = (): Partial<Record<VehicleFormField, string>> => {
+    const errors: Partial<Record<VehicleFormField, string>> = {};
+    const maxYear = new Date().getFullYear() + 1;
+    const plate = formPlate.trim().toUpperCase();
+    const parsedYear = Number(formYear);
+    const renavam = formRenavam.trim();
+    const chassis = formChassis.trim();
+
+    if (!formRiderId.trim()) {
+      errors.rider_id = "Selecione o cliente proprietário do veículo.";
+    }
+    if (!formBrand.trim()) {
+      errors.brand = "Informe a marca do veículo.";
+    }
+    if (!formModel.trim()) {
+      errors.model = "Informe o modelo do veículo.";
+    }
+    if (!plate) {
+      errors.license_plate = "Informe a placa do veículo.";
+    } else if (plate.length < 7) {
+      errors.license_plate = "A placa deve ter 7 caracteres (ex: ABC1D23).";
+    }
+    if (!formYear.trim() || !Number.isInteger(parsedYear) || parsedYear < 1990 || parsedYear > maxYear) {
+      errors.year = `Informe um ano válido entre 1990 e ${maxYear}.`;
+    }
+    if (!formColor.trim()) {
+      errors.color = "Informe a cor do veículo.";
+    }
+    if (renavam && renavam.length !== 11) {
+      errors.renavam = "O RENAVAM deve conter 11 dígitos.";
+    }
+    if (chassis && chassis.length !== 17) {
+      errors.chassis = "O Chassi / VIN deve conter 17 caracteres.";
+    }
+
+    return errors;
+  };
+
   const handleCreateVehicle = async (e: FormEvent) => {
     e.preventDefault();
+    const errors = validateVehicleForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      setModalError(null);
+      setValidationAttempt((prev) => prev + 1);
+      const firstErrorField = (Object.keys(errors) as VehicleFormField[])[0];
+      fieldRefs.current[firstErrorField]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     setSaving(true);
     setFeedback(null);
+    setModalError(null);
 
     try {
       const res = await fetch("/api/admin/vehicles", {
@@ -183,7 +315,7 @@ export default function AdminVehiclesPage() {
       }
 
       setFeedback({ type: "success", text: `Veículo ${formPlate.toUpperCase()} cadastrado com sucesso!` });
-      setIsNewVehicleModalOpen(false);
+      closeNewVehicleModal();
       setFormRiderId("");
       setFormBrand("");
       setFormModel("");
@@ -195,7 +327,9 @@ export default function AdminVehiclesPage() {
       setFormFuelType("");
       void fetchData();
     } catch (err: unknown) {
-      setFeedback({ type: "error", text: err instanceof Error ? err.message : "Erro desconhecido" });
+      const message = err instanceof Error ? err.message : "Erro desconhecido";
+      setModalError(message);
+      setValidationAttempt((prev) => prev + 1);
     } finally {
       setSaving(false);
     }
@@ -350,7 +484,7 @@ export default function AdminVehiclesPage() {
                 Atualizar
               </button>
               <button
-                onClick={() => setIsNewVehicleModalOpen(true)}
+                onClick={openNewVehicleModal}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 cursor-pointer"
               >
                 <Plus className="size-4" />
@@ -599,57 +733,114 @@ export default function AdminVehiclesPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setIsNewVehicleModalOpen(false)}
+                  type="button"
+                  onClick={closeNewVehicleModal}
                   className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                 >
                   <X className="size-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateVehicle} className="mt-6 space-y-4">
+              <form onSubmit={handleCreateVehicle} noValidate className="mt-6 space-y-4">
                 <VehicleSmartImport compact onApply={handleSmartImportApply} />
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <motion.div
+                  ref={(el) => {
+                    fieldRefs.current.rider_id = el;
+                  }}
+                  animate={formErrors.rider_id ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                  transition={{ duration: 0.36, ease: "easeInOut" }}
+                  className="space-y-1.5"
+                >
+                  <label
+                    className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                      formErrors.rider_id ? "text-red-400" : "text-muted-foreground"
+                    }`}
+                  >
                     Cliente Proprietário *
                   </label>
                   <OwnerSelect
                     required
+                    hasError={Boolean(formErrors.rider_id)}
                     options={customers}
                     value={formRiderId}
-                    onChange={setFormRiderId}
+                    onChange={(val) => {
+                      setFormRiderId(val);
+                      if (val) clearFieldError("rider_id");
+                    }}
                     placeholder="Selecione um cliente..."
                   />
-                </div>
+                  <FieldErrorMessage error={formErrors.rider_id} />
+                </motion.div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.brand = el;
+                    }}
+                    animate={formErrors.brand ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.brand ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       Marca *
                     </label>
                     <input
                       type="text"
                       required
+                      aria-invalid={Boolean(formErrors.brand)}
                       value={formBrand}
-                      onChange={(e) => setFormBrand(e.target.value)}
+                      onChange={(e) => {
+                        setFormBrand(e.target.value);
+                        clearFieldError("brand");
+                      }}
                       placeholder="Ex: Honda, Yamaha"
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${
+                        formErrors.brand
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.brand} />
+                  </motion.div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.model = el;
+                    }}
+                    animate={formErrors.model ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.model ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       Modelo *
                     </label>
                     <input
                       type="text"
                       required
+                      aria-invalid={Boolean(formErrors.model)}
                       value={formModel}
-                      onChange={(e) => setFormModel(e.target.value)}
+                      onChange={(e) => {
+                        setFormModel(e.target.value);
+                        clearFieldError("model");
+                      }}
                       placeholder="Ex: CB 500F, MT-07"
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${
+                        formErrors.model
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.model} />
+                  </motion.div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -667,79 +858,179 @@ export default function AdminVehiclesPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.license_plate = el;
+                    }}
+                    animate={formErrors.license_plate ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.license_plate ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       Placa *
                     </label>
                     <input
                       type="text"
                       required
+                      aria-invalid={Boolean(formErrors.license_plate)}
                       value={formPlate}
-                      onChange={(e) => setFormPlate(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        setFormPlate(e.target.value.toUpperCase());
+                        clearFieldError("license_plate");
+                      }}
                       placeholder="ABC1D23"
                       maxLength={7}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono uppercase text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs font-mono uppercase text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${
+                        formErrors.license_plate
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.license_plate} />
+                  </motion.div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.year = el;
+                    }}
+                    animate={formErrors.year ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.year ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       Ano *
                     </label>
                     <input
                       type="number"
                       required
+                      aria-invalid={Boolean(formErrors.year)}
                       value={formYear}
-                      onChange={(e) => setFormYear(e.target.value)}
+                      onChange={(e) => {
+                        setFormYear(e.target.value);
+                        clearFieldError("year");
+                      }}
                       min="1990"
                       max={new Date().getFullYear() + 1}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-foreground focus:outline-none transition-all ${
+                        formErrors.year
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.year} />
+                  </motion.div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.color = el;
+                    }}
+                    animate={formErrors.color ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.color ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       Cor *
                     </label>
                     <input
                       type="text"
                       required
+                      aria-invalid={Boolean(formErrors.color)}
                       value={formColor}
-                      onChange={(e) => setFormColor(e.target.value)}
+                      onChange={(e) => {
+                        setFormColor(e.target.value);
+                        clearFieldError("color");
+                      }}
                       placeholder="Preta, Vermelha"
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${
+                        formErrors.color
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.color} />
+                  </motion.div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.renavam = el;
+                    }}
+                    animate={formErrors.renavam ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.renavam ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       RENAVAM
                     </label>
                     <input
                       type="text"
+                      aria-invalid={Boolean(formErrors.renavam)}
                       value={formRenavam}
-                      onChange={(e) => setFormRenavam(e.target.value.replace(/\D/g, ""))}
+                      onChange={(e) => {
+                        setFormRenavam(e.target.value.replace(/\D/g, ""));
+                        clearFieldError("renavam");
+                      }}
                       placeholder="11 dígitos"
                       maxLength={11}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${
+                        formErrors.renavam
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.renavam} />
+                  </motion.div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <motion.div
+                    ref={(el) => {
+                      fieldRefs.current.chassis = el;
+                    }}
+                    animate={formErrors.chassis ? { x: getShakeKeyframes(validationAttempt) } : { x: 0 }}
+                    transition={{ duration: 0.36, ease: "easeInOut" }}
+                    className="space-y-1.5"
+                  >
+                    <label
+                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                        formErrors.chassis ? "text-red-400" : "text-muted-foreground"
+                      }`}
+                    >
                       Chassi / VIN
                     </label>
                     <input
                       type="text"
+                      aria-invalid={Boolean(formErrors.chassis)}
                       value={formChassis}
-                      onChange={(e) => setFormChassis(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        setFormChassis(e.target.value.toUpperCase());
+                        clearFieldError("chassis");
+                      }}
                       placeholder="17 caracteres"
                       maxLength={17}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-mono uppercase text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-xs font-mono uppercase text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${
+                        formErrors.chassis
+                          ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 focus:border-red-500"
+                          : "border-border bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                      }`}
                     />
-                  </div>
+                    <FieldErrorMessage error={formErrors.chassis} />
+                  </motion.div>
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -755,10 +1046,41 @@ export default function AdminVehiclesPage() {
                   </div>
                 </div>
 
+                <AnimatePresence mode="wait">
+                  {(modalError || Object.keys(formErrors).length > 0) && (
+                    <motion.div
+                      key={modalError ? `api-${validationAttempt}` : `val-${validationAttempt}`}
+                      role="alert"
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                        scale: 1,
+                        x: getShakeKeyframes(validationAttempt),
+                      }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.3, ease: "easeOut" }}
+                      className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200"
+                    >
+                      <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-red-300">
+                          {modalError
+                            ? "Não foi possível cadastrar o veículo"
+                            : "Verifique os campos destacados"}
+                        </p>
+                        <p className="text-[11px] text-red-200/90">
+                          {modalError ?? Object.values(formErrors)[0]}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <div className="mt-6 flex items-center justify-end gap-3 border-t border-border/80 pt-4">
                   <button
                     type="button"
-                    onClick={() => setIsNewVehicleModalOpen(false)}
+                    onClick={closeNewVehicleModal}
                     className="rounded-xl border border-border px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                   >
                     Cancelar

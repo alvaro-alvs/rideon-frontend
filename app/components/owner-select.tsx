@@ -15,6 +15,7 @@ interface OwnerSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  hasError?: boolean;
 }
 
 function getInitials(name: string): string {
@@ -30,6 +31,7 @@ export function OwnerSelect({
   onChange,
   placeholder = "Selecione um cliente...",
   required = false,
+  hasError = false,
 }: OwnerSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -75,25 +77,18 @@ export function OwnerSelect({
 
   return (
     <div ref={containerRef} className="relative">
-      {required && (
-        <input
-          tabIndex={-1}
-          aria-hidden="true"
-          required
-          value={value}
-          onChange={() => {}}
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-0 w-full opacity-0"
-        />
-      )}
-
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
+        data-required={required || undefined}
+        data-invalid={hasError || undefined}
         className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-all cursor-pointer ${
           open
             ? "border-primary bg-background ring-2 ring-primary/20"
-            : "border-border bg-background hover:border-primary/50"
+            : hasError
+              ? "border-red-500/80 bg-red-500/5 ring-2 ring-red-500/20 hover:border-red-500"
+              : "border-border bg-background hover:border-primary/50"
         }`}
       >
         {selected ? (

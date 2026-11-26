@@ -5,30 +5,25 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertCircle,
-  ArrowRightLeft,
   Bike,
   Building2,
   CheckCircle2,
   Copy,
   Cpu,
-  Eye,
   History,
   LayoutGrid,
-  Link2,
   List,
+  Maximize2,
   Plus,
   Radio,
   RefreshCw,
   Search,
   ShieldCheck,
-  Unlink,
-  User,
 } from "lucide-react";
 
 import { DashboardShell } from "@/app/components/dashboard-shell";
 import { useTenant } from "@/app/components/tenant-provider";
 import { DeviceCard } from "@/app/admin/devices/components/device-card";
-import { formatVehicleDisplayName } from "@/lib/vehicle-display";
 import {
   canManageDeviceTransfers,
   isMasterAdmin,
@@ -36,6 +31,7 @@ import {
 } from "@/lib/auth";
 import { DeviceAuditModal } from "@/app/admin/devices/components/device-audit-modal";
 import { DeviceCreateModal } from "@/app/admin/devices/components/device-create-modal";
+import { DeviceDetailModal } from "@/app/admin/devices/components/device-detail-modal";
 import { DeviceLinkModal } from "@/app/admin/devices/components/device-link-modal";
 import { DeviceMapModal } from "@/app/admin/devices/components/device-map-modal";
 import { DeviceTransferModal } from "@/app/admin/devices/components/device-transfer-modal";
@@ -65,6 +61,8 @@ export default function AdminDevicesPage() {
     refetch,
   } = useAdminDevices(30);
 
+  const [selectedDeviceForDetail, setSelectedDeviceForDetail] =
+    useState<Device | null>(null);
   const [selectedDeviceForMap, setSelectedDeviceForMap] =
     useState<Device | null>(null);
   const [selectedDeviceForLink, setSelectedDeviceForLink] =
@@ -83,7 +81,7 @@ export default function AdminDevicesPage() {
   const canTransfer =
     currentUser.status === "authenticated" &&
     canManageDeviceTransfers(currentUser.user.role);
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Client-side role protection
@@ -445,77 +443,86 @@ export default function AdminDevicesPage() {
               </button>
             </div>
           ) : viewMode === "grid" ? (
-            /* GRID VIEW */
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            /* GRID VIEW (Clean & Minimal) */
+            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredDevices.map((device) => (
                 <DeviceCard
                   key={device.id}
                   device={device}
-                  onOpenMap={(d) => setSelectedDeviceForMap(d)}
-                  onOpenLink={(d) => setSelectedDeviceForLink(d)}
-                  onUnlink={(d) => void handleUnlink(d)}
-                  onOpenTransfer={(d) => setSelectedDeviceForTransfer(d)}
-                  onOpenAudit={(d) => setAuditModalState({ open: true, device: d })}
-                  canManageTransfers={canTransfer}
-                  showManager={isMaster}
+                  onOpenDetail={(d) => setSelectedDeviceForDetail(d)}
                 />
               ))}
             </div>
           ) : (
-            /* UNIFIED TABLE VIEW */
-            <div className="overflow-x-auto">
+            /* CLEAN TABLE VIEW */
+            <div className="overflow-x-auto rounded-xl border border-border/60 bg-background/20">
               <table className="w-full text-left text-xs">
-                <thead className="bg-background/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <thead className="border-b border-border/60 bg-background/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="py-3 pl-5 pr-3">Status</th>
                     <th className="px-3 py-3">IMEI / Serial</th>
-                    <th className="px-3 py-3">Veículo & Piloto</th>
+                    <th className="px-3 py-3">Placa</th>
                     {isMaster && <th className="px-3 py-3">Gerente</th>}
-                    <th className="px-3 py-3">Telemetria</th>
+                    <th className="px-3 py-3">Última Atividade</th>
                     <th className="py-3 pl-3 pr-5 text-right">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/50">
+                <tbody className="divide-y divide-border/40">
                   {filteredDevices.map((device) => {
                     const hasPos = Boolean(device.last_position);
                     const moto = device.motorcycle;
-                    const pos = device.last_position;
+                    const lastActivity =
+                      device.last_seen_at || device.last_position?.timestamp;
 
                     return (
                       <tr
                         key={device.id}
-                        className="hover:bg-secondary/40 transition-colors"
+                        onClick={() => setSelectedDeviceForDetail(device)}
+                        className="hover:bg-secondary/40 transition-colors cursor-pointer"
                       >
                         {/* Status */}
-                        <td className="py-3.5 pl-5 pr-3">
+                        <td className="py-3.5 pl-5 pr-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`size-2 rounded-full ${hasPos
-                                ? "bg-emerald-500 animate-pulse"
-                                : "bg-neutral-600"
-                                }`}
+                              className={`size-2 rounded-full ${
+                                hasPos
+                                  ? "bg-emerald-500 animate-pulse"
+                                  : device.status === "standby"
+                                    ? "bg-amber-400"
+                                    : "bg-neutral-600"
+                              }`}
                             />
                             <span
-                              className={`font-bold uppercase text-[11px] ${hasPos ? "text-emerald-400" : "text-muted-foreground"
-                                }`}
+                              className={`font-semibold uppercase text-[11px] ${
+                                hasPos
+                                  ? "text-emerald-400"
+                                  : device.status === "standby"
+                                    ? "text-amber-400"
+                                    : "text-muted-foreground"
+                              }`}
                             >
-                              {hasPos ? "Online" : "Sem Sinal"}
+                              {hasPos
+                                ? "Online"
+                                : device.status === "standby"
+                                  ? "Standby"
+                                  : "Sem Sinal"}
                             </span>
                           </div>
                         </td>
 
                         {/* IMEI / Serial */}
-                        <td className="px-3 py-3.5">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-2 font-mono">
-                            <span className="font-bold text-foreground">
+                            <span className="font-semibold text-foreground">
                               {device.serial_number}
                             </span>
                             {device.serial_number !== "—" && (
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleCopy(device.serial_number, device.id)
-                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopy(device.serial_number, device.id);
+                                }}
                                 className="text-muted-foreground hover:text-foreground cursor-pointer"
                                 title="Copiar IMEI"
                               >
@@ -529,28 +536,20 @@ export default function AdminDevicesPage() {
                           </div>
                         </td>
 
-                        {/* Unified Vehicle & Rider */}
-                        <td className="px-3 py-3.5">
+                        {/* Inline Plate Only */}
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           {moto ? (
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-2">
-                                <span className="rounded bg-neutral-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-foreground border border-blue-500/50">
-                                  {moto.license_plate}
-                                </span>
-                                <span className="font-bold text-foreground truncate max-w-[160px]">
-                                  {formatVehicleDisplayName(moto)}
-                                </span>
-                              </div>
-                              {moto.rider?.name && (
-                                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                  <User className="size-3 text-emerald-400" />
-                                  <span>{moto.rider.name}</span>
-                                </p>
-                              )}
+                            <div className="inline-flex items-center overflow-hidden rounded-md border border-blue-500/60 bg-neutral-950 text-[11px] font-extrabold">
+                              <span className="bg-blue-600 px-1.5 py-0.5 text-[8px] font-black text-white uppercase">
+                                BR
+                              </span>
+                              <span className="px-2 py-0.5 tracking-wider text-foreground font-mono">
+                                {moto.license_plate}
+                              </span>
                             </div>
                           ) : (
-                            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-400 border border-amber-500/20">
-                              Em Estoque
+                            <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase text-amber-400 border border-amber-500/20">
+                              Estoque
                             </span>
                           )}
                         </td>
@@ -561,7 +560,7 @@ export default function AdminDevicesPage() {
                             {device.manager_email ? (
                               <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-foreground/90">
                                 <Building2 className="size-3 text-violet-400 shrink-0" />
-                                <span className="truncate max-w-[160px]">
+                                <span className="truncate max-w-[180px]">
                                   {device.manager_email}
                                 </span>
                               </span>
@@ -573,99 +572,33 @@ export default function AdminDevicesPage() {
                           </td>
                         )}
 
-                        {/* Telemetry */}
-                        <td className="px-3 py-3.5">
-                          {pos ? (
-                            <div className="font-mono text-[11px] text-muted-foreground space-y-0.5">
-                              <div>
-                                <span className="text-foreground font-semibold">
-                                  {pos.latitude.toFixed(5)}, {pos.longitude.toFixed(5)}
-                                </span>
-                                {pos.speed !== undefined && (
-                                  <span className="ml-2 text-primary font-bold">
-                                    {pos.speed} km/h
-                                  </span>
-                                )}
-                              </div>
-                              {pos.timestamp && (
-                                <div className="text-[10px] text-muted-foreground">
-                                  {new Date(pos.timestamp).toLocaleString("pt-BR", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-neutral-500 italic">
-                              Sem coordenadas
-                            </span>
-                          )}
+                        {/* Last Activity */}
+                        <td className="px-3 py-3.5 whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                          {lastActivity
+                            ? new Date(lastActivity).toLocaleString("pt-BR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
                         </td>
 
-                        {/* Actions */}
-                        <td className="py-3.5 pl-3 pr-5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {moto && (
-                              <button
-                                type="button"
-                                onClick={() => void handleUnlink(device)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
-                                title="Desvincular equipamento"
-                              >
-                                <Unlink className="size-3" />
-                                <span className="hidden xl:inline">Desvincular</span>
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDeviceForLink(device)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
-                              title="Vincular ou gerenciar veículo"
-                            >
-                              <Link2 className="size-3 text-primary" />
-                              <span className="hidden lg:inline">
-                                {moto ? "Vínculo" : "Vincular"}
-                              </span>
-                            </button>
-
-                            {canTransfer && (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedDeviceForTransfer(device)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
-                                title="Transferir para Gerente"
-                              >
-                                <ArrowRightLeft className="size-3" />
-                                <span className="hidden lg:inline">Transferir</span>
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => setAuditModalState({ open: true, device })}
-                              className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-secondary px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-foreground transition-colors cursor-pointer"
-                              title="Auditoria do equipamento"
-                            >
-                              <History className="size-3.5" />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDeviceForMap(device)}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${hasPos
-                                ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary hover:text-white"
-                                : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                                }`}
-                            >
-                              <Eye className="size-3.5" />
-                              <span className="hidden lg:inline">Mapa</span>
-                            </button>
-                          </div>
+                        {/* Expand / Detail Modal Trigger */}
+                        <td className="py-3.5 pl-3 pr-5 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDeviceForDetail(device);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-secondary/70 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
+                            title="Abrir detalhes do equipamento"
+                          >
+                            <Maximize2 className="size-3" />
+                            <span>Detalhes</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -678,8 +611,25 @@ export default function AdminDevicesPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODALS: DEVICE CREATION, MAP TELEMETRY & DEVICE LINKING                   */}
+      {/* MODALS: DETAIL, CREATION, MAP TELEMETRY & DEVICE LINKING                  */}
       {/* ========================================================================= */}
+      <DeviceDetailModal
+        device={
+          selectedDeviceForDetail
+            ? devices.find((d) => d.id === selectedDeviceForDetail.id) ||
+              selectedDeviceForDetail
+            : null
+        }
+        onClose={() => setSelectedDeviceForDetail(null)}
+        onOpenMap={(d) => setSelectedDeviceForMap(d)}
+        onOpenLink={(d) => setSelectedDeviceForLink(d)}
+        onUnlink={(d) => void handleUnlink(d)}
+        onOpenTransfer={(d) => setSelectedDeviceForTransfer(d)}
+        onOpenAudit={(d) => setAuditModalState({ open: true, device: d })}
+        canManageTransfers={canTransfer}
+        showManager={isMaster}
+      />
+
       <DeviceCreateModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
